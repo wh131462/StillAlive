@@ -1,0 +1,26 @@
+{
+  "name": "still-alive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "今天又活了一天 - 生存确认与记忆沉淀",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "dev:mobile": "turbo run dev --filter=@still-alive/mobile",
+    "dev:web": "turbo run dev --filter=@still-alive/web",
+    "dev:miniprogram": "turbo run dev --filter=@still-alive/miniprogram",
+    "dev:server": "turbo run dev --filter=@still-alive/server"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

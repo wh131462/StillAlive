@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今天又活了一天 - 设计原型</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .float-animation {
+            animation: float 3s ease-in-out infinite;
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .coming-soon {
+            position: relative;
+            overflow: hidden;
+        }
+        .coming-soon::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(2px);
+            z-index: 1;
+        }
+        .coming-soon-badge {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg">
+    <!-- Header -->
+    <header class="pt-12 pb-8 text-center">
+        <div class="inline-flex items-center justify-center w-20 h-20 bg-white/20 rounded-2xl mb-6 float-animation">
+            <i class="fa-solid fa-heart-pulse text-white text-4xl"></i>
+        </div>
+        <h1 class="text-4xl font-bold text-white mb-3">今天又活了一天</h1>
+        <p class="text-white/80 text-lg">设计原型展示</p>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-6 pb-16">
+        <div class="grid md:grid-cols-3 gap-6">
+
+            <!-- Mobile App -->
+            <a href="./app/" class="block">
+                <div class="bg-white rounded-2xl overflow-hidden card-hover cursor-pointer">
+                    <div class="bg-gradient-to-br from-emerald-400 to-cyan-500 p-8 text-center">
+                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-mobile-screen text-white text-3xl"></i>
+                        </div>
+                        <h2 class="text-white text-xl font-bold">移动端 App</h2>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-slate-600 text-sm mb-4">iOS / Android 移动应用原型设计，包含打卡、记录、人物管理等核心功能。</p>
+                        <div class="flex items-center justify-between">
+                            <span class="inline-flex items-center text-emerald-600 text-sm font-medium">
+                                <span class="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
+                                已完成
+                            </span>
+                            <i class="fa-solid fa-arrow-right text-slate-400"></i>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <!-- Desktop App -->
+            <a href="./desktop/" class="block">
+                <div class="bg-white rounded-2xl overflow-hidden card-hover coming-soon cursor-pointer">
+                    <div class="bg-gradient-to-br from-indigo-400 to-purple-500 p-8 text-center">
+                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-desktop text-white text-3xl"></i>
+                        </div>
+                        <h2 class="text-white text-xl font-bold">桌面端</h2>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-slate-600 text-sm mb-4">Windows / macOS 桌面客户端原型设计，提供更丰富的数据展示与管理能力。</p>
+                        <div class="flex items-center justify-between">
+                            <span class="inline-flex items-center text-slate-400 text-sm font-medium">
+                                <span class="w-2 h-2 bg-slate-300 rounded-full mr-2"></span>
+                                开发中
+                            </span>
+                            <i class="fa-solid fa-arrow-right text-slate-400"></i>
+                        </div>
+                    </div>
+                    <div class="coming-soon-badge">
+                        <span class="bg-indigo-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">
+                            <i class="fa-solid fa-clock mr-2"></i>即将推出
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <!-- Mini Program -->
+            <a href="./miniprogram/" class="block">
+                <div class="bg-white rounded-2xl overflow-hidden card-hover coming-soon cursor-pointer">
+                    <div class="bg-gradient-to-br from-green-400 to-emerald-600 p-8 text-center">
+                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-brands fa-weixin text-white text-3xl"></i>
+                        </div>
+                        <h2 class="text-white text-xl font-bold">微信小程序</h2>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-slate-600 text-sm mb-4">微信小程序原型设计，无需下载即可使用，方便快捷的打卡体验。</p>
+                        <div class="flex items-center justify-between">
+                            <span class="inline-flex items-center text-slate-400 text-sm font-medium">
+                                <span class="w-2 h-2 bg-slate-300 rounded-full mr-2"></span>
+                                规划中
+                            </span>
+                            <i class="fa-solid fa-arrow-right text-slate-400"></i>
+                        </div>
+                    </div>
+                    <div class="coming-soon-badge">
+                        <span class="bg-green-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">
+                            <i class="fa-solid fa-clock mr-2"></i>即将推出
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- Footer Info -->
+        <div class="mt-12 text-center">
+            <div class="inline-flex items-center bg-white/10 backdrop-blur rounded-full px-6 py-3">
+                <i class="fa-solid fa-code text-white/60 mr-3"></i>
+                <span class="text-white/80 text-sm">点击卡片查看对应平台的设计原型</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Version -->
+    <footer class="text-center pb-8">
+        <p class="text-white/50 text-sm">Design Prototype v1.0.0</p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "name": "@still-alive/miniprogram",
+  "version": "1.0.0",
+  "private": true,
+  "templateInfo": {
+    "name": "default",
+    "typescript": true,
+    "css": "sass"
+  },
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "dev:swan": "taro build --type swan --watch",
+    "dev:alipay": "taro build --type alipay --watch",
+    "dev:tt": "taro build --type tt --watch",
+    "dev:h5": "taro build --type h5 --watch",
+    "dev": "npm run dev:weapp",
+    "build:weapp": "taro build --type weapp",
+    "build:swan": "taro build --type swan",
+    "build:alipay": "taro build --type alipay",
+    "build:tt": "taro build --type tt",
+    "build:h5": "taro build --type h5",
+    "build": "npm run build:weapp",
+    "lint": "eslint .",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@still-alive/types": "workspace:*",
+    "@still-alive/utils": "workspace:*",
+    "@still-alive/api-client": "workspace:*",
+    "@tarojs/components": "4.0.0",
+    "@tarojs/helper": "4.0.0",
+    "@tarojs/plugin-platform-weapp": "4.0.0",
+    "@tarojs/plugin-platform-alipay": "4.0.0",
+    "@tarojs/plugin-platform-h5": "4.0.0",
+    "@tarojs/react": "4.0.0",
+    "@tarojs/runtime": "4.0.0",
+    "@tarojs/shared": "4.0.0",
+    "@tarojs/taro": "4.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "zustand": "^5.0.0",
+    "dayjs": "^1.11.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.8.0",
+    "@babel/runtime": "^7.7.7",
+    "@tarojs/cli": "4.0.0",
+    "@tarojs/webpack5-runner": "4.0.0",
+    "@types/react": "^18.3.0",
+    "babel-preset-taro": "4.0.0",
+    "eslint": "^8.57.0",
+    "postcss": "^8.4.35",
+    "sass": "^1.80.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,84 @@
+.home {
+  padding: 32px;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+.status-card {
+  background-color: #ffffff;
+  border-radius: 32px;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.heart-container {
+  width: 160px;
+  height: 160px;
+  background-color: #fef2f2;
+  border-radius: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.heart-icon {
+  font-size: 72px;
+}
+
+.status-text {
+  color: #64748b;
+  font-size: 28px;
+  margin-bottom: 32px;
+}
+
+.checkin-btn {
+  width: 100%;
+  background-color: #0f172a;
+  color: #ffffff;
+  font-size: 36px;
+  font-weight: bold;
+  padding: 32px;
+  border-radius: 24px;
+  border: none;
+
+  &.checked {
+    background-color: #10b981;
+  }
+
+  &::after {
+    border: none;
+  }
+}
+
+.quote {
+  color: #94a3b8;
+  font-size: 24px;
+  margin-top: 24px;
+  font-style: italic;
+}
+
+.feedback-card {
+  background-color: #ecfdf5;
+  border-radius: 32px;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 32px;
+}
+
+.feedback-title {
+  color: #047857;
+  font-size: 36px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.feedback-subtitle {
+  color: #059669;
+  font-size: 28px;
+}

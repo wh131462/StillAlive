@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今天又活了一天 - 桌面端原型</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .float-animation {
+            animation: float 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+    <div class="text-center px-6">
+        <div class="inline-flex items-center justify-center w-24 h-24 bg-white/20 rounded-3xl mb-8 float-animation">
+            <i class="fa-solid fa-desktop text-white text-5xl"></i>
+        </div>
+        <h1 class="text-4xl font-bold text-white mb-4">桌面端原型</h1>
+        <p class="text-white/80 text-lg mb-8">正在设计中，敬请期待...</p>
+        <div class="inline-flex items-center bg-white/10 backdrop-blur rounded-full px-6 py-3 mb-8">
+            <i class="fa-solid fa-hammer text-white/60 mr-3"></i>
+            <span class="text-white/80 text-sm">Windows / macOS 客户端设计即将推出</span>
+        </div>
+        <div>
+            <a href="../" class="inline-flex items-center text-white hover:text-white/80 transition-colors">
+                <i class="fa-solid fa-arrow-left mr-2"></i>
+                返回原型列表
+            </a>
+        </div>
+    </div>
+</body>
+</html>
