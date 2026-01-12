@@ -79,18 +79,24 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initialize: async () => {
-        const { token } = get();
-        if (token) {
-          apiClient.setToken(token);
-          try {
-            const user = await apiClient.getMe();
-            set({ user, isAuthenticated: true, isInitialized: true });
-          } catch {
-            // Token invalid, clear state
-            apiClient.setToken(null);
-            set({ token: null, user: null, isInitialized: true });
+        try {
+          const { token } = get();
+          if (token) {
+            apiClient.setToken(token);
+            try {
+              const user = await apiClient.getMe();
+              set({ user, isAuthenticated: true, isInitialized: true });
+            } catch {
+              // Token invalid, clear state
+              apiClient.setToken(null);
+              set({ token: null, user: null, isAuthenticated: false, isInitialized: true });
+            }
+          } else {
+            set({ isInitialized: true });
           }
-        } else {
+        } catch (error) {
+          // Ensure app doesn't crash on init error
+          console.error('Auth init error:', error);
           set({ isInitialized: true });
         }
       },

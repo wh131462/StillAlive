@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -20,13 +20,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
   const { isAuthenticated, isInitialized, initialize } = useAuthStore();
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
+  // Delay navigation to ensure router is ready
   useEffect(() => {
-    if (!isInitialized) return;
+    if (isInitialized) {
+      const timer = setTimeout(() => setIsNavigationReady(true), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized || !isNavigationReady) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -35,7 +44,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isInitialized, segments, router]);
+  }, [isAuthenticated, isInitialized, isNavigationReady, segments, router]);
 
   if (!isInitialized) {
     return (
