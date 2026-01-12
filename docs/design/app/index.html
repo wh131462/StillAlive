@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>今天又活了一天 - 移动端原型</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            light: '#d1fae5',
+                            DEFAULT: '#10b981',
+                            dark: '#059669'
+                        },
+                        accent: {
+                            light: '#ffe4e6',
+                            DEFAULT: '#f43f5e',
+                            dark: '#e11d48'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans SC', 'sans-serif'],
+                        mono: ['SF Mono', 'Monaco', 'Cascadia Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* ========== 动画系统 ========== */
+        /* 心跳动画 - 生存状态 */
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            14% { transform: scale(1.1); }
+            28% { transform: scale(1); }
+            42% { transform: scale(1.1); }
+            70% { transform: scale(1); }
+        }
+
+        /* 打卡成功动画 */
+        @keyframes checkIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 呼吸效果 - 提醒状态 */
+        @keyframes breathe {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* 淡入动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 从底部滑入 */
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        /* 缩放弹出 */
+        @keyframes scaleIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
+        .animate-checkin { animation: checkIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        .animate-breathe { animation: breathe 2s ease-in-out infinite; }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-slideUp { animation: slideUp 0.3s ease-out; }
+        .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+
+        /* ========== 基础样式 ========== */
+        body {
+            background-color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+        }
+
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* ========== 页面切换 ========== */
+        .page, .tab-content {
+            display: none;
+        }
+        .page.active, .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        /* ========== 日历样式 ========== */
+        .calendar-day {
+            aspect-ratio: 1;
+        }
+        .calendar-day.checked {
+            background-color: #10b981;
+            color: white;
+        }
+        .calendar-day.today {
+            border: 2px solid #10b981;
+        }
+
+        /* ========== 打卡按钮 ========== */
+        .btn-checkin {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 600;
+            box-shadow: 0 4px 14px 0 rgb(16 185 129 / 0.4);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-checkin:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px 0 rgb(16 185 129 / 0.5);
+        }
+        .btn-checkin:active {
+            transform: scale(0.98);
+        }
+        .btn-checkin.completed {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #059669;
+            box-shadow: 0 2px 8px 0 rgb(16 185 129 / 0.2);
+        }
+
+        /* ========== 卡片样式 ========== */
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            transition: box-shadow 0.2s ease;
+        }
+        .card:hover {
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        /* ========== 输入框样式 ========== */
+        .input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            color: #1e293b;
+            background: #ffffff;
+            transition: all 0.15s ease;
+        }
+        .input:focus {
+            outline: none;
+            border-color: #10b981;
+            box-shadow: 0 0 0 3px rgb(16 185 129 / 0.1);
+        }
+        .input::placeholder {
+            color: #94a3b8;
+        }
+
+        /* ========== Toast 消息 ========== */
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 100;
+            animation: scaleIn 0.2s ease-out;
+        }
+        .toast-success {
+            background: #d1fae5;
+            color: #059669;
+            border: 1px solid #a7f3d0;
+        }
+        .toast-error {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        .toast-warning {
+            background: #fef3c7;
+            color: #d97706;
+            border: 1px solid #fde68a;
+        }
+
+        /* ========== 遮罩层 ========== */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+        }
+
+        /* ========== 弹窗样式 ========== */
+        .modal {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-width: 448px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 24px 24px 0 0;
+            z-index: 50;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        /* ========== 骨架屏 ========== */
+        .skeleton {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen max-w-md mx-auto">
+
+    <!-- ==================== 登录页面 ==================== -->
+    <div id="page-login" class="page active min-h-screen flex flex-col bg-slate-50">
+        <div class="flex-grow flex flex-col justify-center px-6 py-12">
+            <!-- Logo & Title -->
+            <div class="text-center mb-12">
+                <div class="w-24 h-24 bg-primary-light rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-heart-pulse text-primary text-4xl animate-heartbeat"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">今天又活了一天</h1>
+                <p class="text-slate-500 text-sm">记录生存，沉淀记忆</p>
+            </div>
+
+            <!-- Login Form -->
+            <div class="space-y-4 mb-6">
+                <div>
+                    <input type="email" placeholder="邮箱" class="input">
+                </div>
+                <div>
+                    <input type="password" placeholder="密码" class="input">
+                </div>
+            </div>
+
+            <!-- Login Button -->
+            <button id="loginBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors mb-4">
+                登录
+            </button>
+
+            <!-- Register Link -->
+            <p class="text-center text-slate-500 text-sm">
+                还没有账号？
+                <button id="toRegisterBtn" class="text-primary font-medium">立即注册</button>
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 pb-8 text-center">
+            <p class="text-slate-400 text-xs">"原来你还活着啊"</p>
+        </div>
+    </div>
+
+    <!-- ==================== 注册页面 ==================== -->
+    <div id="page-register" class="page min-h-screen flex flex-col bg-slate-50">
+        <div class="flex-grow flex flex-col justify-center px-6 py-12">
+            <!-- Back & Title -->
+            <div class="mb-8">
+                <button id="backToLoginBtn" class="text-slate-500 mb-4">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>返回
+                </button>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">创建账号</h1>
+                <p class="text-slate-500 text-sm">开始记录你的生存轨迹</p>
+            </div>
+
+            <!-- Register Form -->
+            <div class="space-y-4 mb-6">
+                <div>
+                    <input type="email" placeholder="邮箱" class="input">
+                </div>
+                <div>
+                    <input type="password" placeholder="密码（至少6位）" class="input">
+                </div>
+                <div>
+                    <input type="password" placeholder="确认密码" class="input">
+                </div>
+                <div>
+                    <input type="text" placeholder="昵称（选填）" class="input">
+                </div>
+            </div>
+
+            <!-- Register Button -->
+            <button id="registerBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors">
+                注册
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 主应用容器 ==================== -->
+    <div id="page-app" class="page flex flex-col min-h-screen">
+
+        <!-- Header -->
+        <header class="bg-white px-4 py-3 flex justify-between items-center shadow-sm sticky top-0 z-10">
+            <h1 class="text-xl font-bold text-slate-800">今天又活了一天</h1>
+            <div class="flex space-x-4">
+                <button class="text-slate-600 relative">
+                    <i class="fa-regular fa-bell"></i>
+                    <span class="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full animate-breathe"></span>
+                </button>
+                <button class="text-slate-600"><i class="fa-solid fa-gear"></i></button>
+            </div>
+        </header>
+
+        <!-- Main Content Container -->
+        <main class="flex-grow overflow-y-auto pb-20">
+
+            <!-- ==================== Tab 1: 主页 ==================== -->
+            <div id="tab-home" class="tab-content active p-4">
+
+                <!-- Status Card with Checkin Button -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm mb-6 text-center border border-slate-100">
+                    <div class="mb-6">
+                        <div class="w-20 h-20 bg-accent-light rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fa-solid fa-heart-pulse text-accent text-3xl animate-heartbeat"></i>
+                        </div>
+                        <p class="text-slate-800 font-medium text-lg mb-1" id="statusTitle">原来你还活着啊</p>
+                        <p class="text-slate-500 text-sm" id="statusText">今日尚未确认存活</p>
+                    </div>
+
+                    <!-- 圆形打卡按钮 -->
+                    <button id="openCheckinModal" class="btn-checkin mx-auto flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-check text-2xl mb-1"></i>
+                        <span class="text-sm">确认存活</span>
+                    </button>
+                </div>
+
+                <!-- Success Feedback (Hidden by default) -->
+                <div id="feedbackArea" class="hidden bg-primary-light border border-emerald-200 rounded-2xl p-6 text-center mb-6 animate-checkin">
+                    <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fa-solid fa-check text-primary text-3xl"></i>
+                    </div>
+                    <p class="text-primary-dark font-bold text-lg mb-1">恭喜你又活过了一天！</p>
+                    <p class="text-emerald-600 text-sm">今天也辛苦了</p>
+                </div>
+
+                <!-- Today's Birthday Reminder -->
+                <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center mr-3">
+                            <i class="fa-solid fa-cake-candles text-amber-600"></i>
+                        </div>
+                        <div class="flex-grow">
+                            <p class="text-amber-800 font-medium text-sm">今日生日提醒</p>
+                            <p class="text-amber-600 text-xs">张三 今天生日，记得送上祝福</p>
+                        </div>
+                        <button class="text-amber-600 text-sm font-medium">查看</button>
+                    </div>
+                </div>
+
+                <!-- Daily Info Card -->
+                <section class="mb-6">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <i class="fa-solid fa-lightbulb mr-2 text-amber-500"></i> 每日信息差
+                    </h2>
+                    <div class="bg-gradient-to-br from-primary to-primary-dark rounded-xl p-5 text-white">
+                        <p class="text-white/80 text-xs mb-2">2026年1月12日</p>
+                        <p class="font-medium mb-3">"人生中最重要的不是所站的位置，而是所朝的方向。"</p>
+                        <div class="flex items-center text-white/70 text-xs">
+                            <i class="fa-solid fa-quote-left mr-1"></i>
+                            <span>奥利弗·温德尔·霍姆斯</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Entry -->
+                <section class="mb-6">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <i class="fa-solid fa-feather-pointed mr-2 text-primary"></i> 今日有意义的事
+                    </h2>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+                        <textarea class="w-full h-20 p-0 border-none focus:ring-0 text-slate-700 placeholder-slate-400 resize-none text-sm" placeholder="记录下今天的一些有意义的事件..."></textarea>
+                        <div class="flex justify-between items-center mt-2 border-t border-slate-100 pt-3">
+                            <div class="flex space-x-3">
+                                <button class="text-slate-400 hover:text-primary transition-colors"><i class="fa-solid fa-image"></i></button>
+                                <button class="text-slate-400 hover:text-primary transition-colors"><i class="fa-solid fa-face-smile"></i></button>
+                            </div>
+                            <button class="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors">保存记忆</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Missed Day Hint -->
+                <div class="bg-sky-50 border border-sky-100 rounded-xl p-4">
+                    <p class="text-sky-700 text-sm">
+                        <i class="fa-solid fa-circle-info mr-1"></i>
+                        一定是因为昨天过得很开心吧，才忘了打卡。
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- ==================== Tab 2: 打卡记录 ==================== -->
+            <div id="tab-checkin" class="tab-content p-4">
+
+                <!-- Stats Overview -->
+                <div class="grid grid-cols-3 gap-3 mb-6">
+                    <div class="bg-white rounded-xl p-4 text-center border border-slate-100">
+                        <p class="text-2xl font-bold text-primary font-mono">365</p>
+                        <p class="text-slate-500 text-xs">总打卡天数</p>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 text-center border border-slate-100">
+                        <p class="text-2xl font-bold text-accent font-mono">28</p>
+                        <p class="text-slate-500 text-xs">连续打卡</p>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 text-center border border-slate-100">
+                        <p class="text-2xl font-bold text-amber-500 font-mono">42</p>
+                        <p class="text-slate-500 text-xs">记录条数</p>
+                    </div>
+                </div>
+
+                <!-- Calendar View -->
+                <section class="mb-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <button class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-chevron-left"></i></button>
+                            <h3 class="font-bold text-slate-800">2026年1月</h3>
+                            <button class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 mb-2">
+                            <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 text-center text-sm">
+                            <span class="calendar-day rounded-lg p-2 text-slate-300"></span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-300"></span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-300"></span>
+                            <span class="calendar-day rounded-lg p-2 checked">1</span>
+                            <span class="calendar-day rounded-lg p-2 checked">2</span>
+                            <span class="calendar-day rounded-lg p-2 checked">3</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">4</span>
+                            <span class="calendar-day rounded-lg p-2 checked">5</span>
+                            <span class="calendar-day rounded-lg p-2 checked">6</span>
+                            <span class="calendar-day rounded-lg p-2 checked">7</span>
+                            <span class="calendar-day rounded-lg p-2 checked">8</span>
+                            <span class="calendar-day rounded-lg p-2 checked">9</span>
+                            <span class="calendar-day rounded-lg p-2 checked">10</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">11</span>
+                            <span class="calendar-day rounded-lg p-2 today bg-primary-light">12</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">13</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">14</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">15</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">16</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">17</span>
+                            <span class="calendar-day rounded-lg p-2 text-slate-400">18</span>
+                        </div>
+                        <div class="flex items-center justify-center mt-4 space-x-4 text-xs">
+                            <span class="flex items-center"><span class="w-3 h-3 bg-primary rounded mr-1"></span>已打卡</span>
+                            <span class="flex items-center"><span class="w-3 h-3 border-2 border-primary rounded mr-1"></span>今天</span>
+                            <span class="flex items-center"><span class="w-3 h-3 bg-slate-200 rounded mr-1"></span>未打卡</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Recent Records -->
+                <section>
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <i class="fa-solid fa-clock-rotate-left mr-2 text-slate-500"></i> 近期记录
+                    </h2>
+
+                    <!-- Record Item -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-slate-500 text-xs">2026-01-10 · 周五</span>
+                            <span class="bg-primary-light text-primary-dark text-xs px-2 py-0.5 rounded font-medium">已打卡</span>
+                        </div>
+                        <p class="text-slate-700 text-sm mb-3">今天完成了项目的第一个里程碑，团队一起吃了庆功宴。</p>
+                        <div class="flex space-x-2">
+                            <img src="https://picsum.photos/seed/day1/100/100" class="w-16 h-16 rounded-lg object-cover">
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-3">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-slate-500 text-xs">2026-01-09 · 周四</span>
+                            <span class="bg-primary-light text-primary-dark text-xs px-2 py-0.5 rounded font-medium">已打卡</span>
+                        </div>
+                        <p class="text-slate-700 text-sm">新的一周开始，早起跑了5公里，感觉精神很好。</p>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-3 opacity-50">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-slate-500 text-xs">2026-01-04 · 周六</span>
+                            <span class="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded">未打卡</span>
+                        </div>
+                        <p class="text-slate-400 text-sm italic">这一天没有记录</p>
+                    </div>
+
+                    <!-- Load More -->
+                    <button class="w-full py-3 text-slate-500 text-sm hover:text-primary transition-colors">
+                        <i class="fa-solid fa-chevron-down mr-1"></i> 加载更多
+                    </button>
+                </section>
+            </div>
+
+            <!-- ==================== Tab 3: 人物记 ==================== -->
+            <div id="tab-people" class="tab-content p-4">
+
+                <!-- Search & Add -->
+                <div class="flex space-x-3 mb-6">
+                    <div class="flex-grow relative">
+                        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" placeholder="搜索人物..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+                    <button id="addPersonBtn" class="bg-primary text-white px-4 rounded-xl hover:bg-primary-dark transition-colors">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+
+                <!-- Sort Options -->
+                <div class="flex space-x-2 mb-4">
+                    <button class="px-3 py-1.5 bg-primary text-white text-xs rounded-lg font-medium">按添加时间</button>
+                    <button class="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium hover:bg-slate-200 transition-colors">按生日临近</button>
+                </div>
+
+                <!-- Birthday Today Section -->
+                <section class="mb-6">
+                    <h2 class="text-sm font-medium text-amber-600 mb-3 flex items-center">
+                        <i class="fa-solid fa-cake-candles mr-2"></i> 今日生日
+                    </h2>
+                    <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
+                        <div class="flex items-center">
+                            <div class="w-14 h-14 bg-white rounded-full overflow-hidden border-2 border-amber-300 mr-4">
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
+                            </div>
+                            <div class="flex-grow">
+                                <h3 class="font-bold text-slate-800">张三</h3>
+                                <p class="text-slate-500 text-xs">INFP · 今天 25 岁</p>
+                            </div>
+                            <button class="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors">送祝福</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- All People -->
+                <section>
+                    <h2 class="text-sm font-medium text-slate-500 mb-3">全部人物 (5)</h2>
+
+                    <div class="space-y-3">
+                        <!-- Person Card -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="showPersonDetail()">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h3 class="font-bold text-slate-800 text-sm">张三</h3>
+                                    <p class="text-slate-400 text-xs">INFP · 1月12日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h3 class="font-bold text-slate-800 text-sm">李四</h3>
+                                    <p class="text-slate-400 text-xs">ENFJ · 5月12日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Luna" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h3 class="font-bold text-slate-800 text-sm">王五</h3>
+                                    <p class="text-slate-400 text-xs">INTJ · 8月23日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h3 class="font-bold text-slate-800 text-sm">赵六</h3>
+                                    <p class="text-slate-400 text-xs">ESTP · 11月5日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Add Person Floating Button -->
+                <div class="fixed bottom-24 right-4 z-20">
+                    <button class="w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary-dark transition-colors hover:scale-105">
+                        <i class="fa-solid fa-user-plus text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ==================== Tab 4: 我的 ==================== -->
+            <div id="tab-profile" class="tab-content p-4">
+
+                <!-- Profile Header -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm mb-6 border border-slate-100 text-center">
+                    <div class="w-20 h-20 bg-slate-100 rounded-full mx-auto mb-3 overflow-hidden border-4 border-white shadow">
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Me" alt="avatar" class="w-full h-full">
+                    </div>
+                    <h2 class="font-bold text-slate-800 text-lg">用户昵称</h2>
+                    <p class="text-slate-500 text-sm">已存活 <span class="text-primary font-mono font-bold">365</span> 天</p>
+                    <button class="mt-3 text-primary text-sm font-medium">
+                        <i class="fa-solid fa-pen mr-1"></i> 编辑资料
+                    </button>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="bg-primary-light rounded-xl p-4 border border-emerald-200">
+                        <div class="flex items-center mb-2">
+                            <i class="fa-solid fa-heart text-primary mr-2"></i>
+                            <span class="text-slate-600 text-sm">生存天数</span>
+                        </div>
+                        <p class="text-2xl font-bold text-primary-dark font-mono">365</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                        <div class="flex items-center mb-2">
+                            <i class="fa-solid fa-users text-blue-500 mr-2"></i>
+                            <span class="text-slate-600 text-sm">记录人物</span>
+                        </div>
+                        <p class="text-2xl font-bold text-blue-600 font-mono">5</p>
+                    </div>
+                </div>
+
+                <!-- Death Confirmation Settings -->
+                <section class="mb-6">
+                    <div class="bg-accent-light border border-rose-200 rounded-xl p-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-accent-dark font-bold text-sm flex items-center">
+                                <i class="fa-solid fa-skull-crossbones mr-2"></i> 死亡确认设置
+                            </h3>
+                            <!-- Toggle Switch -->
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                            </label>
+                        </div>
+                        <p class="text-rose-600 text-xs mb-3">若连续多日未打卡，将发送确认邮件至紧急联系人</p>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-accent-dark text-xs mb-1 block font-medium">触发天数</label>
+                                <select class="w-full text-sm p-2.5 rounded-lg border border-rose-200 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent bg-white">
+                                    <option>连续 3 天未打卡</option>
+                                    <option selected>连续 7 天未打卡</option>
+                                    <option>连续 14 天未打卡</option>
+                                    <option>连续 30 天未打卡</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-accent-dark text-xs mb-1 block font-medium">紧急联系人邮箱</label>
+                                <input type="email" placeholder="emergency@example.com" class="w-full text-sm p-2.5 rounded-lg border border-rose-200 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Settings List -->
+                <section class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                    <div class="divide-y divide-slate-100">
+                        <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-primary-light rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-bell text-primary text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">打卡提醒</span>
+                            </div>
+                            <div class="flex items-center text-slate-400">
+                                <span class="text-sm mr-2">每天 21:00</span>
+                                <i class="fa-solid fa-chevron-right text-xs"></i>
+                            </div>
+                        </button>
+                        <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-envelope text-blue-500 text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">消息通知</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                        </button>
+                        <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-shield-halved text-purple-500 text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">隐私设置</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                        </button>
+                        <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-cloud-arrow-up text-amber-500 text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">数据备份</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- About Section -->
+                <section class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="divide-y divide-slate-100">
+                        <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-circle-info text-slate-500 text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">关于我们</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                        </button>
+                        <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-circle-question text-slate-500 text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">帮助与反馈</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                        </button>
+                        <button id="logoutBtn" class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-right-from-bracket text-red-500 text-sm"></i>
+                                </div>
+                                <span class="text-red-500">退出登录</span>
+                            </div>
+                        </button>
+                    </div>
+                </section>
+
+                <p class="text-center text-slate-400 text-xs mt-6">版本 1.0.0</p>
+            </div>
+
+        </main>
+
+        <!-- Navigation Bar -->
+        <nav class="bg-white border-t border-slate-100 px-6 py-2 flex justify-around items-center safe-area-bottom fixed bottom-0 left-0 right-0 max-w-md mx-auto">
+            <button class="nav-btn flex flex-col items-center py-1 px-3 text-primary" data-tab="home">
+                <i class="fa-solid fa-house-chimney text-xl"></i>
+                <span class="text-[10px] mt-1 font-medium">主页</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center py-1 px-3 text-slate-400" data-tab="checkin">
+                <i class="fa-solid fa-calendar-check text-xl"></i>
+                <span class="text-[10px] mt-1">打卡</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center py-1 px-3 text-slate-400" data-tab="people">
+                <i class="fa-solid fa-address-book text-xl"></i>
+                <span class="text-[10px] mt-1">人物</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center py-1 px-3 text-slate-400" data-tab="profile">
+                <i class="fa-solid fa-user text-xl"></i>
+                <span class="text-[10px] mt-1">我的</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- ==================== 打卡弹窗 ==================== -->
+    <div id="checkinModal" class="hidden">
+        <div class="overlay" onclick="closeCheckinModal()"></div>
+        <div class="modal p-6 pb-10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-bold text-slate-800">确认今日存活</h3>
+                <button onclick="closeCheckinModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Step 1: Input -->
+            <div id="checkinStep1">
+                <p class="text-slate-500 text-sm mb-4">记录一下今天有意义的事（可选）</p>
+                <textarea id="checkinInput" class="w-full h-24 p-3 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="今天发生了什么值得记住的事..."></textarea>
+
+                <div class="flex items-center space-x-3 mt-3 mb-6">
+                    <button class="flex items-center px-3 py-2 bg-slate-100 rounded-lg text-slate-600 text-sm hover:bg-slate-200 transition-colors">
+                        <i class="fa-solid fa-image mr-2"></i> 添加照片
+                    </button>
+                    <button class="flex items-center px-3 py-2 bg-slate-100 rounded-lg text-slate-600 text-sm hover:bg-slate-200 transition-colors">
+                        <i class="fa-solid fa-face-smile mr-2"></i> 心情
+                    </button>
+                </div>
+
+                <div class="flex space-x-3">
+                    <button onclick="doCheckinWithContent()" class="flex-grow bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-dark transition-colors">
+                        确认打卡
+                    </button>
+                    <button onclick="doCheckinSimple()" class="px-6 bg-slate-100 text-slate-600 py-3 rounded-xl font-medium hover:bg-slate-200 transition-colors">
+                        纯打卡
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Success -->
+            <div id="checkinStep2" class="hidden text-center py-6">
+                <div class="w-20 h-20 bg-primary-light rounded-full flex items-center justify-center mx-auto mb-4 animate-checkin">
+                    <i class="fa-solid fa-check text-primary text-4xl"></i>
+                </div>
+                <h4 class="text-xl font-bold text-slate-800 mb-2">恭喜你又活过了一天！</h4>
+                <p class="text-slate-500 text-sm mb-6">今天也辛苦了</p>
+                <button onclick="closeCheckinModal()" class="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary-dark transition-colors">
+                    完成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 人物详情弹窗 ==================== -->
+    <div id="personDetailModal" class="hidden">
+        <div class="overlay" onclick="closePersonDetail()"></div>
+        <div class="modal max-h-[85vh] overflow-y-auto p-6 pb-10">
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="closePersonDetail()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-arrow-left text-xl"></i>
+                </button>
+                <div class="flex space-x-3">
+                    <button class="text-primary"><i class="fa-solid fa-pen"></i></button>
+                    <button class="text-red-500"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+
+            <!-- Person Info -->
+            <div class="text-center mb-6">
+                <div class="w-24 h-24 bg-slate-100 rounded-full mx-auto mb-4 overflow-hidden border-4 border-white shadow-lg">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
+                </div>
+                <h3 class="text-xl font-bold text-slate-800 mb-1">张三</h3>
+                <p class="text-slate-500 text-sm">INFP · 25岁</p>
+            </div>
+
+            <!-- Info Cards -->
+            <div class="space-y-4">
+                <div class="bg-slate-50 rounded-xl p-4">
+                    <h4 class="text-xs font-medium text-slate-500 mb-2">基本信息</h4>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <span class="text-slate-400">性别</span>
+                            <p class="text-slate-700 font-medium">男</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-400">生日</span>
+                            <p class="text-slate-700 font-medium">1月12日</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-400">MBTI</span>
+                            <p class="text-slate-700 font-medium">INFP</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 rounded-xl p-4">
+                    <h4 class="text-xs font-medium text-slate-500 mb-2">个人印象</h4>
+                    <p class="text-slate-700 text-sm">一个很有趣的人，喜欢哲学和艺术，总是能在平凡的事物中发现美好。性格温和，是个很好的倾听者。</p>
+                </div>
+
+                <div class="bg-slate-50 rounded-xl p-4">
+                    <h4 class="text-xs font-medium text-slate-500 mb-3">共同经历</h4>
+                    <div class="space-y-3">
+                        <div class="flex">
+                            <div class="w-2 h-2 bg-primary rounded-full mt-2 mr-3"></div>
+                            <div>
+                                <p class="text-slate-700 text-sm">2025年一起去了日本旅行</p>
+                                <p class="text-slate-400 text-xs">2025-03</p>
+                            </div>
+                        </div>
+                        <div class="flex">
+                            <div class="w-2 h-2 bg-primary rounded-full mt-2 mr-3"></div>
+                            <div>
+                                <p class="text-slate-700 text-sm">大学室友，一起度过了四年时光</p>
+                                <p class="text-slate-400 text-xs">2018-09</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="mt-3 text-primary text-sm font-medium">
+                        <i class="fa-solid fa-plus mr-1"></i> 添加经历
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 添加人物弹窗 ==================== -->
+    <div id="addPersonModal" class="hidden">
+        <div class="overlay" onclick="closeAddPerson()"></div>
+        <div class="modal max-h-[90vh] overflow-y-auto p-6 pb-10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-bold text-slate-800">添加人物</h3>
+                <button onclick="closeAddPerson()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Avatar Upload -->
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 bg-slate-100 rounded-full mx-auto mb-2 flex items-center justify-center border-2 border-dashed border-slate-300 cursor-pointer hover:border-primary transition-colors">
+                    <i class="fa-solid fa-camera text-slate-400 text-xl"></i>
+                </div>
+                <p class="text-slate-500 text-xs">点击上传照片</p>
+            </div>
+
+            <!-- Form -->
+            <div class="space-y-4">
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">姓名/称呼 <span class="text-accent">*</span></label>
+                    <input type="text" placeholder="输入姓名或称呼" class="input">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">性别</label>
+                        <select class="input">
+                            <option value="">请选择</option>
+                            <option value="male">男</option>
+                            <option value="female">女</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">生日</label>
+                        <input type="text" placeholder="MM-DD" class="input">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">MBTI</label>
+                    <select class="input">
+                        <option value="">请选择</option>
+                        <option>INTJ</option>
+                        <option>INTP</option>
+                        <option>ENTJ</option>
+                        <option>ENTP</option>
+                        <option>INFJ</option>
+                        <option>INFP</option>
+                        <option>ENFJ</option>
+                        <option>ENFP</option>
+                        <option>ISTJ</option>
+                        <option>ISFJ</option>
+                        <option>ESTJ</option>
+                        <option>ESFJ</option>
+                        <option>ISTP</option>
+                        <option>ISFP</option>
+                        <option>ESTP</option>
+                        <option>ESFP</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">个人印象</label>
+                    <textarea placeholder="描述一下这个人给你的印象..." class="input h-20 resize-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">共同经历</label>
+                    <textarea placeholder="记录你们的重要共同经历..." class="input h-20 resize-none"></textarea>
+                </div>
+            </div>
+
+            <button class="w-full bg-primary text-white py-3 rounded-xl font-bold mt-6 hover:bg-primary-dark transition-colors">
+                保存
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== Toast 消息 ==================== -->
+    <div id="toast" class="toast toast-success hidden">
+        <i class="fa-solid fa-check-circle mr-2"></i>
+        <span id="toastMessage">操作成功</span>
+    </div>
+
+    <!-- ==================== Loading 遮罩 ==================== -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-white/80 z-50 flex items-center justify-center">
+        <div class="text-center">
+            <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p class="text-slate-600 text-sm">加载中...</p>
+        </div>
+    </div>
+
+    <script>
+        // ========== 页面导航 ==========
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+        }
+
+        // ========== Tab 导航 ==========
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const targetTab = this.dataset.tab;
+
+                // 更新导航按钮状态
+                document.querySelectorAll('.nav-btn').forEach(b => {
+                    b.classList.remove('text-primary');
+                    b.classList.add('text-slate-400');
+                    b.querySelector('span').classList.remove('font-medium');
+                });
+                this.classList.remove('text-slate-400');
+                this.classList.add('text-primary');
+                this.querySelector('span').classList.add('font-medium');
+
+                // 切换 Tab 内容
+                document.querySelectorAll('.tab-content').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                document.getElementById('tab-' + targetTab).classList.add('active');
+            });
+        });
+
+        // ========== 登录/注册 ==========
+        document.getElementById('loginBtn').addEventListener('click', function() {
+            showLoading();
+            setTimeout(() => {
+                hideLoading();
+                showPage('page-app');
+                showToast('登录成功', 'success');
+            }, 1000);
+        });
+
+        document.getElementById('toRegisterBtn').addEventListener('click', function() {
+            showPage('page-register');
+        });
+
+        document.getElementById('backToLoginBtn').addEventListener('click', function() {
+            showPage('page-login');
+        });
+
+        document.getElementById('registerBtn').addEventListener('click', function() {
+            showLoading();
+            setTimeout(() => {
+                hideLoading();
+                showPage('page-app');
+                showToast('注册成功', 'success');
+            }, 1000);
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            showPage('page-login');
+            showToast('已退出登录', 'success');
+        });
+
+        // ========== 打卡弹窗 ==========
+        document.getElementById('openCheckinModal').addEventListener('click', function() {
+            if (!this.classList.contains('completed')) {
+                document.getElementById('checkinModal').classList.remove('hidden');
+                document.getElementById('checkinStep1').classList.remove('hidden');
+                document.getElementById('checkinStep2').classList.add('hidden');
+            }
+        });
+
+        function closeCheckinModal() {
+            document.getElementById('checkinModal').classList.add('hidden');
+        }
+
+        function doCheckinWithContent() {
+            completeCheckin();
+        }
+
+        function doCheckinSimple() {
+            completeCheckin();
+        }
+
+        function completeCheckin() {
+            document.getElementById('checkinStep1').classList.add('hidden');
+            document.getElementById('checkinStep2').classList.remove('hidden');
+
+            // 更新主页状态
+            const checkinBtn = document.getElementById('openCheckinModal');
+            checkinBtn.classList.add('completed');
+            checkinBtn.innerHTML = '<i class="fa-solid fa-check text-2xl mb-1"></i><span class="text-sm">已确认</span>';
+
+            document.getElementById('statusTitle').textContent = '恭喜你又活过了一天！';
+            document.getElementById('statusText').textContent = '今日已确认存活';
+            document.getElementById('feedbackArea').classList.remove('hidden');
+        }
+
+        // ========== 人物详情弹窗 ==========
+        function showPersonDetail() {
+            document.getElementById('personDetailModal').classList.remove('hidden');
+        }
+
+        function closePersonDetail() {
+            document.getElementById('personDetailModal').classList.add('hidden');
+        }
+
+        // ========== 添加人物弹窗 ==========
+        document.getElementById('addPersonBtn').addEventListener('click', function() {
+            document.getElementById('addPersonModal').classList.remove('hidden');
+        });
+
+        function closeAddPerson() {
+            document.getElementById('addPersonModal').classList.add('hidden');
+        }
+
+        // ========== Toast 消息 ==========
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+
+            toast.className = 'toast toast-' + type;
+            toastMessage.textContent = message;
+            toast.classList.remove('hidden');
+
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2000);
+        }
+
+        // ========== Loading ==========
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
