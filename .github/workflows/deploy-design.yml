@@ -3,7 +3,7 @@ name: Deploy Design Prototypes
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'docs/design/**'
   workflow_dispatch:
