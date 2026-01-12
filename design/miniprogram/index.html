@@ -2,37 +2,573 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>今天又活了一天 - 微信小程序原型</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
+        @keyframes heartBeat {
+            0% { transform: scale(1); }
+            14% { transform: scale(1.3); }
+            28% { transform: scale(1); }
+            42% { transform: scale(1.3); }
+            70% { transform: scale(1); }
         }
-        .float-animation {
-            animation: float 3s ease-in-out infinite;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-heartbeat {
+            animation: heartBeat 1.5s infinite;
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out;
+        }
+        body {
+            background-color: #ededed;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+        }
+        .miniprogram-container {
+            background-color: #ededed;
+            min-height: 100vh;
+        }
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.2s ease-out;
+        }
+        .calendar-day {
+            aspect-ratio: 1;
+        }
+        .calendar-day.checked {
+            background-color: #07c160;
+            color: white;
+        }
+        .calendar-day.today {
+            border: 2px solid #07c160;
+        }
+        /* WeChat Green */
+        .wechat-green {
+            background-color: #07c160;
+        }
+        .wechat-green-text {
+            color: #07c160;
+        }
+        /* WeChat Style Button */
+        .wx-btn {
+            background-color: #07c160;
+            color: white;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        .wx-btn:active {
+            background-color: #06ad56;
+        }
+        /* WeChat Style Card */
+        .wx-card {
+            background: white;
+            border-radius: 12px;
+        }
+        /* WeChat Navigation Bar */
+        .wx-nav-bar {
+            background: linear-gradient(135deg, #07c160 0%, #06ad56 100%);
+        }
+        /* WeChat Capsule Button */
+        .wx-capsule {
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 16px;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+        }
+        .wx-capsule-divider {
+            width: 1px;
+            height: 18px;
+            background: rgba(255, 255, 255, 0.5);
+            margin: 0 8px;
         }
     </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center">
-    <div class="text-center px-6">
-        <div class="inline-flex items-center justify-center w-24 h-24 bg-white/20 rounded-3xl mb-8 float-animation">
-            <i class="fa-brands fa-weixin text-white text-5xl"></i>
-        </div>
-        <h1 class="text-4xl font-bold text-white mb-4">微信小程序原型</h1>
-        <p class="text-white/80 text-lg mb-8">正在规划中，敬请期待...</p>
-        <div class="inline-flex items-center bg-white/10 backdrop-blur rounded-full px-6 py-3 mb-8">
-            <i class="fa-solid fa-lightbulb text-white/60 mr-3"></i>
-            <span class="text-white/80 text-sm">无需下载，扫码即用的打卡体验</span>
-        </div>
-        <div>
-            <a href="../" class="inline-flex items-center text-white hover:text-white/80 transition-colors">
+<body class="flex justify-center items-start min-h-screen py-8 px-4">
+
+    <!-- Phone Frame -->
+    <div class="relative">
+        <!-- Back to list link -->
+        <div class="mb-4 text-center">
+            <a href="../" class="inline-flex items-center text-slate-500 hover:text-slate-700 text-sm">
                 <i class="fa-solid fa-arrow-left mr-2"></i>
                 返回原型列表
             </a>
         </div>
+
+        <!-- Mini Program Frame -->
+        <div class="w-[375px] bg-white rounded-[40px] shadow-2xl overflow-hidden border-8 border-slate-800">
+            <!-- iPhone Status Bar -->
+            <div class="bg-slate-800 text-white px-6 py-2 flex justify-between items-center text-xs">
+                <span>9:41</span>
+                <div class="flex items-center space-x-1">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi"></i>
+                    <i class="fa-solid fa-battery-full"></i>
+                </div>
+            </div>
+
+            <!-- WeChat Navigation Bar -->
+            <div class="wx-nav-bar px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <button class="text-white">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <span class="text-white font-medium">今天又活了一天</span>
+                </div>
+                <!-- WeChat Capsule -->
+                <div class="wx-capsule">
+                    <i class="fa-solid fa-ellipsis text-white text-xs"></i>
+                    <div class="wx-capsule-divider"></div>
+                    <i class="fa-solid fa-circle text-white text-xs"></i>
+                </div>
+            </div>
+
+            <!-- Mini Program Content -->
+            <div class="miniprogram-container h-[667px] overflow-y-auto pb-16">
+
+                <!-- ==================== Tab 1: 主页 ==================== -->
+                <div id="tab-home" class="tab-content active p-4">
+
+                    <!-- Status Card -->
+                    <div class="wx-card p-5 mb-4 text-center">
+                        <div class="mb-4">
+                            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <i class="fa-solid fa-heart-pulse text-red-500 text-3xl animate-heartbeat"></i>
+                            </div>
+                            <p class="text-slate-500 text-sm" id="statusText">生存状态：确认中...</p>
+                        </div>
+                        <button id="checkInBtn" class="wx-btn w-full py-3 text-lg">
+                            确认存活打卡
+                        </button>
+                        <p class="text-slate-400 text-xs mt-3">"原来你还活着啊"</p>
+                    </div>
+
+                    <!-- Success Feedback -->
+                    <div id="feedbackArea" class="hidden wx-card bg-green-50 border border-green-100 p-4 text-center mb-4">
+                        <p class="wechat-green-text font-bold mb-1">恭喜你又活过了一天！</p>
+                        <p class="text-green-600 text-sm">今天也辛苦了</p>
+                    </div>
+
+                    <!-- Birthday Reminder -->
+                    <div class="wx-card bg-amber-50 p-4 mb-4">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center mr-3">
+                                <i class="fa-solid fa-cake-candles text-amber-500"></i>
+                            </div>
+                            <div class="flex-grow">
+                                <p class="text-amber-800 font-medium text-sm">今日生日提醒</p>
+                                <p class="text-amber-600 text-xs">张三 今天生日</p>
+                            </div>
+                            <button class="text-amber-600 text-sm">查看</button>
+                        </div>
+                    </div>
+
+                    <!-- Daily Quote -->
+                    <div class="wx-card wechat-green p-4 mb-4">
+                        <p class="text-white/60 text-xs mb-2">每日信息差</p>
+                        <p class="text-white text-sm mb-2">"人生中最重要的不是所站的位置，而是所朝的方向。"</p>
+                        <p class="text-white/70 text-xs">—— 奥利弗·温德尔·霍姆斯</p>
+                    </div>
+
+                    <!-- Quick Record -->
+                    <div class="wx-card p-4 mb-4">
+                        <h3 class="font-medium text-slate-800 mb-3 flex items-center text-sm">
+                            <i class="fa-solid fa-feather-pointed mr-2 wechat-green-text"></i>
+                            今日有意义的事
+                        </h3>
+                        <textarea class="w-full h-20 p-3 bg-slate-50 rounded-lg text-sm placeholder-slate-400 border-none resize-none" placeholder="记录下今天的一些有意义的事件..."></textarea>
+                        <div class="flex justify-between items-center mt-3">
+                            <div class="flex space-x-4">
+                                <button class="text-slate-400"><i class="fa-solid fa-image"></i></button>
+                                <button class="text-slate-400"><i class="fa-solid fa-face-smile"></i></button>
+                            </div>
+                            <button class="wx-btn px-4 py-1.5 text-sm">保存</button>
+                        </div>
+                    </div>
+
+                    <!-- Reminder -->
+                    <div class="wx-card bg-blue-50 p-3">
+                        <p class="text-blue-600 text-xs">
+                            <i class="fa-solid fa-circle-info mr-1"></i>
+                            一定是因为昨天过的很开心吧，才忘了打卡。
+                        </p>
+                    </div>
+
+                </div>
+
+                <!-- ==================== Tab 2: 打卡记录 ==================== -->
+                <div id="tab-checkin" class="tab-content p-4">
+
+                    <!-- Stats -->
+                    <div class="grid grid-cols-3 gap-3 mb-4">
+                        <div class="wx-card p-3 text-center">
+                            <p class="text-xl font-bold wechat-green-text">365</p>
+                            <p class="text-slate-500 text-xs">总打卡天数</p>
+                        </div>
+                        <div class="wx-card p-3 text-center">
+                            <p class="text-xl font-bold text-orange-500">28</p>
+                            <p class="text-slate-500 text-xs">连续打卡</p>
+                        </div>
+                        <div class="wx-card p-3 text-center">
+                            <p class="text-xl font-bold text-blue-500">42</p>
+                            <p class="text-slate-500 text-xs">记录条数</p>
+                        </div>
+                    </div>
+
+                    <!-- Calendar -->
+                    <div class="wx-card p-4 mb-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <button class="text-slate-400 p-1"><i class="fa-solid fa-chevron-left"></i></button>
+                            <h3 class="font-medium text-slate-800 text-sm">2024年1月</h3>
+                            <button class="text-slate-400 p-1"><i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 mb-2">
+                            <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 text-center text-sm">
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">1</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">2</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">3</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">4</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">5</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400 bg-slate-100">6</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">7</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">8</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">9</span>
+                            <span class="calendar-day rounded-lg p-1.5 today bg-green-50 font-bold">10</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">11</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">12</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">13</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">14</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">15</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">16</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">17</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">18</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">19</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">20</span>
+                        </div>
+                        <div class="flex items-center justify-center mt-3 space-x-4 text-xs">
+                            <span class="flex items-center"><span class="w-2 h-2 bg-green-500 rounded mr-1"></span>已打卡</span>
+                            <span class="flex items-center"><span class="w-2 h-2 border-2 border-green-500 rounded mr-1"></span>今天</span>
+                        </div>
+                    </div>
+
+                    <!-- Recent Records -->
+                    <div class="wx-card p-4">
+                        <h3 class="font-medium text-slate-800 mb-3 text-sm">近期记录</h3>
+                        <div class="space-y-3">
+                            <div class="bg-slate-50 rounded-lg p-3">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-slate-500 text-xs">2024-01-09</span>
+                                    <span class="bg-green-100 wechat-green-text text-xs px-2 py-0.5 rounded">已打卡</span>
+                                </div>
+                                <p class="text-slate-700 text-sm mb-2">今天完成了项目的第一个里程碑。</p>
+                                <img src="https://picsum.photos/seed/day1/200/80" class="w-full h-16 rounded-lg object-cover">
+                            </div>
+                            <div class="bg-slate-50 rounded-lg p-3">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-slate-500 text-xs">2024-01-08</span>
+                                    <span class="bg-green-100 wechat-green-text text-xs px-2 py-0.5 rounded">已打卡</span>
+                                </div>
+                                <p class="text-slate-700 text-sm">早起跑了5公里，感觉精神很好。</p>
+                            </div>
+                            <div class="bg-slate-50 rounded-lg p-3 opacity-60">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-slate-500 text-xs">2024-01-06</span>
+                                    <span class="bg-slate-200 text-slate-500 text-xs px-2 py-0.5 rounded">未打卡</span>
+                                </div>
+                                <p class="text-slate-400 text-sm italic">这一天没有记录</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== Tab 3: 人物记 ==================== -->
+                <div id="tab-people" class="tab-content p-4">
+
+                    <!-- Search -->
+                    <div class="flex space-x-2 mb-4">
+                        <div class="flex-grow relative">
+                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input type="text" placeholder="搜索人物..." class="w-full pl-9 pr-3 py-2 bg-white rounded-lg text-sm border-none">
+                        </div>
+                        <button class="wx-btn px-3 rounded-lg">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+
+                    <!-- Birthday Today -->
+                    <div class="wx-card bg-gradient-to-r from-amber-50 to-orange-50 p-4 mb-4">
+                        <h3 class="text-amber-800 font-medium text-sm mb-3 flex items-center">
+                            <i class="fa-solid fa-cake-candles mr-2"></i> 今日生日
+                        </h3>
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-white rounded-full overflow-hidden border-2 border-amber-300 mr-3">
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
+                            </div>
+                            <div class="flex-grow">
+                                <h4 class="font-medium text-slate-800 text-sm">张三</h4>
+                                <p class="text-slate-500 text-xs">INFP · 今天 25 岁</p>
+                            </div>
+                            <button class="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs">送祝福</button>
+                        </div>
+                    </div>
+
+                    <!-- People List -->
+                    <div class="wx-card overflow-hidden">
+                        <h3 class="font-medium text-slate-500 text-xs px-4 pt-3 pb-2">全部人物 (5)</h3>
+                        <div class="divide-y divide-slate-100">
+                            <div class="flex items-center p-4">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h4 class="font-medium text-slate-800 text-sm">张三</h4>
+                                    <p class="text-slate-400 text-xs">INFP · 1月10日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                            </div>
+                            <div class="flex items-center p-4">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h4 class="font-medium text-slate-800 text-sm">李四</h4>
+                                    <p class="text-slate-400 text-xs">ENFJ · 5月12日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                            </div>
+                            <div class="flex items-center p-4">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Luna" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h4 class="font-medium text-slate-800 text-sm">王五</h4>
+                                    <p class="text-slate-400 text-xs">INTJ · 8月23日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                            </div>
+                            <div class="flex items-center p-4">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h4 class="font-medium text-slate-800 text-sm">赵六</h4>
+                                    <p class="text-slate-400 text-xs">ESTP · 11月5日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                            </div>
+                            <div class="flex items-center p-4">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Bella" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <h4 class="font-medium text-slate-800 text-sm">小美</h4>
+                                    <p class="text-slate-400 text-xs">ISFJ · 3月18日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Add Button -->
+                    <div class="fixed bottom-20 right-6" style="right: calc(50% - 375px/2 + 16px);">
+                        <button class="w-12 h-12 wechat-green text-white rounded-full shadow-lg flex items-center justify-center">
+                            <i class="fa-solid fa-user-plus"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ==================== Tab 4: 我的 ==================== -->
+                <div id="tab-profile" class="tab-content p-4">
+
+                    <!-- Profile Header -->
+                    <div class="wx-card p-6 mb-4 text-center">
+                        <div class="w-20 h-20 bg-slate-100 rounded-full mx-auto mb-3 overflow-hidden border-4 border-white shadow">
+                            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Me" alt="avatar" class="w-full h-full">
+                        </div>
+                        <h2 class="font-bold text-slate-800 text-lg">用户昵称</h2>
+                        <p class="text-slate-500 text-sm">已存活 365 天</p>
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div class="wx-card bg-green-50 p-4">
+                            <div class="flex items-center mb-2">
+                                <i class="fa-solid fa-heart wechat-green-text mr-2"></i>
+                                <span class="text-slate-600 text-xs">生存天数</span>
+                            </div>
+                            <p class="text-2xl font-bold wechat-green-text">365</p>
+                        </div>
+                        <div class="wx-card bg-blue-50 p-4">
+                            <div class="flex items-center mb-2">
+                                <i class="fa-solid fa-users text-blue-500 mr-2"></i>
+                                <span class="text-slate-600 text-xs">记录人物</span>
+                            </div>
+                            <p class="text-2xl font-bold text-blue-500">5</p>
+                        </div>
+                    </div>
+
+                    <!-- Death Confirmation -->
+                    <div class="wx-card bg-red-50 p-4 mb-4">
+                        <h3 class="text-red-800 font-medium text-sm mb-2 flex items-center">
+                            <i class="fa-solid fa-skull-crossbones mr-2"></i> 死亡确认设置
+                        </h3>
+                        <p class="text-red-600 text-xs mb-3">若连续多日未打卡，将发送确认邮件至紧急联系人</p>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-red-700 text-xs mb-1 block">触发天数</label>
+                                <select class="w-full text-sm p-2 rounded-lg border border-red-200 bg-white">
+                                    <option>连续 3 天未打卡</option>
+                                    <option selected>连续 7 天未打卡</option>
+                                    <option>连续 14 天未打卡</option>
+                                    <option>连续 30 天未打卡</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-red-700 text-xs mb-1 block">紧急联系人邮箱</label>
+                                <input type="email" placeholder="emergency@example.com" class="w-full text-sm p-2 rounded-lg border border-red-200">
+                            </div>
+                            <button class="w-full bg-red-500 text-white py-2 rounded-lg text-sm">保存设置</button>
+                        </div>
+                    </div>
+
+                    <!-- Settings List -->
+                    <div class="wx-card overflow-hidden mb-4">
+                        <div class="divide-y divide-slate-100">
+                            <button class="w-full flex items-center justify-between p-4">
+                                <div class="flex items-center">
+                                    <i class="fa-solid fa-bell w-5 text-slate-500"></i>
+                                    <span class="ml-3 text-slate-700 text-sm">打卡提醒</span>
+                                </div>
+                                <div class="flex items-center text-slate-400">
+                                    <span class="text-xs mr-2">每天 21:00</span>
+                                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                                </div>
+                            </button>
+                            <button class="w-full flex items-center justify-between p-4">
+                                <div class="flex items-center">
+                                    <i class="fa-solid fa-envelope w-5 text-slate-500"></i>
+                                    <span class="ml-3 text-slate-700 text-sm">消息通知</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                            </button>
+                            <button class="w-full flex items-center justify-between p-4">
+                                <div class="flex items-center">
+                                    <i class="fa-solid fa-shield-halved w-5 text-slate-500"></i>
+                                    <span class="ml-3 text-slate-700 text-sm">隐私设置</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                            </button>
+                            <button class="w-full flex items-center justify-between p-4">
+                                <div class="flex items-center">
+                                    <i class="fa-solid fa-cloud-arrow-up w-5 text-slate-500"></i>
+                                    <span class="ml-3 text-slate-700 text-sm">数据备份</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- About -->
+                    <div class="wx-card overflow-hidden">
+                        <div class="divide-y divide-slate-100">
+                            <button class="w-full flex items-center justify-between p-4">
+                                <div class="flex items-center">
+                                    <i class="fa-solid fa-circle-info w-5 text-slate-500"></i>
+                                    <span class="ml-3 text-slate-700 text-sm">关于我们</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                            </button>
+                            <button class="w-full flex items-center justify-between p-4">
+                                <div class="flex items-center">
+                                    <i class="fa-solid fa-circle-question w-5 text-slate-500"></i>
+                                    <span class="ml-3 text-slate-700 text-sm">帮助与反馈</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="text-center text-slate-400 text-xs mt-4">版本 1.0.0</p>
+                </div>
+
+            </div>
+
+            <!-- Tab Bar -->
+            <nav class="bg-white border-t border-slate-200 px-2 py-1 flex justify-around items-center absolute bottom-0 left-0 right-0">
+                <button class="nav-btn flex flex-col items-center py-1 px-3 wechat-green-text" data-tab="home">
+                    <i class="fa-solid fa-house-chimney text-lg"></i>
+                    <span class="text-[10px] mt-0.5">主页</span>
+                </button>
+                <button class="nav-btn flex flex-col items-center py-1 px-3 text-slate-400" data-tab="checkin">
+                    <i class="fa-solid fa-calendar-check text-lg"></i>
+                    <span class="text-[10px] mt-0.5">打卡</span>
+                </button>
+                <button class="nav-btn flex flex-col items-center py-1 px-3 text-slate-400" data-tab="people">
+                    <i class="fa-solid fa-address-book text-lg"></i>
+                    <span class="text-[10px] mt-0.5">人物</span>
+                </button>
+                <button class="nav-btn flex flex-col items-center py-1 px-3 text-slate-400" data-tab="profile">
+                    <i class="fa-solid fa-user text-lg"></i>
+                    <span class="text-[10px] mt-0.5">我的</span>
+                </button>
+            </nav>
+
+            <!-- Home Indicator -->
+            <div class="bg-slate-800 py-2 flex justify-center">
+                <div class="w-32 h-1 bg-white rounded-full"></div>
+            </div>
+        </div>
+
+        <!-- Device Info -->
+        <p class="text-center text-slate-400 text-xs mt-4">微信小程序原型 · iPhone 14 Pro</p>
     </div>
+
+    <script>
+        // Tab Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const targetTab = this.dataset.tab;
+
+                // Update nav buttons
+                document.querySelectorAll('.nav-btn').forEach(b => {
+                    b.classList.remove('wechat-green-text');
+                    b.classList.add('text-slate-400');
+                });
+                this.classList.remove('text-slate-400');
+                this.classList.add('wechat-green-text');
+
+                // Update tab content
+                document.querySelectorAll('.tab-content').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                document.getElementById('tab-' + targetTab).classList.add('active');
+            });
+        });
+
+        // Check-in Button
+        document.getElementById('checkInBtn').addEventListener('click', function() {
+            this.textContent = '已确认存活 ✓';
+            this.style.backgroundColor = '#f0fdf4';
+            this.style.color = '#07c160';
+            this.disabled = true;
+            document.getElementById('statusText').textContent = '生存状态：已确认';
+            document.getElementById('feedbackArea').classList.remove('hidden');
+        });
+    </script>
 </body>
 </html>
