@@ -18,7 +18,8 @@
     "dev:mobile": "turbo run dev --filter=@still-alive/mobile",
     "dev:web": "turbo run dev --filter=@still-alive/web",
     "dev:miniprogram": "turbo run dev --filter=@still-alive/miniprogram",
-    "dev:server": "turbo run dev --filter=@still-alive/server"
+    "dev:server": "turbo run dev --filter=@still-alive/server",
+    "dev:portal": "turbo run dev --filter=@still-alive/portal"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

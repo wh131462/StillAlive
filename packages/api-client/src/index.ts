@@ -143,6 +143,147 @@ export class ApiClient {
   async deletePerson(id: string): Promise<void> {
     return this.request(`/people/${id}`, { method: 'DELETE' });
   }
+
+  // ============ 同步 API ============
+
+  /**
+   * 推送本地变更到服务器
+   */
+  async syncPush(data: SyncPushRequest): Promise<SyncPushResponse> {
+    return this.request('/sync/push', { method: 'POST', body: data });
+  }
+
+  /**
+   * 从服务器拉取变更
+   */
+  async syncPull(data: SyncPullRequest): Promise<SyncPullResponse> {
+    return this.request('/sync/pull', { method: 'POST', body: data });
+  }
+
+  /**
+   * 获取同步状态
+   */
+  async getSyncStatus(): Promise<SyncStatusResponse> {
+    return this.request('/sync/status');
+  }
+
+  // ============ 增值服务 API ============
+
+  /**
+   * 获取每日信息差
+   */
+  async getDailyInfo(): Promise<DailyInfoResponse> {
+    return this.request('/daily-info');
+  }
+
+  /**
+   * 获取每日信息差历史
+   */
+  async getDailyInfoHistory(limit = 7): Promise<DailyInfoResponse[]> {
+    return this.request(`/daily-info/history?limit=${limit}`);
+  }
+
+  /**
+   * 生成年度总结
+   */
+  async generateYearlySummary(year: number): Promise<YearlySummaryResponse> {
+    return this.request('/premium/yearly-summary/generate', {
+      method: 'POST',
+      body: { year },
+    });
+  }
+
+  /**
+   * 获取年度总结
+   */
+  async getYearlySummary(year: number): Promise<YearlySummaryResponse | null> {
+    return this.request(`/premium/yearly-summary/${year}`);
+  }
+}
+
+// ============ 同步类型 ============
+
+export interface SyncPushRequest {
+  lastSyncAt: number;
+  changes: Array<{
+    collection: 'checkins' | 'people';
+    operation: 'upsert' | 'delete';
+    data: unknown;
+    localUpdatedAt: number;
+  }>;
+}
+
+export interface SyncPushResponse {
+  syncedAt: number;
+  accepted: string[];
+  conflicts: Array<{
+    id: string;
+    collection: 'checkins' | 'people';
+    serverData: unknown;
+  }>;
+}
+
+export interface SyncPullRequest {
+  lastSyncAt: number;
+}
+
+export interface SyncPullResponse {
+  checkins: Checkin[];
+  people: Person[];
+  serverTime: number;
+}
+
+export interface SyncStatusResponse {
+  checkinsCount: number;
+  peopleCount: number;
+  lastServerUpdate: number;
+}
+
+// ============ 增值服务类型 ============
+
+export interface DailyNewsItem {
+  id: string;
+  title: string;
+  summary: string;
+  category: 'tech' | 'world' | 'finance' | 'science' | 'culture' | 'sports' | 'other';
+  source?: string;
+  url?: string;
+  importance: 1 | 2 | 3;
+}
+
+export interface HistoryTodayItem {
+  year: number;
+  event: string;
+  category: 'history' | 'birth' | 'death' | 'invention' | 'culture';
+}
+
+export interface DailyInfoResponse {
+  date: string;
+  news: DailyNewsItem[];
+  historyToday: HistoryTodayItem[];
+  generatedAt: string;
+}
+
+export interface YearlySummaryResponse {
+  exists: boolean;
+  content?: {
+    year: number;
+    title: string;
+    highlights: string[];
+    statistics: {
+      totalDays: number;
+      longestStreak: number;
+      meaningfulMoments: number;
+      peopleCherished: number;
+    };
+    monthlyReview: Array<{
+      month: number;
+      summary: string;
+      keyMoment?: string;
+    }>;
+    aiInsights: string;
+    shareImage?: string;
+  };
 }
 
 export const apiClient = new ApiClient();

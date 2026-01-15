@@ -1,0 +1,18 @@
+{
+  "name": "@still-alive/sync-engine",
+  "version": "0.1.0",
+  "description": "Data sync engine for StillAlive",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@still-alive/local-storage": "workspace:*",
+    "@still-alive/api-client": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

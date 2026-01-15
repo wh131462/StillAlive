@@ -76,3 +76,26 @@ model EmergencyConfig {
 
   @@map("emergency_configs")
 }
+
+// 每日信息差
+model DailyInfo {
+  id        String   @id @default(cuid())
+  date      String   @unique // YYYY-MM-DD
+  content   Json     // 存储新闻和历史上的今天
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("daily_info")
+}
+
+// 年度总结缓存
+model YearlySummary {
+  id          String   @id @default(cuid())
+  userId      String
+  year        Int
+  content     Json     // AI 生成的年度总结
+  generatedAt DateTime @default(now())
+
+  @@unique([userId, year])
+  @@map("yearly_summaries")
+}

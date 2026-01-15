@@ -1,0 +1,72 @@
+# ============================================
+# StillAlive Web - Production Dockerfile
+# ============================================
+
+FROM node:20-alpine AS base
+
+# 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# ============================================
+# 依赖安装阶段
+# ============================================
+FROM base AS deps
+
+# 复制 package 相关文件
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/types/package.json ./packages/types/
+COPY packages/utils/package.json ./packages/utils/
+COPY packages/api-client/package.json ./packages/api-client/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/local-storage/package.json ./packages/local-storage/
+COPY apps/web/package.json ./apps/web/
+
+# 安装依赖
+RUN pnpm install --frozen-lockfile
+
+# ============================================
+# 构建阶段
+# ============================================
+FROM base AS builder
+
+ARG VITE_API_URL=https://api.still-alive.me
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
+COPY --from=deps /app/packages/utils/node_modules ./packages/utils/node_modules
+COPY --from=deps /app/packages/api-client/node_modules ./packages/api-client/node_modules
+COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+
+# 复制源代码
+COPY packages/types ./packages/types
+COPY packages/utils ./packages/utils
+COPY packages/api-client ./packages/api-client
+COPY packages/ui ./packages/ui
+COPY packages/local-storage ./packages/local-storage
+COPY apps/web ./apps/web
+COPY tsconfig.json ./
+
+# 设置环境变量
+ENV VITE_API_URL=$VITE_API_URL
+
+# 构建
+RUN cd apps/web && pnpm build
+
+# ============================================
+# 生产阶段 - Nginx
+# ============================================
+FROM nginx:alpine AS runner
+
+# 复制构建产物
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+
+# 复制 nginx 配置
+COPY nginx/web.conf /etc/nginx/conf.d/default.conf
+
+# 暴露端口
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

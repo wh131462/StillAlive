@@ -1,0 +1,81 @@
+# ============================================
+# StillAlive Server - Production Dockerfile
+# ============================================
+
+FROM node:20-alpine AS base
+
+# 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# ============================================
+# 依赖安装阶段
+# ============================================
+FROM base AS deps
+
+# 复制 package 相关文件
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/types/package.json ./packages/types/
+COPY packages/utils/package.json ./packages/utils/
+COPY packages/api-client/package.json ./packages/api-client/
+COPY packages/local-storage/package.json ./packages/local-storage/
+COPY packages/sync-engine/package.json ./packages/sync-engine/
+COPY apps/server/package.json ./apps/server/
+
+# 安装依赖
+RUN pnpm install --frozen-lockfile --prod=false
+
+# ============================================
+# 构建阶段
+# ============================================
+FROM base AS builder
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
+COPY --from=deps /app/packages/utils/node_modules ./packages/utils/node_modules
+COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
+
+# 复制源代码
+COPY packages/types ./packages/types
+COPY packages/utils ./packages/utils
+COPY apps/server ./apps/server
+COPY tsconfig.json ./
+
+# 生成 Prisma Client
+RUN cd apps/server && pnpm db:generate
+
+# 构建
+RUN cd packages/types && pnpm build || true
+RUN cd packages/utils && pnpm build || true
+RUN cd apps/server && pnpm build
+
+# ============================================
+# 生产阶段
+# ============================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# 创建非 root 用户
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 stillalive
+
+# 复制必要文件
+COPY --from=builder /app/apps/server/dist ./dist
+COPY --from=builder /app/apps/server/package.json ./
+COPY --from=builder /app/apps/server/node_modules ./node_modules
+COPY --from=builder /app/apps/server/prisma ./prisma
+
+# 设置权限
+USER stillalive
+
+# 暴露端口
+EXPOSE 4000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/health || exit 1
+
+# 启动命令
+CMD ["node", "dist/index.js"]

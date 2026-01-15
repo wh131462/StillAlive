@@ -68,3 +68,13 @@ apps/server/prisma/*.db-journal
 # Misc
 *.local
 .cache/
+
+# Docker & SSL
+certbot/
+downloads/
+*.pem
+*.crt
+
+# Database dumps
+*.sql
+*.dump
