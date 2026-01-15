@@ -7,18 +7,19 @@ const footerLinks = {
       { label: '网页版', href: 'https://app.still-alive.me' },
     ],
   },
+  docs: {
+    title: '文档',
+    links: [
+      { label: '设计原型', href: '/design/' },
+      { label: '产品需求', href: '#docs' },
+      { label: 'GitHub', href: 'https://github.com/wh131462/StillAlive' },
+    ],
+  },
   support: {
     title: '支持',
     links: [
       { label: '帮助中心', href: 'mailto:support@still-alive.me' },
       { label: '反馈建议', href: 'mailto:feedback@still-alive.me' },
-    ],
-  },
-  legal: {
-    title: '法律',
-    links: [
-      { label: '隐私政策', href: '/privacy' },
-      { label: '服务条款', href: '/terms' },
     ],
   },
 };

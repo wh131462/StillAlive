@@ -34,7 +34,7 @@ export default function About() {
           {/* Links */}
           <div className="flex justify-center gap-8">
             <a
-              href="https://github.com/your-username/stillalive"
+              href="https://github.com/wh131462/StillAlive"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-primary hover:text-primary-light transition-colors"

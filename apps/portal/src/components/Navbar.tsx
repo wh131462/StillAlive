@@ -5,6 +5,7 @@ import { Menu, X } from 'lucide-react';
 const navLinks = [
   { label: '功能', href: '#features' },
   { label: '下载', href: '#download' },
+  { label: '文档', href: '#docs' },
   { label: '关于', href: '#about' },
 ];
 
