@@ -117,7 +117,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>"原来你还活着啊"</Text>
+          <Text style={styles.footerText}>"还活着吗？"</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -180,7 +180,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
-    marginTop: 'auto',
     paddingTop: 24,
   },
   footerText: {

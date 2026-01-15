@@ -79,15 +79,20 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initialize: async () => {
+        // Add timeout to prevent infinite loading
+        const initTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Init timeout')), 5000)
+        );
+
         try {
           const { token } = get();
           if (token) {
             apiClient.setToken(token);
             try {
-              const user = await apiClient.getMe();
+              const user = await Promise.race([apiClient.getMe(), initTimeout]);
               set({ user, isAuthenticated: true, isInitialized: true });
             } catch {
-              // Token invalid, clear state
+              // Token invalid or timeout, clear state
               apiClient.setToken(null);
               set({ token: null, user: null, isAuthenticated: false, isInitialized: true });
             }

@@ -22,15 +22,14 @@ export default function Home() {
         <button
           onClick={handleCheckIn}
           disabled={isCheckedIn}
-          className={`w-full py-4 rounded-xl font-bold text-lg transition-colors ${
-            isCheckedIn
+          className={`w-full py-4 rounded-xl font-bold text-lg transition-colors ${isCheckedIn
               ? 'bg-emerald-500 text-white cursor-not-allowed'
               : 'bg-slate-900 text-white hover:bg-slate-800'
-          }`}
+            }`}
         >
           {isCheckedIn ? '已确认存活 ✓' : '确认存活打卡'}
         </button>
-        <p className="text-slate-400 text-xs mt-3 italic">"原来你还活着啊"</p>
+        <p className="text-slate-400 text-xs mt-3 italic">"还活着吗？"</p>
       </div>
 
       {/* Success Feedback */}

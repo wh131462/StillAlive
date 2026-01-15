@@ -25,7 +25,7 @@ export default function Home() {
         >
           {isCheckedIn ? '已确认存活 ✓' : '确认存活打卡'}
         </Button>
-        <Text className="quote">"原来你还活着啊"</Text>
+        <Text className="quote">"还活着吗？"</Text>
       </View>
 
       {isCheckedIn && (

@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "description": "今天又活了一天 - 生存确认与记忆沉淀",
+  "pnpm": {
+    "overrides": {
+      "react": "18.3.1",
+      "react-dom": "18.3.1"
+    }
+  },
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",

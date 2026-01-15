@@ -56,7 +56,7 @@ export default function StatusCard({
       </View>
 
       <Text style={styles.title}>
-        {isCheckedIn ? '恭喜你又活过了一天！' : '原来你还活着啊'}
+        {isCheckedIn ? '恭喜你又活过了一天！' : '还活着吗？'}
       </Text>
       <Text style={styles.subtitle}>
         {isCheckedIn ? '今日已确认存活' : '今日尚未确认存活'}

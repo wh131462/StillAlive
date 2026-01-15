@@ -16,7 +16,6 @@
     "clean": "rm -rf node_modules"
   },
   "dependencies": {
-    "react": "^18.3.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.0"
   },
