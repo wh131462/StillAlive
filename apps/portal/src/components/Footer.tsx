@@ -1,3 +1,7 @@
+// 获取 base URL，用于内部链接
+const baseUrl = import.meta.env.BASE_URL || '/';
+const designUrl = `${baseUrl}design/`.replace('//', '/');
+
 const footerLinks = {
   product: {
     title: '产品',
@@ -10,7 +14,7 @@ const footerLinks = {
   docs: {
     title: '文档',
     links: [
-      { label: '设计原型', href: '/design/' },
+      { label: '设计原型', href: designUrl },
       { label: '产品需求', href: '#docs' },
       { label: 'GitHub', href: 'https://github.com/wh131462/StillAlive' },
     ],

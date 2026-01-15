@@ -1,12 +1,16 @@
 import { motion } from 'framer-motion';
 import { FileText, Palette, Server, Rocket, Layout } from 'lucide-react';
 
+// 获取 base URL，用于内部链接
+const baseUrl = import.meta.env.BASE_URL || '/';
+const designUrl = `${baseUrl}design/`.replace('//', '/');
+
 const docs = [
   {
     icon: Layout,
     title: '设计原型',
     description: '交互原型、页面设计、UI 组件预览',
-    href: '/design/',
+    href: designUrl,
     file: '在线预览',
     isInternal: true,
   },
@@ -59,7 +63,7 @@ export default function Docs() {
 
         {/* Featured - Design Prototype */}
         <motion.a
-          href="/design/"
+          href={designUrl}
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
