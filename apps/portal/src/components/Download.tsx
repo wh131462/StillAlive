@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Smartphone, Globe } from 'lucide-react';
+import { Globe } from 'lucide-react';
 
 const platforms = [
   {
