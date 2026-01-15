@@ -42,6 +42,11 @@ jobs:
         run: pnpm --filter @still-alive/portal build
         env:
           NODE_ENV: production
+          VITE_BASE: /${{ github.event.repository.name }}/
+
+      # SPA 支持：复制 index.html 为 404.html
+      - name: Create 404.html for SPA
+        run: cp apps/portal/dist/index.html apps/portal/dist/404.html
 
       # 将设计稿复制到 portal 构建目录
       - name: Copy design docs
@@ -50,6 +55,10 @@ jobs:
             cp -r docs/design apps/portal/dist/design
             echo "✅ Design docs copied to /design"
           fi
+
+      # 调试：列出构建产物
+      - name: List build output
+        run: ls -la apps/portal/dist/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
