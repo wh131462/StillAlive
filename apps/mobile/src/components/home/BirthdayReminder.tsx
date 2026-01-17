@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Person } from '@still-alive/types';
+import type { LocalPerson } from '@still-alive/local-storage';
 import { colors } from '../../theme/colors';
 import Avatar from '../ui/Avatar';
 
 interface BirthdayReminderProps {
-  persons: Person[];
-  onPress?: (person: Person) => void;
+  persons: LocalPerson[];
+  onPress?: (person: LocalPerson) => void;
 }
 
 export default function BirthdayReminder({ persons, onPress }: BirthdayReminderProps) {

@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Person } from '@still-alive/types';
+import type { LocalPerson } from '@still-alive/local-storage';
 import Avatar from '../ui/Avatar';
 import { colors } from '../../theme/colors';
 
 interface PersonCardProps {
-  person: Person;
+  person: LocalPerson;
   onPress: () => void;
 }
 

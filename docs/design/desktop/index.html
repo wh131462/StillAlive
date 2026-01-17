@@ -6,12 +6,33 @@
     <title>今天又活了一天 - 桌面端原型</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            light: '#d1fae5',
+                            DEFAULT: '#10b981',
+                            dark: '#059669'
+                        },
+                        accent: {
+                            light: '#ffe4e6',
+                            DEFAULT: '#f43f5e',
+                            dark: '#e11d48'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        @keyframes heartBeat {
-            0% { transform: scale(1); }
-            14% { transform: scale(1.3); }
+        /* ========== 动画系统 ========== */
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            14% { transform: scale(1.1); }
             28% { transform: scale(1); }
-            42% { transform: scale(1.3); }
+            42% { transform: scale(1.1); }
             70% { transform: scale(1); }
         }
         @keyframes fadeIn {
@@ -22,15 +43,36 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
         }
-        .animate-heartbeat {
-            animation: heartBeat 1.5s infinite;
+        @keyframes checkIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
         }
-        .animate-fadeIn {
-            animation: fadeIn 0.3s ease-out;
+        @keyframes fadeOut {
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.9); }
         }
-        .animate-pulse-slow {
-            animation: pulse 2s ease-in-out infinite;
+        @keyframes scaleIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
         }
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-pulse-slow { animation: pulse 2s ease-in-out infinite; }
+        .animate-checkin { animation: checkIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        .animate-fadeOut { animation: fadeOut 0.3s ease-out forwards; }
+        .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+        .animate-slideUp { animation: slideUp 0.3s ease-out; }
+
         body {
             background-color: #f8fafc;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -39,11 +81,11 @@
             transition: all 0.2s ease;
         }
         .sidebar-item:hover {
-            background-color: rgba(99, 102, 241, 0.1);
+            background-color: rgba(16, 185, 129, 0.1);
         }
         .sidebar-item.active {
-            background-color: rgba(99, 102, 241, 0.15);
-            border-right: 3px solid #6366f1;
+            background-color: rgba(16, 185, 129, 0.15);
+            border-right: 3px solid #10b981;
         }
         .tab-content {
             display: none;
@@ -57,14 +99,14 @@
             transition: all 0.2s ease;
         }
         .calendar-day:hover {
-            background-color: #e0e7ff;
+            background-color: #d1fae5;
         }
         .calendar-day.checked {
             background-color: #10b981;
             color: white;
         }
         .calendar-day.today {
-            border: 2px solid #6366f1;
+            border: 2px solid #10b981;
         }
         .card-hover {
             transition: all 0.2s ease;
@@ -74,7 +116,7 @@
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
         }
         .gradient-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         }
         ::-webkit-scrollbar {
             width: 6px;
@@ -89,6 +131,24 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+        /* 遮罩层 */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+        }
+        /* 弹窗样式 */
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            z-index: 50;
+            animation: scaleIn 0.2s ease-out;
+        }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden">
@@ -98,7 +158,7 @@
         <!-- Logo -->
         <div class="p-6 border-b border-slate-100">
             <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <div class="w-10 h-10 bg-gradient-to-br from-primary to-primary-dark rounded-xl flex items-center justify-center">
                     <i class="fa-solid fa-heart-pulse text-white text-lg"></i>
                 </div>
                 <div>
@@ -167,14 +227,14 @@
         <header class="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center">
             <div>
                 <h2 class="text-xl font-bold text-slate-800" id="pageTitle">主页</h2>
-                <p class="text-sm text-slate-500">2024年1月10日 · 周三</p>
+                <p class="text-sm text-slate-500">2026年1月12日 · 周日</p>
             </div>
             <div class="flex items-center space-x-4">
                 <button class="relative text-slate-500 hover:text-slate-700">
                     <i class="fa-regular fa-bell text-xl"></i>
-                    <span class="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full"></span>
+                    <span class="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full"></span>
                 </button>
-                <button class="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors flex items-center space-x-2">
+                <button id="quickCheckinBtn" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors flex items-center space-x-2">
                     <i class="fa-solid fa-plus"></i>
                     <span>快速打卡</span>
                 </button>
@@ -193,53 +253,68 @@
                         <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-100">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center space-x-6">
-                                    <div class="w-24 h-24 bg-rose-50 rounded-2xl flex items-center justify-center">
-                                        <i class="fa-solid fa-heart-pulse text-rose-500 text-4xl animate-heartbeat"></i>
+                                    <div class="w-24 h-24 bg-accent-light rounded-2xl flex items-center justify-center">
+                                        <i class="fa-solid fa-heart-pulse text-accent text-4xl animate-heartbeat"></i>
                                     </div>
                                     <div>
                                         <p class="text-slate-500 text-sm mb-1" id="statusText">生存状态：确认中...</p>
-                                        <h3 class="text-2xl font-bold text-slate-800 mb-2">还活着吗？</h3>
+                                        <h3 class="text-2xl font-bold text-slate-800 mb-2" id="statusTitle">还活着吗？</h3>
                                         <p class="text-slate-400 text-sm">今天是你存活的第 365 天</p>
                                     </div>
                                 </div>
-                                <button id="checkInBtn" class="bg-slate-900 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-colors">
+                                <button id="checkInBtn" class="bg-primary text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors">
                                     确认存活
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Success Feedback -->
-                        <div id="feedbackArea" class="hidden bg-emerald-50 border border-emerald-100 rounded-2xl p-6">
-                            <div class="flex items-center space-x-4">
-                                <div class="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                                    <i class="fa-solid fa-check text-emerald-600 text-xl"></i>
-                                </div>
-                                <div>
-                                    <p class="text-emerald-700 font-bold text-lg">恭喜你又活过了一天！</p>
-                                    <p class="text-emerald-600 text-sm">今天也辛苦了，继续加油</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Quick Record -->
+                        <!-- Quick Record with Mood Selector -->
                         <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                             <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                                <i class="fa-solid fa-feather-pointed mr-2 text-indigo-500"></i>
+                                <i class="fa-solid fa-feather-pointed mr-2 text-primary"></i>
                                 今日有意义的事
                             </h3>
-                            <textarea class="w-full h-32 p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-700 placeholder-slate-400 resize-none" placeholder="记录下今天有意义的事件..."></textarea>
-                            <div class="flex justify-between items-center mt-4">
+                            <textarea class="w-full h-32 p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent text-slate-700 placeholder-slate-400 resize-none" placeholder="记录下今天有意义的事件..."></textarea>
+
+                            <!-- Mood Selector -->
+                            <div class="mt-4 mb-4">
+                                <p class="text-slate-500 text-sm mb-3">今天心情如何？</p>
+                                <div class="flex space-x-4">
+                                    <button class="mood-btn flex flex-col items-center p-3 rounded-lg hover:bg-slate-100 transition-colors" data-mood="happy">
+                                        <span class="text-2xl mb-1">😊</span>
+                                        <span class="text-xs text-slate-500">开心</span>
+                                    </button>
+                                    <button class="mood-btn flex flex-col items-center p-3 rounded-lg hover:bg-slate-100 transition-colors" data-mood="calm">
+                                        <span class="text-2xl mb-1">😌</span>
+                                        <span class="text-xs text-slate-500">平静</span>
+                                    </button>
+                                    <button class="mood-btn flex flex-col items-center p-3 rounded-lg hover:bg-slate-100 transition-colors" data-mood="tired">
+                                        <span class="text-2xl mb-1">😫</span>
+                                        <span class="text-xs text-slate-500">疲惫</span>
+                                    </button>
+                                    <button class="mood-btn flex flex-col items-center p-3 rounded-lg hover:bg-slate-100 transition-colors" data-mood="sad">
+                                        <span class="text-2xl mb-1">😢</span>
+                                        <span class="text-xs text-slate-500">难过</span>
+                                    </button>
+                                    <button class="mood-btn flex flex-col items-center p-3 rounded-lg hover:bg-slate-100 transition-colors" data-mood="anxious">
+                                        <span class="text-2xl mb-1">😰</span>
+                                        <span class="text-xs text-slate-500">焦虑</span>
+                                    </button>
+                                    <button class="mood-btn flex flex-col items-center p-3 rounded-lg hover:bg-slate-100 transition-colors" data-mood="excited">
+                                        <span class="text-2xl mb-1">🤩</span>
+                                        <span class="text-xs text-slate-500">兴奋</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-between items-center pt-4 border-t border-slate-100">
                                 <div class="flex space-x-3">
-                                    <button class="flex items-center space-x-2 text-slate-500 hover:text-indigo-500 transition-colors">
+                                    <button class="flex items-center space-x-2 text-slate-500 hover:text-primary transition-colors">
                                         <i class="fa-solid fa-image"></i>
                                         <span class="text-sm">添加图片</span>
                                     </button>
-                                    <button class="flex items-center space-x-2 text-slate-500 hover:text-indigo-500 transition-colors">
-                                        <i class="fa-solid fa-face-smile"></i>
-                                        <span class="text-sm">心情标签</span>
-                                    </button>
                                 </div>
-                                <button class="bg-indigo-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors">
+                                <button class="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors">
                                     保存记忆
                                 </button>
                             </div>
@@ -252,26 +327,32 @@
                                     <i class="fa-solid fa-clock-rotate-left mr-2 text-slate-500"></i>
                                     近期记录
                                 </h3>
-                                <button class="text-indigo-500 text-sm hover:text-indigo-600">查看全部</button>
+                                <button class="text-primary text-sm hover:text-primary-dark">查看全部</button>
                             </div>
                             <div class="space-y-4">
                                 <div class="flex items-start space-x-4 p-4 bg-slate-50 rounded-xl">
-                                    <div class="w-2 h-2 bg-emerald-500 rounded-full mt-2"></div>
+                                    <div class="w-2 h-2 bg-primary rounded-full mt-2"></div>
                                     <div class="flex-grow">
                                         <div class="flex justify-between items-start mb-2">
-                                            <span class="text-slate-500 text-sm">2024-01-09 · 周二</span>
-                                            <span class="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded">已打卡</span>
+                                            <span class="text-slate-500 text-sm">2026-01-11 · 周六</span>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-lg">😊</span>
+                                                <span class="bg-primary-light text-primary-dark text-xs px-2 py-0.5 rounded">已打卡</span>
+                                            </div>
                                         </div>
                                         <p class="text-slate-700">今天完成了项目的第一个里程碑，团队一起吃了庆功宴。</p>
                                     </div>
                                     <img src="https://picsum.photos/seed/day1/80/80" class="w-16 h-16 rounded-lg object-cover">
                                 </div>
                                 <div class="flex items-start space-x-4 p-4 bg-slate-50 rounded-xl">
-                                    <div class="w-2 h-2 bg-emerald-500 rounded-full mt-2"></div>
+                                    <div class="w-2 h-2 bg-primary rounded-full mt-2"></div>
                                     <div class="flex-grow">
                                         <div class="flex justify-between items-start mb-2">
-                                            <span class="text-slate-500 text-sm">2024-01-08 · 周一</span>
-                                            <span class="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded">已打卡</span>
+                                            <span class="text-slate-500 text-sm">2026-01-10 · 周五</span>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-lg">😌</span>
+                                                <span class="bg-primary-light text-primary-dark text-xs px-2 py-0.5 rounded">已打卡</span>
+                                            </div>
                                         </div>
                                         <p class="text-slate-700">新的一周开始，早起跑了5公里，感觉精神很好。</p>
                                     </div>
@@ -305,7 +386,7 @@
                         <!-- Daily Info Card -->
                         <div class="gradient-card rounded-2xl p-6 text-white">
                             <p class="text-white/60 text-xs mb-2">每日信息差</p>
-                            <p class="text-white/90 text-xs mb-3">2024年1月10日</p>
+                            <p class="text-white/90 text-xs mb-3">2026年1月12日</p>
                             <p class="font-medium mb-4 leading-relaxed">"人生中最重要的不是所站的位置，而是所朝的方向。"</p>
                             <div class="flex items-center text-white/70 text-xs">
                                 <i class="fa-solid fa-quote-left mr-2"></i>
@@ -316,7 +397,7 @@
                         <!-- Mini Calendar -->
                         <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                             <div class="flex justify-between items-center mb-4">
-                                <h3 class="font-bold text-slate-800">2024年1月</h3>
+                                <h3 class="font-bold text-slate-800">2026年1月</h3>
                                 <div class="flex space-x-2">
                                     <button class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-chevron-left"></i></button>
                                     <button class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-chevron-right"></i></button>
@@ -327,31 +408,32 @@
                             </div>
                             <div class="grid grid-cols-7 gap-1 text-center text-sm">
                                 <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
+                                <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
+                                <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">1</span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">2</span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">3</span>
-                                <span class="calendar-day rounded-lg p-1.5 checked">4</span>
+                                <span class="calendar-day rounded-lg p-1.5 text-slate-400 bg-slate-100">4</span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">5</span>
-                                <span class="calendar-day rounded-lg p-1.5 text-slate-400">6</span>
+                                <span class="calendar-day rounded-lg p-1.5 checked">6</span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">7</span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">8</span>
                                 <span class="calendar-day rounded-lg p-1.5 checked">9</span>
-                                <span class="calendar-day rounded-lg p-1.5 today bg-indigo-50">10</span>
-                                <span class="calendar-day rounded-lg p-1.5 text-slate-400">11</span>
-                                <span class="calendar-day rounded-lg p-1.5 text-slate-400">12</span>
-                                <span class="calendar-day rounded-lg p-1.5 text-slate-400">13</span>
+                                <span class="calendar-day rounded-lg p-1.5 checked">10</span>
+                                <span class="calendar-day rounded-lg p-1.5 text-slate-400 bg-slate-100">11</span>
+                                <span class="calendar-day rounded-lg p-1.5 today bg-primary-light font-bold">12</span>
                             </div>
                         </div>
 
                         <!-- Quick Stats -->
                         <div class="grid grid-cols-2 gap-4">
-                            <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                                <p class="text-2xl font-bold text-emerald-600">365</p>
-                                <p class="text-emerald-700 text-xs">总打卡天数</p>
+                            <div class="bg-primary-light rounded-xl p-4 border border-emerald-200">
+                                <p class="text-2xl font-bold text-primary-dark font-mono">365</p>
+                                <p class="text-primary-dark text-xs">总打卡天数</p>
                             </div>
-                            <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
-                                <p class="text-2xl font-bold text-indigo-600">28</p>
-                                <p class="text-indigo-700 text-xs">连续打卡</p>
+                            <div class="bg-accent-light rounded-xl p-4 border border-rose-200">
+                                <p class="text-2xl font-bold text-accent-dark font-mono">28</p>
+                                <p class="text-accent-dark text-xs">连续打卡</p>
                             </div>
                         </div>
                     </div>
@@ -366,29 +448,29 @@
                         <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 card-hover">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-3xl font-bold text-emerald-500">365</p>
+                                    <p class="text-3xl font-bold text-primary font-mono">365</p>
                                     <p class="text-slate-500 text-sm">总打卡天数</p>
                                 </div>
-                                <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                                    <i class="fa-solid fa-calendar-check text-emerald-500 text-xl"></i>
+                                <div class="w-12 h-12 bg-primary-light rounded-xl flex items-center justify-center">
+                                    <i class="fa-solid fa-calendar-check text-primary text-xl"></i>
                                 </div>
                             </div>
                         </div>
                         <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 card-hover">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-3xl font-bold text-indigo-500">28</p>
+                                    <p class="text-3xl font-bold text-accent font-mono">28</p>
                                     <p class="text-slate-500 text-sm">连续打卡</p>
                                 </div>
-                                <div class="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                                    <i class="fa-solid fa-fire text-indigo-500 text-xl"></i>
+                                <div class="w-12 h-12 bg-accent-light rounded-xl flex items-center justify-center">
+                                    <i class="fa-solid fa-fire text-accent text-xl"></i>
                                 </div>
                             </div>
                         </div>
                         <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 card-hover">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-3xl font-bold text-amber-500">42</p>
+                                    <p class="text-3xl font-bold text-amber-500 font-mono">42</p>
                                     <p class="text-slate-500 text-sm">记录条数</p>
                                 </div>
                                 <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -399,11 +481,11 @@
                         <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100 card-hover">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-3xl font-bold text-rose-500">95%</p>
+                                    <p class="text-3xl font-bold text-blue-500 font-mono">95%</p>
                                     <p class="text-slate-500 text-sm">打卡率</p>
                                 </div>
-                                <div class="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center">
-                                    <i class="fa-solid fa-chart-pie text-rose-500 text-xl"></i>
+                                <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                    <i class="fa-solid fa-chart-pie text-blue-500 text-xl"></i>
                                 </div>
                             </div>
                         </div>
@@ -414,13 +496,16 @@
                         <div class="flex justify-between items-center mb-6">
                             <div class="flex items-center space-x-4">
                                 <button class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-chevron-left"></i></button>
-                                <h3 class="text-xl font-bold text-slate-800">2024年1月</h3>
+                                <h3 class="text-xl font-bold text-slate-800">2026年1月</h3>
                                 <button class="text-slate-400 hover:text-slate-600 p-2"><i class="fa-solid fa-chevron-right"></i></button>
                             </div>
                             <div class="flex items-center space-x-4 text-sm">
-                                <span class="flex items-center"><span class="w-3 h-3 bg-emerald-500 rounded mr-2"></span>已打卡</span>
-                                <span class="flex items-center"><span class="w-3 h-3 border-2 border-indigo-500 rounded mr-2"></span>今天</span>
+                                <span class="flex items-center"><span class="w-3 h-3 bg-primary rounded mr-2"></span>已打卡</span>
+                                <span class="flex items-center"><span class="w-3 h-3 border-2 border-primary rounded mr-2"></span>今天</span>
                                 <span class="flex items-center"><span class="w-3 h-3 bg-slate-200 rounded mr-2"></span>未打卡</span>
+                                <button onclick="showMakeupCheckin()" class="text-primary hover:text-primary-dark font-medium">
+                                    <i class="fa-solid fa-calendar-plus mr-1"></i>补签
+                                </button>
                             </div>
                         </div>
                         <div class="grid grid-cols-7 gap-2 text-center text-sm text-slate-500 mb-4">
@@ -434,37 +519,26 @@
                         </div>
                         <div class="grid grid-cols-7 gap-2 text-center">
                             <span class="calendar-day rounded-xl p-3 text-slate-300 cursor-pointer"></span>
+                            <span class="calendar-day rounded-xl p-3 text-slate-300 cursor-pointer"></span>
+                            <span class="calendar-day rounded-xl p-3 text-slate-300 cursor-pointer"></span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">1</span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">2</span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">3</span>
-                            <span class="calendar-day rounded-xl p-3 checked cursor-pointer">4</span>
+                            <span class="calendar-day rounded-xl p-3 text-slate-400 bg-slate-100 cursor-pointer" onclick="showMakeupCheckin('1月4日')">4</span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">5</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 bg-slate-100 cursor-pointer">6</span>
+                            <span class="calendar-day rounded-xl p-3 checked cursor-pointer">6</span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">7</span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">8</span>
                             <span class="calendar-day rounded-xl p-3 checked cursor-pointer">9</span>
-                            <span class="calendar-day rounded-xl p-3 today bg-indigo-50 font-bold cursor-pointer">10</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">11</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">12</span>
+                            <span class="calendar-day rounded-xl p-3 checked cursor-pointer">10</span>
+                            <span class="calendar-day rounded-xl p-3 text-slate-400 bg-slate-100 cursor-pointer" onclick="showMakeupCheckin('1月11日')">11</span>
+                            <span class="calendar-day rounded-xl p-3 today bg-primary-light font-bold cursor-pointer">12</span>
                             <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">13</span>
                             <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">14</span>
                             <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">15</span>
                             <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">16</span>
                             <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">17</span>
                             <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">18</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">19</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">20</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">21</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">22</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">23</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">24</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">25</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">26</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">27</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">28</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">29</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">30</span>
-                            <span class="calendar-day rounded-xl p-3 text-slate-400 cursor-pointer">31</span>
                         </div>
                     </div>
 
@@ -474,32 +548,31 @@
                         <div class="space-y-4 max-h-96 overflow-y-auto">
                             <div class="p-4 bg-slate-50 rounded-xl">
                                 <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-09 · 周二</span>
-                                    <span class="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    <span class="text-slate-500 text-xs">2026-01-11 · 周六</span>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-base">😊</span>
+                                        <span class="bg-primary-light text-primary-dark text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    </div>
                                 </div>
                                 <p class="text-slate-700 text-sm mb-2">今天完成了项目的第一个里程碑。</p>
                                 <img src="https://picsum.photos/seed/day1/200/100" class="w-full h-20 rounded-lg object-cover">
                             </div>
                             <div class="p-4 bg-slate-50 rounded-xl">
                                 <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-08 · 周一</span>
-                                    <span class="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    <span class="text-slate-500 text-xs">2026-01-10 · 周五</span>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-base">😌</span>
+                                        <span class="bg-primary-light text-primary-dark text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    </div>
                                 </div>
                                 <p class="text-slate-700 text-sm">新的一周开始，早起跑了5公里。</p>
                             </div>
                             <div class="p-4 bg-slate-50 rounded-xl opacity-60">
                                 <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-06 · 周六</span>
+                                    <span class="text-slate-500 text-xs">2026-01-04 · 周六</span>
                                     <span class="bg-slate-200 text-slate-500 text-xs px-2 py-0.5 rounded">未打卡</span>
                                 </div>
                                 <p class="text-slate-400 text-sm italic">这一天没有记录</p>
-                            </div>
-                            <div class="p-4 bg-slate-50 rounded-xl">
-                                <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-05 · 周五</span>
-                                    <span class="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded">已打卡</span>
-                                </div>
-                                <p class="text-slate-700 text-sm">周五了，和朋友约了火锅。</p>
                             </div>
                         </div>
                     </div>
@@ -512,18 +585,36 @@
                     <div class="flex items-center space-x-4">
                         <div class="relative">
                             <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input type="text" placeholder="搜索人物..." class="pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-80">
+                            <input type="text" placeholder="搜索人物..." class="pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary w-80">
                         </div>
-                        <select class="px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option>全部人物</option>
-                            <option>按生日排序</option>
-                            <option>按添加时间</option>
-                        </select>
+                        <!-- Group Filter -->
+                        <div class="flex space-x-2">
+                            <button class="group-filter-btn px-3 py-2 bg-primary text-white text-sm rounded-lg font-medium" data-group="all">全部 (5)</button>
+                            <button class="group-filter-btn px-3 py-2 bg-slate-100 text-slate-600 text-sm rounded-lg font-medium hover:bg-slate-200 transition-colors" data-group="family">
+                                <i class="fa-solid fa-house-heart mr-1"></i>家人 (1)
+                            </button>
+                            <button class="group-filter-btn px-3 py-2 bg-slate-100 text-slate-600 text-sm rounded-lg font-medium hover:bg-slate-200 transition-colors" data-group="friend">
+                                <i class="fa-solid fa-user-group mr-1"></i>朋友 (2)
+                            </button>
+                            <button class="group-filter-btn px-3 py-2 bg-slate-100 text-slate-600 text-sm rounded-lg font-medium hover:bg-slate-200 transition-colors" data-group="colleague">
+                                <i class="fa-solid fa-briefcase mr-1"></i>同事 (1)
+                            </button>
+                            <button class="group-filter-btn px-3 py-2 bg-slate-100 text-slate-600 text-sm rounded-lg font-medium hover:bg-slate-200 transition-colors" data-group="other">
+                                <i class="fa-solid fa-ellipsis mr-1"></i>其他 (1)
+                            </button>
+                        </div>
                     </div>
-                    <button class="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 transition-colors flex items-center space-x-2">
+                    <button onclick="showAddPerson()" class="bg-primary text-white px-6 py-3 rounded-xl hover:bg-primary-dark transition-colors flex items-center space-x-2">
                         <i class="fa-solid fa-user-plus"></i>
                         <span>添加人物</span>
                     </button>
+                </div>
+
+                <!-- Sort Options -->
+                <div class="flex space-x-2 mb-4">
+                    <span class="text-slate-400 text-sm leading-8">排序：</span>
+                    <button class="sort-btn px-3 py-1.5 bg-primary-light text-primary-dark text-sm rounded font-medium" data-sort="time">按添加时间</button>
+                    <button class="sort-btn px-3 py-1.5 bg-slate-100 text-slate-500 text-sm rounded font-medium hover:bg-slate-200 transition-colors" data-sort="birthday">按生日临近</button>
                 </div>
 
                 <!-- Birthday Today -->
@@ -534,11 +625,14 @@
                     </h3>
                     <div class="flex items-center justify-between bg-white rounded-xl p-4">
                         <div class="flex items-center space-x-4">
-                            <div class="w-16 h-16 bg-white rounded-full overflow-hidden border-2 border-amber-300">
+                            <div class="w-16 h-16 bg-white rounded-full overflow-hidden border-2 border-amber-300 ring-2 ring-rose-200">
                                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
                             </div>
                             <div>
-                                <h4 class="font-bold text-slate-800 text-lg">张三</h4>
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <h4 class="font-bold text-slate-800 text-lg">张三</h4>
+                                    <span class="text-xs px-2 py-0.5 bg-rose-100 text-rose-600 rounded">家人</span>
+                                </div>
                                 <p class="text-slate-500 text-sm">INFP · 今天 25 岁</p>
                             </div>
                         </div>
@@ -555,21 +649,24 @@
 
                 <!-- People Grid -->
                 <div class="grid grid-cols-3 gap-6">
-                    <!-- Person Card -->
+                    <!-- Person Card with Group Tag -->
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 card-hover cursor-pointer">
                         <div class="flex items-center space-x-4 mb-4">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden ring-2 ring-rose-200">
                                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
                             </div>
                             <div>
-                                <h4 class="font-bold text-slate-800">张三</h4>
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <h4 class="font-bold text-slate-800">张三</h4>
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded">家人</span>
+                                </div>
                                 <p class="text-slate-400 text-sm">INFP</p>
                             </div>
                         </div>
                         <div class="space-y-2 text-sm">
                             <div class="flex items-center text-slate-500">
                                 <i class="fa-solid fa-cake-candles w-5 text-center mr-2"></i>
-                                <span>1月10日 (25岁)</span>
+                                <span>1月12日 (25岁)</span>
                             </div>
                             <div class="flex items-center text-slate-500">
                                 <i class="fa-solid fa-venus-mars w-5 text-center mr-2"></i>
@@ -581,11 +678,14 @@
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 card-hover cursor-pointer">
                         <div class="flex items-center space-x-4 mb-4">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden ring-2 ring-blue-200">
                                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" alt="avatar" class="w-full h-full">
                             </div>
                             <div>
-                                <h4 class="font-bold text-slate-800">李四</h4>
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <h4 class="font-bold text-slate-800">李四</h4>
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">朋友</span>
+                                </div>
                                 <p class="text-slate-400 text-sm">ENFJ</p>
                             </div>
                         </div>
@@ -604,11 +704,14 @@
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 card-hover cursor-pointer">
                         <div class="flex items-center space-x-4 mb-4">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden ring-2 ring-blue-200">
                                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Luna" alt="avatar" class="w-full h-full">
                             </div>
                             <div>
-                                <h4 class="font-bold text-slate-800">王五</h4>
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <h4 class="font-bold text-slate-800">王五</h4>
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">朋友</span>
+                                </div>
                                 <p class="text-slate-400 text-sm">INTJ</p>
                             </div>
                         </div>
@@ -627,11 +730,14 @@
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 card-hover cursor-pointer">
                         <div class="flex items-center space-x-4 mb-4">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden ring-2 ring-amber-200">
                                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" alt="avatar" class="w-full h-full">
                             </div>
                             <div>
-                                <h4 class="font-bold text-slate-800">赵六</h4>
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <h4 class="font-bold text-slate-800">赵六</h4>
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded">同事</span>
+                                </div>
                                 <p class="text-slate-400 text-sm">ESTP</p>
                             </div>
                         </div>
@@ -650,18 +756,21 @@
 
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 card-hover cursor-pointer">
                         <div class="flex items-center space-x-4 mb-4">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden">
-                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Bella" alt="avatar" class="w-full h-full">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full overflow-hidden ring-2 ring-slate-200">
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sam" alt="avatar" class="w-full h-full">
                             </div>
                             <div>
-                                <h4 class="font-bold text-slate-800">小美</h4>
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <h4 class="font-bold text-slate-800">钱七</h4>
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">其他</span>
+                                </div>
                                 <p class="text-slate-400 text-sm">ISFJ</p>
                             </div>
                         </div>
                         <div class="space-y-2 text-sm">
                             <div class="flex items-center text-slate-500">
                                 <i class="fa-solid fa-cake-candles w-5 text-center mr-2"></i>
-                                <span>3月18日 (24岁)</span>
+                                <span>3月15日 (24岁)</span>
                             </div>
                             <div class="flex items-center text-slate-500">
                                 <i class="fa-solid fa-venus-mars w-5 text-center mr-2"></i>
@@ -672,7 +781,7 @@
                     </div>
 
                     <!-- Add New Person Card -->
-                    <div class="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
+                    <div onclick="showAddPerson()" class="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-primary hover:bg-primary-light/30 transition-colors">
                         <div class="text-center">
                             <div class="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <i class="fa-solid fa-plus text-slate-400 text-2xl"></i>
@@ -688,22 +797,22 @@
                 <div class="grid grid-cols-4 gap-6 mb-6">
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                                <i class="fa-solid fa-heart text-emerald-500 text-xl"></i>
+                            <div class="w-12 h-12 bg-primary-light rounded-xl flex items-center justify-center">
+                                <i class="fa-solid fa-heart text-primary text-xl"></i>
                             </div>
-                            <span class="text-emerald-500 text-sm">+2.5%</span>
+                            <span class="text-primary text-sm">+2.5%</span>
                         </div>
-                        <p class="text-3xl font-bold text-slate-800 mb-1">365</p>
+                        <p class="text-3xl font-bold text-slate-800 mb-1 font-mono">365</p>
                         <p class="text-slate-500 text-sm">生存天数</p>
                     </div>
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                                <i class="fa-solid fa-fire text-indigo-500 text-xl"></i>
+                            <div class="w-12 h-12 bg-accent-light rounded-xl flex items-center justify-center">
+                                <i class="fa-solid fa-fire text-accent text-xl"></i>
                             </div>
-                            <span class="text-indigo-500 text-sm">当前</span>
+                            <span class="text-accent text-sm">当前</span>
                         </div>
-                        <p class="text-3xl font-bold text-slate-800 mb-1">28</p>
+                        <p class="text-3xl font-bold text-slate-800 mb-1 font-mono">28</p>
                         <p class="text-slate-500 text-sm">连续打卡</p>
                     </div>
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
@@ -713,52 +822,161 @@
                             </div>
                             <span class="text-amber-500 text-sm">+1 本月</span>
                         </div>
-                        <p class="text-3xl font-bold text-slate-800 mb-1">5</p>
+                        <p class="text-3xl font-bold text-slate-800 mb-1 font-mono">5</p>
                         <p class="text-slate-500 text-sm">记录人物</p>
                     </div>
                     <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                         <div class="flex items-center justify-between mb-4">
-                            <div class="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center">
-                                <i class="fa-solid fa-feather text-rose-500 text-xl"></i>
+                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <i class="fa-solid fa-feather text-blue-500 text-xl"></i>
                             </div>
-                            <span class="text-rose-500 text-sm">+5 本周</span>
+                            <span class="text-blue-500 text-sm">+5 本周</span>
                         </div>
-                        <p class="text-3xl font-bold text-slate-800 mb-1">42</p>
+                        <p class="text-3xl font-bold text-slate-800 mb-1 font-mono">42</p>
                         <p class="text-slate-500 text-sm">意义记录</p>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-6">
-                    <!-- Chart Placeholder -->
-                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                        <h3 class="text-lg font-bold text-slate-800 mb-6">月度打卡趋势</h3>
-                        <div class="h-64 flex items-end justify-between space-x-2">
-                            <div class="flex-1 bg-indigo-100 rounded-t-lg" style="height: 80%"></div>
-                            <div class="flex-1 bg-indigo-200 rounded-t-lg" style="height: 90%"></div>
-                            <div class="flex-1 bg-indigo-300 rounded-t-lg" style="height: 75%"></div>
-                            <div class="flex-1 bg-indigo-400 rounded-t-lg" style="height: 95%"></div>
-                            <div class="flex-1 bg-indigo-500 rounded-t-lg" style="height: 100%"></div>
-                            <div class="flex-1 bg-indigo-400 rounded-t-lg" style="height: 88%"></div>
-                            <div class="flex-1 bg-indigo-300 rounded-t-lg" style="height: 92%"></div>
-                            <div class="flex-1 bg-indigo-200 rounded-t-lg" style="height: 85%"></div>
-                            <div class="flex-1 bg-indigo-100 rounded-t-lg" style="height: 78%"></div>
-                            <div class="flex-1 bg-indigo-200 rounded-t-lg" style="height: 90%"></div>
-                            <div class="flex-1 bg-indigo-300 rounded-t-lg" style="height: 95%"></div>
-                            <div class="flex-1 bg-indigo-500 rounded-t-lg animate-pulse-slow" style="height: 70%"></div>
+                <!-- Milestone Badges -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-medal text-amber-500 mr-2"></i> 里程碑徽章
+                        </h3>
+                        <span class="text-slate-400 text-sm">已获得 4/5</span>
+                    </div>
+                    <div class="flex justify-around">
+                        <!-- 7 Days Badge -->
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
+                                <span class="text-white font-bold text-xl">7</span>
+                            </div>
+                            <p class="text-slate-700 text-sm font-medium">初心者</p>
+                            <p class="text-slate-400 text-xs">7天连续</p>
                         </div>
-                        <div class="flex justify-between mt-4 text-xs text-slate-400">
-                            <span>1月</span>
-                            <span>2月</span>
-                            <span>3月</span>
-                            <span>4月</span>
-                            <span>5月</span>
-                            <span>6月</span>
-                            <span>7月</span>
-                            <span>8月</span>
-                            <span>9月</span>
-                            <span>10月</span>
-                            <span>11月</span>
-                            <span>12月</span>
+                        <!-- 30 Days Badge -->
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-gradient-to-br from-sky-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
+                                <span class="text-white font-bold text-xl">30</span>
+                            </div>
+                            <p class="text-slate-700 text-sm font-medium">坚持者</p>
+                            <p class="text-slate-400 text-xs">30天连续</p>
+                        </div>
+                        <!-- 100 Days Badge -->
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-gradient-to-br from-purple-400 to-violet-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
+                                <span class="text-white font-bold text-xl">100</span>
+                            </div>
+                            <p class="text-slate-700 text-sm font-medium">证明者</p>
+                            <p class="text-slate-400 text-xs">100天连续</p>
+                        </div>
+                        <!-- 365 Days Badge -->
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
+                                <span class="text-white font-bold text-xl">365</span>
+                            </div>
+                            <p class="text-slate-700 text-sm font-medium">史诗</p>
+                            <p class="text-slate-400 text-xs">365天连续</p>
+                        </div>
+                        <!-- 1000 Days Badge (Locked) -->
+                        <div class="text-center opacity-40">
+                            <div class="w-16 h-16 bg-slate-300 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <i class="fa-solid fa-lock text-slate-500 text-xl"></i>
+                            </div>
+                            <p class="text-slate-500 text-sm font-medium">传说</p>
+                            <p class="text-slate-400 text-xs">1000天连续</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <!-- Year Heatmap -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                                <i class="fa-solid fa-fire text-orange-500 mr-2"></i> 年度热力图
+                            </h3>
+                            <span class="text-slate-400 text-sm">2026年</span>
+                        </div>
+                        <!-- Month Labels -->
+                        <div class="flex text-xs text-slate-400 mb-2 ml-8">
+                            <span class="w-8">1月</span>
+                            <span class="w-8">2月</span>
+                            <span class="w-8">3月</span>
+                            <span class="w-8">4月</span>
+                            <span class="w-8">5月</span>
+                            <span class="w-8">6月</span>
+                            <span class="w-8">7月</span>
+                            <span class="w-8">8月</span>
+                            <span class="w-8">9月</span>
+                            <span class="w-8">10月</span>
+                            <span class="w-8">11月</span>
+                            <span class="w-8">12月</span>
+                        </div>
+                        <!-- Heatmap Grid -->
+                        <div class="flex">
+                            <!-- Day Labels -->
+                            <div class="flex flex-col text-xs text-slate-400 mr-2">
+                                <span class="h-3 leading-3">一</span>
+                                <span class="h-3 leading-3"></span>
+                                <span class="h-3 leading-3">三</span>
+                                <span class="h-3 leading-3"></span>
+                                <span class="h-3 leading-3">五</span>
+                                <span class="h-3 leading-3"></span>
+                                <span class="h-3 leading-3">日</span>
+                            </div>
+                            <!-- Heatmap Cells -->
+                            <div class="flex gap-[3px]">
+                                <!-- Sample weeks -->
+                                <div class="flex flex-col gap-[3px]">
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-60"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-40"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                </div>
+                                <div class="flex flex-col gap-[3px]">
+                                    <div class="w-3 h-3 rounded-sm bg-primary"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-60"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-40"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-80"></div>
+                                </div>
+                                <div class="flex flex-col gap-[3px]">
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-60"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-40"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-primary opacity-60"></div>
+                                </div>
+                                <div class="flex flex-col gap-[3px]">
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                    <div class="w-3 h-3 rounded-sm bg-slate-200"></div>
+                                </div>
+                                <!-- Placeholder -->
+                                <div class="flex items-center text-slate-300 text-sm ml-2">...</div>
+                            </div>
+                        </div>
+                        <!-- Legend -->
+                        <div class="flex items-center justify-end mt-4 text-xs text-slate-400">
+                            <span class="mr-2">少</span>
+                            <div class="w-3 h-3 rounded-sm bg-slate-200 mr-1"></div>
+                            <div class="w-3 h-3 rounded-sm bg-primary opacity-40 mr-1"></div>
+                            <div class="w-3 h-3 rounded-sm bg-primary opacity-60 mr-1"></div>
+                            <div class="w-3 h-3 rounded-sm bg-primary opacity-80 mr-1"></div>
+                            <div class="w-3 h-3 rounded-sm bg-primary mr-2"></div>
+                            <span>多</span>
                         </div>
                     </div>
 
@@ -773,10 +991,10 @@
                                     </div>
                                     <div>
                                         <p class="font-bold text-slate-800">最长连续打卡</p>
-                                        <p class="text-slate-500 text-sm">2023.09 - 2023.11</p>
+                                        <p class="text-slate-500 text-sm">2025.09 - 2025.11</p>
                                     </div>
                                 </div>
-                                <p class="text-2xl font-bold text-amber-600">62天</p>
+                                <p class="text-2xl font-bold text-amber-600 font-mono">62天</p>
                             </div>
                             <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                                 <div class="flex items-center space-x-3">
@@ -785,10 +1003,10 @@
                                     </div>
                                     <div>
                                         <p class="font-medium text-slate-700">第二长连续</p>
-                                        <p class="text-slate-500 text-sm">2023.05 - 2023.06</p>
+                                        <p class="text-slate-500 text-sm">2025.05 - 2025.06</p>
                                     </div>
                                 </div>
-                                <p class="text-xl font-bold text-slate-600">45天</p>
+                                <p class="text-xl font-bold text-slate-600 font-mono">45天</p>
                             </div>
                             <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                                 <div class="flex items-center space-x-3">
@@ -797,10 +1015,10 @@
                                     </div>
                                     <div>
                                         <p class="font-medium text-slate-700">第三长连续</p>
-                                        <p class="text-slate-500 text-sm">2024.01 - 至今</p>
+                                        <p class="text-slate-500 text-sm">2026.01 - 至今</p>
                                     </div>
                                 </div>
-                                <p class="text-xl font-bold text-slate-600">28天</p>
+                                <p class="text-xl font-bold text-slate-600 font-mono">28天</p>
                             </div>
                         </div>
                     </div>
@@ -818,31 +1036,50 @@
                                 <div class="w-24 h-24 bg-slate-100 rounded-full overflow-hidden border-4 border-white shadow">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Me" alt="avatar" class="w-full h-full">
                                 </div>
-                                <button class="absolute bottom-0 right-0 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white hover:bg-indigo-600 transition-colors">
+                                <button class="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white hover:bg-primary-dark transition-colors">
                                     <i class="fa-solid fa-camera text-xs"></i>
                                 </button>
                             </div>
                             <div class="flex-grow">
                                 <label class="block text-sm text-slate-600 mb-1">昵称</label>
-                                <input type="text" value="用户昵称" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <input type="text" value="用户昵称" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
                             </div>
                         </div>
-                        <button class="bg-indigo-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors">
+                        <button class="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors">
                             保存修改
                         </button>
                     </div>
 
-                    <!-- Death Confirmation Settings -->
-                    <div class="bg-rose-50 border border-rose-100 rounded-2xl p-6 mb-6">
-                        <h3 class="text-lg font-bold text-rose-800 mb-2 flex items-center">
-                            <i class="fa-solid fa-skull-crossbones mr-2"></i>
-                            死亡确认设置
+                    <!-- Theme Settings -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-6">
+                        <h3 class="text-lg font-bold text-slate-800 mb-6 flex items-center">
+                            <i class="fa-solid fa-moon text-indigo-500 mr-2"></i> 主题模式
                         </h3>
+                        <div class="flex items-center space-x-2 bg-slate-100 rounded-lg p-1 w-fit">
+                            <button class="px-4 py-2 text-sm rounded-lg bg-white text-slate-700 shadow-sm font-medium">浅色</button>
+                            <button class="px-4 py-2 text-sm rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">深色</button>
+                            <button class="px-4 py-2 text-sm rounded-lg text-slate-500 hover:bg-slate-50 transition-colors">跟随系统</button>
+                        </div>
+                    </div>
+
+                    <!-- Death Confirmation Settings -->
+                    <div class="bg-accent-light border border-rose-200 rounded-2xl p-6 mb-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-accent-dark flex items-center">
+                                <i class="fa-solid fa-skull-crossbones mr-2"></i>
+                                死亡确认设置
+                            </h3>
+                            <!-- Toggle Switch -->
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                            </label>
+                        </div>
                         <p class="text-rose-600 text-sm mb-6">若连续多日未打卡，将发送确认邮件至紧急联系人</p>
                         <div class="grid grid-cols-2 gap-6">
                             <div>
-                                <label class="block text-sm text-rose-700 mb-2">触发天数</label>
-                                <select class="w-full px-4 py-3 rounded-lg border border-rose-200 focus:outline-none focus:ring-2 focus:ring-rose-400 bg-white">
+                                <label class="block text-sm text-accent-dark mb-2 font-medium">触发天数</label>
+                                <select class="w-full px-4 py-3 rounded-lg border border-rose-200 focus:outline-none focus:ring-2 focus:ring-accent bg-white">
                                     <option>连续 3 天未打卡</option>
                                     <option selected>连续 7 天未打卡</option>
                                     <option>连续 14 天未打卡</option>
@@ -850,11 +1087,11 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm text-rose-700 mb-2">紧急联系人邮箱</label>
-                                <input type="email" placeholder="emergency@example.com" class="w-full px-4 py-3 rounded-lg border border-rose-200 focus:outline-none focus:ring-2 focus:ring-rose-400">
+                                <label class="block text-sm text-accent-dark mb-2 font-medium">紧急联系人邮箱</label>
+                                <input type="email" placeholder="emergency@example.com" class="w-full px-4 py-3 rounded-lg border border-rose-200 focus:outline-none focus:ring-2 focus:ring-accent">
                             </div>
                         </div>
-                        <button class="mt-4 bg-rose-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-rose-600 transition-colors">
+                        <button class="mt-4 bg-accent text-white px-6 py-2 rounded-lg font-medium hover:bg-accent-dark transition-colors">
                             保存设置
                         </button>
                     </div>
@@ -870,7 +1107,7 @@
                                 </div>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" checked class="sr-only peer">
-                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                                 </label>
                             </div>
                             <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
@@ -878,7 +1115,7 @@
                                     <i class="fa-solid fa-clock text-slate-500"></i>
                                     <span class="text-slate-700">提醒时间</span>
                                 </div>
-                                <input type="time" value="21:00" class="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <input type="time" value="21:00" class="px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
                             </div>
                         </div>
                     </div>
@@ -921,6 +1158,12 @@
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-400"></i>
                             </button>
+                            <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center space-x-3">
+                                    <i class="fa-solid fa-right-from-bracket w-5 text-center text-red-500"></i>
+                                    <span class="text-red-500">退出登录</span>
+                                </div>
+                            </button>
                         </div>
                     </div>
 
@@ -937,6 +1180,183 @@
             <i class="fa-solid fa-arrow-left mr-2"></i>
             返回原型列表
         </a>
+    </div>
+
+    <!-- ==================== 打卡成功浮层 ==================== -->
+    <div id="checkinSuccessOverlay" class="hidden fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div class="bg-white rounded-2xl p-10 shadow-2xl text-center animate-checkin max-w-md mx-4">
+            <div class="w-24 h-24 bg-primary-light rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fa-solid fa-check text-primary text-5xl"></i>
+            </div>
+            <p id="checkinSuccessTitle" class="text-slate-800 font-bold text-2xl mb-2">恭喜你又活过了一天！</p>
+            <p id="checkinSuccessSubtitle" class="text-slate-500 text-sm">今天也辛苦了</p>
+        </div>
+    </div>
+
+    <!-- ==================== 补签弹窗 ==================== -->
+    <div id="makeupCheckinModal" class="hidden">
+        <div class="overlay" onclick="closeMakeupCheckin()"></div>
+        <div class="modal p-8 w-[480px]">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-slate-800">补签打卡</h3>
+                <button onclick="closeMakeupCheckin()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-calendar-plus text-amber-600 text-3xl"></i>
+                </div>
+                <p class="text-slate-700 font-medium text-lg mb-1">补签 <span id="makeupDate" class="text-primary">1月4日</span></p>
+                <p class="text-slate-500 text-sm">本月剩余补签次数：<span class="text-amber-600 font-bold">2</span>/3</p>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6">
+                <p class="text-amber-700 text-sm">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    补签规则：仅可补签过去7天内的记录，每月最多3次
+                </p>
+            </div>
+
+            <p class="text-slate-500 text-sm mb-4">记录一下当天有意义的事（可选）</p>
+            <textarea class="w-full h-24 p-4 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent mb-6" placeholder="回忆一下那天发生了什么..."></textarea>
+
+            <button onclick="doMakeupCheckin()" class="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-dark transition-colors">
+                确认补签
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 里程碑庆祝弹窗 ==================== -->
+    <div id="milestoneModal" class="hidden">
+        <div class="overlay" onclick="closeMilestone()"></div>
+        <div class="modal p-8 w-[400px] text-center">
+            <div class="relative mb-6">
+                <div class="w-28 h-28 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                    <i class="fa-solid fa-trophy text-white text-5xl"></i>
+                </div>
+                <div class="absolute top-0 right-1/4 w-10 h-10 bg-accent rounded-full flex items-center justify-center text-white text-sm font-bold shadow animate-bounce">
+                    7
+                </div>
+            </div>
+
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">连续打卡 7 天！</h3>
+            <p class="text-slate-500 mb-6">连续7天，你是真的在认真活着</p>
+
+            <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-4 mb-6">
+                <p class="text-amber-700 font-medium">
+                    <i class="fa-solid fa-medal mr-2"></i>
+                    获得徽章：「初心者」
+                </p>
+            </div>
+
+            <button onclick="closeMilestone()" class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-8 py-3 rounded-xl font-bold hover:from-amber-600 hover:to-orange-600 transition-colors">
+                太棒了！
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 添加人物弹窗 ==================== -->
+    <div id="addPersonModal" class="hidden">
+        <div class="overlay" onclick="closeAddPerson()"></div>
+        <div class="modal p-8 w-[560px] max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-slate-800">添加人物</h3>
+                <button onclick="closeAddPerson()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Avatar Upload -->
+            <div class="text-center mb-6">
+                <div class="w-24 h-24 bg-slate-100 rounded-full mx-auto mb-2 flex items-center justify-center border-2 border-dashed border-slate-300 cursor-pointer hover:border-primary transition-colors">
+                    <i class="fa-solid fa-camera text-slate-400 text-2xl"></i>
+                </div>
+                <p class="text-slate-500 text-sm">点击上传照片</p>
+            </div>
+
+            <!-- Form -->
+            <div class="space-y-4">
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">姓名/称呼 <span class="text-accent">*</span></label>
+                    <input type="text" placeholder="输入姓名或称呼" class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">性别</label>
+                        <select class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="">请选择</option>
+                            <option value="male">男</option>
+                            <option value="female">女</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">生日</label>
+                        <input type="text" placeholder="MM-DD" class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">分组</label>
+                        <select class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="family">家人</option>
+                            <option value="friend">朋友</option>
+                            <option value="colleague">同事</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">MBTI</label>
+                        <select class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="">请选择</option>
+                            <option>INTJ</option><option>INTP</option><option>ENTJ</option><option>ENTP</option>
+                            <option>INFJ</option><option>INFP</option><option>ENFJ</option><option>ENFP</option>
+                            <option>ISTJ</option><option>ISFJ</option><option>ESTJ</option><option>ESFJ</option>
+                            <option>ISTP</option><option>ISFP</option><option>ESTP</option><option>ESFP</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Theme Color Picker -->
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-2 block">印象主题色</label>
+                    <div class="flex space-x-3">
+                        <button class="w-8 h-8 rounded-full bg-rose-400 ring-2 ring-offset-2 ring-rose-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-blue-400 hover:ring-2 hover:ring-offset-2 hover:ring-blue-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-amber-400 hover:ring-2 hover:ring-offset-2 hover:ring-amber-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-purple-400 hover:ring-2 hover:ring-offset-2 hover:ring-purple-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-primary hover:ring-2 hover:ring-offset-2 hover:ring-primary"></button>
+                        <button class="w-8 h-8 rounded-full bg-slate-400 hover:ring-2 hover:ring-offset-2 hover:ring-slate-400"></button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">个人印象</label>
+                    <textarea placeholder="描述一下这个人给你的印象..." class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary h-24 resize-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">共同经历</label>
+                    <textarea placeholder="记录你们的重要共同经历..." class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary h-24 resize-none"></textarea>
+                </div>
+            </div>
+
+            <button class="w-full bg-primary text-white py-3 rounded-xl font-bold mt-6 hover:bg-primary-dark transition-colors">
+                保存
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== Toast 消息 ==================== -->
+    <div id="toast" class="hidden fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg z-50 animate-scaleIn">
+        <div class="flex items-center space-x-2">
+            <i id="toastIcon" class="fa-solid fa-check-circle"></i>
+            <span id="toastMessage">操作成功</span>
+        </div>
     </div>
 
     <script>
@@ -972,15 +1392,141 @@
             });
         });
 
+        // 随机鼓励文案
+        const encourageMessages = [
+            { title: '恭喜你又活过了一天！', subtitle: '今天也辛苦了' },
+            { title: '又是元气满满的一天！', subtitle: '你很棒' },
+            { title: '生存确认成功！', subtitle: '继续加油' },
+            { title: '今天也在好好活着呢！', subtitle: '明天见' },
+            { title: '打卡成功！', subtitle: '每一天都值得被记录' },
+            { title: '活着真好！', subtitle: '珍惜当下' },
+            { title: '又度过了一天！', subtitle: '你是最棒的' },
+            { title: '存活确认！', subtitle: '期待明天的你' },
+        ];
+
         // Check-in Button
-        document.getElementById('checkInBtn').addEventListener('click', function() {
-            this.textContent = '已确认存活 ✓';
-            this.classList.remove('bg-slate-900', 'hover:bg-slate-800');
-            this.classList.add('bg-emerald-500');
-            this.disabled = true;
+        function completeCheckin() {
+            const checkInBtn = document.getElementById('checkInBtn');
+            checkInBtn.textContent = '已确认存活 ✓';
+            checkInBtn.classList.remove('bg-primary', 'hover:bg-primary-dark');
+            checkInBtn.classList.add('bg-primary-light', 'text-primary-dark');
+            checkInBtn.disabled = true;
             document.getElementById('statusText').textContent = '生存状态：已确认';
-            document.getElementById('feedbackArea').classList.remove('hidden');
+            document.getElementById('statusTitle').textContent = '今日已确认存活';
+
+            // 显示随机鼓励浮层
+            const randomMsg = encourageMessages[Math.floor(Math.random() * encourageMessages.length)];
+            document.getElementById('checkinSuccessTitle').textContent = randomMsg.title;
+            document.getElementById('checkinSuccessSubtitle').textContent = randomMsg.subtitle;
+
+            const overlay = document.getElementById('checkinSuccessOverlay');
+            const overlayContent = overlay.querySelector('div');
+            overlay.classList.remove('hidden');
+            overlayContent.classList.remove('animate-fadeOut');
+            overlayContent.classList.add('animate-checkin');
+
+            setTimeout(() => {
+                overlayContent.classList.remove('animate-checkin');
+                overlayContent.classList.add('animate-fadeOut');
+            }, 1500);
+
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 1800);
+        }
+
+        document.getElementById('checkInBtn').addEventListener('click', completeCheckin);
+        document.getElementById('quickCheckinBtn').addEventListener('click', completeCheckin);
+
+        // Mood Selection
+        document.querySelectorAll('.mood-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.mood-btn').forEach(b => {
+                    b.classList.remove('bg-primary-light', 'ring-2', 'ring-primary');
+                });
+                this.classList.add('bg-primary-light', 'ring-2', 'ring-primary');
+            });
         });
+
+        // Group Filter
+        document.querySelectorAll('.group-filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.group-filter-btn').forEach(b => {
+                    b.classList.remove('bg-primary', 'text-white');
+                    b.classList.add('bg-slate-100', 'text-slate-600');
+                });
+                this.classList.remove('bg-slate-100', 'text-slate-600');
+                this.classList.add('bg-primary', 'text-white');
+            });
+        });
+
+        // Sort Selection
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.sort-btn').forEach(b => {
+                    b.classList.remove('bg-primary-light', 'text-primary-dark');
+                    b.classList.add('bg-slate-100', 'text-slate-500');
+                });
+                this.classList.remove('bg-slate-100', 'text-slate-500');
+                this.classList.add('bg-primary-light', 'text-primary-dark');
+            });
+        });
+
+        // Makeup Checkin Modal
+        function showMakeupCheckin(date) {
+            document.getElementById('makeupDate').textContent = date || '1月4日';
+            document.getElementById('makeupCheckinModal').classList.remove('hidden');
+        }
+
+        function closeMakeupCheckin() {
+            document.getElementById('makeupCheckinModal').classList.add('hidden');
+        }
+
+        function doMakeupCheckin() {
+            closeMakeupCheckin();
+            showToast('补签成功！', 'success');
+        }
+
+        // Milestone Modal
+        function showMilestone() {
+            document.getElementById('milestoneModal').classList.remove('hidden');
+        }
+
+        function closeMilestone() {
+            document.getElementById('milestoneModal').classList.add('hidden');
+        }
+
+        // Add Person Modal
+        function showAddPerson() {
+            document.getElementById('addPersonModal').classList.remove('hidden');
+        }
+
+        function closeAddPerson() {
+            document.getElementById('addPersonModal').classList.add('hidden');
+        }
+
+        // Toast Message
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMessage.textContent = message;
+
+            if (type === 'success') {
+                toast.className = 'fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg z-50 animate-scaleIn bg-primary-light text-primary-dark';
+                toastIcon.className = 'fa-solid fa-check-circle';
+            } else if (type === 'error') {
+                toast.className = 'fixed top-6 right-6 px-6 py-3 rounded-lg shadow-lg z-50 animate-scaleIn bg-red-100 text-red-600';
+                toastIcon.className = 'fa-solid fa-times-circle';
+            }
+
+            toast.classList.remove('hidden');
+
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2000);
+        }
     </script>
 </body>
 </html>

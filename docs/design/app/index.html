@@ -72,10 +72,17 @@
             to { transform: scale(1); opacity: 1; }
         }
 
+        /* 淡出动画 */
+        @keyframes fadeOut {
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.9); }
+        }
+
         .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
         .animate-checkin { animation: checkIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
         .animate-breathe { animation: breathe 2s ease-in-out infinite; }
         .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-fadeOut { animation: fadeOut 0.3s ease-out forwards; }
         .animate-slideUp { animation: slideUp 0.3s ease-out; }
         .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
 
@@ -245,7 +252,7 @@
             </div>
 
             <!-- Login Form -->
-            <div class="space-y-4 mb-6">
+            <div class="space-y-4 mb-4">
                 <div>
                     <input type="email" placeholder="邮箱" class="input">
                 </div>
@@ -254,10 +261,40 @@
                 </div>
             </div>
 
+            <!-- Remember & Forgot -->
+            <div class="flex justify-between items-center mb-6">
+                <label class="flex items-center text-slate-500 text-sm cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary mr-2">
+                    记住登录
+                </label>
+                <button id="toForgotBtn" class="text-primary text-sm font-medium">忘记密码？</button>
+            </div>
+
             <!-- Login Button -->
             <button id="loginBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors mb-4">
                 登录
             </button>
+
+            <!-- Third Party Login -->
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-slate-200"></div>
+                </div>
+                <div class="relative flex justify-center text-sm">
+                    <span class="px-4 bg-slate-50 text-slate-400">或使用以下方式登录</span>
+                </div>
+            </div>
+
+            <div class="flex justify-center space-x-6 mb-6">
+                <!-- WeChat Login -->
+                <button class="w-14 h-14 bg-[#07c160] rounded-full flex items-center justify-center text-white hover:opacity-90 transition-opacity shadow-md">
+                    <i class="fa-brands fa-weixin text-2xl"></i>
+                </button>
+                <!-- Apple Login -->
+                <button class="w-14 h-14 bg-black rounded-full flex items-center justify-center text-white hover:opacity-90 transition-opacity shadow-md">
+                    <i class="fa-brands fa-apple text-2xl"></i>
+                </button>
+            </div>
 
             <!-- Register Link -->
             <p class="text-center text-slate-500 text-sm">
@@ -290,7 +327,16 @@
                     <input type="email" placeholder="邮箱" class="input">
                 </div>
                 <div>
-                    <input type="password" placeholder="密码（至少6位）" class="input">
+                    <input type="password" id="registerPassword" placeholder="密码（至少6位，包含字母和数字）" class="input" oninput="updatePasswordStrength(this.value)">
+                    <!-- Password Strength Indicator -->
+                    <div class="mt-2">
+                        <div class="flex space-x-1 mb-1">
+                            <div id="strength1" class="h-1 flex-1 rounded bg-slate-200"></div>
+                            <div id="strength2" class="h-1 flex-1 rounded bg-slate-200"></div>
+                            <div id="strength3" class="h-1 flex-1 rounded bg-slate-200"></div>
+                        </div>
+                        <p id="strengthText" class="text-xs text-slate-400">密码强度</p>
+                    </div>
                 </div>
                 <div>
                     <input type="password" placeholder="确认密码" class="input">
@@ -304,6 +350,75 @@
             <button id="registerBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors">
                 注册
             </button>
+        </div>
+    </div>
+
+    <!-- ==================== 忘记密码页面 ==================== -->
+    <div id="page-forgot" class="page min-h-screen flex flex-col bg-slate-50">
+        <div class="flex-grow flex flex-col justify-center px-6 py-12">
+            <!-- Back & Title -->
+            <div class="mb-8">
+                <button id="backFromForgotBtn" class="text-slate-500 mb-4">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>返回
+                </button>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">找回密码</h1>
+                <p class="text-slate-500 text-sm">输入注册邮箱，我们将发送验证码</p>
+            </div>
+
+            <!-- Step 1: Email -->
+            <div id="forgotStep1">
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <input type="email" placeholder="注册邮箱" class="input">
+                    </div>
+                </div>
+                <button id="sendCodeBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors">
+                    发送验证码
+                </button>
+            </div>
+
+            <!-- Step 2: Verify Code -->
+            <div id="forgotStep2" class="hidden">
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <input type="text" placeholder="输入6位验证码" class="input text-center text-lg tracking-widest" maxlength="6">
+                    </div>
+                    <p class="text-slate-500 text-sm text-center">验证码已发送至 user***@example.com</p>
+                </div>
+                <button id="verifyCodeBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors">
+                    验证
+                </button>
+                <button class="w-full text-slate-500 py-3 text-sm mt-2">
+                    没收到？<span class="text-primary font-medium">重新发送</span>
+                </button>
+            </div>
+
+            <!-- Step 3: Reset Password -->
+            <div id="forgotStep3" class="hidden">
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <input type="password" placeholder="新密码（至少6位）" class="input">
+                    </div>
+                    <div>
+                        <input type="password" placeholder="确认新密码" class="input">
+                    </div>
+                </div>
+                <button id="resetPasswordBtn" class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-dark transition-colors">
+                    重置密码
+                </button>
+            </div>
+
+            <!-- Success Message -->
+            <div id="forgotSuccess" class="hidden text-center py-8">
+                <div class="w-20 h-20 bg-primary-light rounded-full flex items-center justify-center mx-auto mb-4 animate-checkin">
+                    <i class="fa-solid fa-check text-primary text-4xl"></i>
+                </div>
+                <h4 class="text-xl font-bold text-slate-800 mb-2">密码重置成功！</h4>
+                <p class="text-slate-500 text-sm mb-6">请使用新密码登录，其他设备需重新登录</p>
+                <button id="backToLoginFromForgot" class="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary-dark transition-colors">
+                    去登录
+                </button>
+            </div>
         </div>
     </div>
 
@@ -345,14 +460,6 @@
                     </button>
                 </div>
 
-                <!-- Success Feedback (Hidden by default) -->
-                <div id="feedbackArea" class="hidden bg-primary-light border border-emerald-200 rounded-2xl p-6 text-center mb-6 animate-checkin">
-                    <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-check text-primary text-3xl"></i>
-                    </div>
-                    <p class="text-primary-dark font-bold text-lg mb-1">恭喜你又活过了一天！</p>
-                    <p class="text-emerald-600 text-sm">今天也辛苦了</p>
-                </div>
 
                 <!-- Today's Birthday Reminder -->
                 <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6">
@@ -526,10 +633,28 @@
                     </button>
                 </div>
 
+                <!-- Group Filter -->
+                <div class="flex space-x-2 mb-4 overflow-x-auto pb-1">
+                    <button class="group-filter-btn px-3 py-1.5 bg-primary text-white text-xs rounded-lg font-medium whitespace-nowrap" data-group="all">全部 (5)</button>
+                    <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium hover:bg-slate-200 transition-colors whitespace-nowrap" data-group="family">
+                        <i class="fa-solid fa-house-heart mr-1"></i>家人 (1)
+                    </button>
+                    <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium hover:bg-slate-200 transition-colors whitespace-nowrap" data-group="friend">
+                        <i class="fa-solid fa-user-group mr-1"></i>朋友 (2)
+                    </button>
+                    <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium hover:bg-slate-200 transition-colors whitespace-nowrap" data-group="colleague">
+                        <i class="fa-solid fa-briefcase mr-1"></i>同事 (1)
+                    </button>
+                    <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium hover:bg-slate-200 transition-colors whitespace-nowrap" data-group="other">
+                        <i class="fa-solid fa-ellipsis mr-1"></i>其他 (1)
+                    </button>
+                </div>
+
                 <!-- Sort Options -->
                 <div class="flex space-x-2 mb-4">
-                    <button class="px-3 py-1.5 bg-primary text-white text-xs rounded-lg font-medium">按添加时间</button>
-                    <button class="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium hover:bg-slate-200 transition-colors">按生日临近</button>
+                    <span class="text-slate-400 text-xs leading-6">排序：</span>
+                    <button class="sort-btn px-3 py-1 bg-primary-light text-primary-dark text-xs rounded font-medium" data-sort="time">按添加时间</button>
+                    <button class="sort-btn px-3 py-1 bg-slate-100 text-slate-500 text-xs rounded font-medium hover:bg-slate-200 transition-colors" data-sort="birthday">按生日临近</button>
                 </div>
 
                 <!-- Birthday Today Section -->
@@ -556,14 +681,17 @@
                     <h2 class="text-sm font-medium text-slate-500 mb-3">全部人物 (5)</h2>
 
                     <div class="space-y-3">
-                        <!-- Person Card -->
+                        <!-- Person Card with Group Tag -->
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="showPersonDetail()">
                             <div class="flex items-center">
-                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4 ring-2 ring-rose-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h3 class="font-bold text-slate-800 text-sm">张三</h3>
+                                    <div class="flex items-center mb-0.5">
+                                        <h3 class="font-bold text-slate-800 text-sm mr-2">张三</h3>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded">家人</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">INFP · 1月12日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300"></i>
@@ -572,11 +700,14 @@
 
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
                             <div class="flex items-center">
-                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4 ring-2 ring-blue-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h3 class="font-bold text-slate-800 text-sm">李四</h3>
+                                    <div class="flex items-center mb-0.5">
+                                        <h3 class="font-bold text-slate-800 text-sm mr-2">李四</h3>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">朋友</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">ENFJ · 5月12日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300"></i>
@@ -585,11 +716,14 @@
 
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
                             <div class="flex items-center">
-                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4 ring-2 ring-blue-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Luna" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h3 class="font-bold text-slate-800 text-sm">王五</h3>
+                                    <div class="flex items-center mb-0.5">
+                                        <h3 class="font-bold text-slate-800 text-sm mr-2">王五</h3>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">朋友</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">INTJ · 8月23日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300"></i>
@@ -598,12 +732,31 @@
 
                         <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
                             <div class="flex items-center">
-                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4 ring-2 ring-amber-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h3 class="font-bold text-slate-800 text-sm">赵六</h3>
+                                    <div class="flex items-center mb-0.5">
+                                        <h3 class="font-bold text-slate-800 text-sm mr-2">赵六</h3>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded">同事</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">ESTP · 11月5日生日</p>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-slate-300"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow cursor-pointer">
+                            <div class="flex items-center">
+                                <div class="w-12 h-12 bg-slate-100 rounded-full overflow-hidden mr-4 ring-2 ring-slate-200">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sam" alt="avatar" class="w-full h-full">
+                                </div>
+                                <div class="flex-grow">
+                                    <div class="flex items-center mb-0.5">
+                                        <h3 class="font-bold text-slate-800 text-sm mr-2">钱七</h3>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">其他</span>
+                                    </div>
+                                    <p class="text-slate-400 text-xs">ISFJ · 3月15日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300"></i>
                             </div>
@@ -652,6 +805,148 @@
                     </div>
                 </div>
 
+                <!-- Milestone Badges -->
+                <section class="mb-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-medal text-amber-500 mr-2"></i> 里程碑徽章
+                        </h3>
+                        <span class="text-slate-400 text-xs">已获得 4/5</span>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+                        <div class="flex justify-around">
+                            <!-- 7 Days Badge -->
+                            <div class="text-center">
+                                <div class="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow">
+                                    <span class="text-white font-bold text-lg">7</span>
+                                </div>
+                                <p class="text-slate-700 text-xs font-medium">初心者</p>
+                            </div>
+                            <!-- 30 Days Badge -->
+                            <div class="text-center">
+                                <div class="w-14 h-14 bg-gradient-to-br from-sky-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow">
+                                    <span class="text-white font-bold text-lg">30</span>
+                                </div>
+                                <p class="text-slate-700 text-xs font-medium">坚持者</p>
+                            </div>
+                            <!-- 100 Days Badge -->
+                            <div class="text-center">
+                                <div class="w-14 h-14 bg-gradient-to-br from-purple-400 to-violet-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow">
+                                    <span class="text-white font-bold text-lg">100</span>
+                                </div>
+                                <p class="text-slate-700 text-xs font-medium">证明者</p>
+                            </div>
+                            <!-- 365 Days Badge -->
+                            <div class="text-center">
+                                <div class="w-14 h-14 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-2 shadow">
+                                    <span class="text-white font-bold text-lg">365</span>
+                                </div>
+                                <p class="text-slate-700 text-xs font-medium">史诗</p>
+                            </div>
+                            <!-- 1000 Days Badge (Locked) -->
+                            <div class="text-center opacity-40">
+                                <div class="w-14 h-14 bg-slate-300 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <i class="fa-solid fa-lock text-slate-500"></i>
+                                </div>
+                                <p class="text-slate-500 text-xs font-medium">传说</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Year Heatmap -->
+                <section class="mb-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-fire text-orange-500 mr-2"></i> 年度热力图
+                        </h3>
+                        <span class="text-slate-400 text-xs">2026年</span>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-4 overflow-x-auto">
+                        <!-- Month Labels -->
+                        <div class="flex text-[10px] text-slate-400 mb-2 ml-6">
+                            <span class="w-6">1月</span>
+                            <span class="w-6">2月</span>
+                            <span class="w-6">3月</span>
+                            <span class="w-6">4月</span>
+                            <span class="w-6">5月</span>
+                            <span class="w-6">6月</span>
+                            <span class="w-6">7月</span>
+                            <span class="w-6">8月</span>
+                            <span class="w-6">9月</span>
+                            <span class="w-6">10月</span>
+                            <span class="w-6">11月</span>
+                            <span class="w-6">12月</span>
+                        </div>
+                        <!-- Heatmap Grid (simplified representation) -->
+                        <div class="flex">
+                            <!-- Day Labels -->
+                            <div class="flex flex-col text-[10px] text-slate-400 mr-1">
+                                <span class="h-2 leading-2">一</span>
+                                <span class="h-2 leading-2"></span>
+                                <span class="h-2 leading-2">三</span>
+                                <span class="h-2 leading-2"></span>
+                                <span class="h-2 leading-2">五</span>
+                                <span class="h-2 leading-2"></span>
+                                <span class="h-2 leading-2">日</span>
+                            </div>
+                            <!-- Heatmap Cells -->
+                            <div class="flex gap-[2px]">
+                                <!-- Week columns - showing sample data -->
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-60"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-40"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                </div>
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-primary"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-60"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-40"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-80"></div>
+                                </div>
+                                <!-- More weeks... simplified for demo -->
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-60"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-40"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-primary opacity-60"></div>
+                                </div>
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                </div>
+                                <!-- Placeholder for future months -->
+                                <div class="flex items-center text-slate-300 text-xs ml-2">...</div>
+                            </div>
+                        </div>
+                        <!-- Legend -->
+                        <div class="flex items-center justify-end mt-3 text-[10px] text-slate-400">
+                            <span class="mr-1">少</span>
+                            <div class="w-2 h-2 rounded-sm bg-slate-200 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-primary opacity-40 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-primary opacity-60 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-primary opacity-80 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-primary mr-1"></div>
+                            <span>多</span>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Death Confirmation Settings -->
                 <section class="mb-6">
                     <div class="bg-accent-light border border-rose-200 rounded-xl p-4">
@@ -687,6 +982,20 @@
                 <!-- Settings List -->
                 <section class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
                     <div class="divide-y divide-slate-100">
+                        <!-- Theme Toggle -->
+                        <div class="w-full flex items-center justify-between p-4">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fa-solid fa-moon text-indigo-500 text-sm"></i>
+                                </div>
+                                <span class="text-slate-700">主题模式</span>
+                            </div>
+                            <div class="flex items-center space-x-1 bg-slate-100 rounded-lg p-1">
+                                <button class="px-2.5 py-1 text-xs rounded bg-white text-slate-700 shadow-sm font-medium">浅色</button>
+                                <button class="px-2.5 py-1 text-xs rounded text-slate-500">深色</button>
+                                <button class="px-2.5 py-1 text-xs rounded text-slate-500">跟随系统</button>
+                            </div>
+                        </div>
                         <button class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
                             <div class="flex items-center">
                                 <div class="w-8 h-8 bg-primary-light rounded-lg flex items-center justify-center mr-3">
@@ -803,13 +1112,42 @@
                 <p class="text-slate-500 text-sm mb-4">记录一下今天有意义的事（可选）</p>
                 <textarea id="checkinInput" class="w-full h-24 p-3 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="今天发生了什么值得记住的事..."></textarea>
 
-                <div class="flex items-center space-x-3 mt-3 mb-6">
+                <!-- Action Buttons -->
+                <div class="flex items-center space-x-3 mt-3 mb-4">
                     <button class="flex items-center px-3 py-2 bg-slate-100 rounded-lg text-slate-600 text-sm hover:bg-slate-200 transition-colors">
                         <i class="fa-solid fa-image mr-2"></i> 添加照片
                     </button>
-                    <button class="flex items-center px-3 py-2 bg-slate-100 rounded-lg text-slate-600 text-sm hover:bg-slate-200 transition-colors">
-                        <i class="fa-solid fa-face-smile mr-2"></i> 心情
-                    </button>
+                </div>
+
+                <!-- Mood Selector -->
+                <div class="mb-6">
+                    <p class="text-slate-500 text-sm mb-3">今天心情如何？（可选）</p>
+                    <div class="flex justify-around">
+                        <button class="mood-btn flex flex-col items-center p-2 rounded-lg hover:bg-slate-100 transition-colors" data-mood="happy">
+                            <span class="text-2xl mb-1">😊</span>
+                            <span class="text-xs text-slate-500">开心</span>
+                        </button>
+                        <button class="mood-btn flex flex-col items-center p-2 rounded-lg hover:bg-slate-100 transition-colors" data-mood="calm">
+                            <span class="text-2xl mb-1">😌</span>
+                            <span class="text-xs text-slate-500">平静</span>
+                        </button>
+                        <button class="mood-btn flex flex-col items-center p-2 rounded-lg hover:bg-slate-100 transition-colors" data-mood="tired">
+                            <span class="text-2xl mb-1">😫</span>
+                            <span class="text-xs text-slate-500">疲惫</span>
+                        </button>
+                        <button class="mood-btn flex flex-col items-center p-2 rounded-lg hover:bg-slate-100 transition-colors" data-mood="sad">
+                            <span class="text-2xl mb-1">😢</span>
+                            <span class="text-xs text-slate-500">难过</span>
+                        </button>
+                        <button class="mood-btn flex flex-col items-center p-2 rounded-lg hover:bg-slate-100 transition-colors" data-mood="anxious">
+                            <span class="text-2xl mb-1">😰</span>
+                            <span class="text-xs text-slate-500">焦虑</span>
+                        </button>
+                        <button class="mood-btn flex flex-col items-center p-2 rounded-lg hover:bg-slate-100 transition-colors" data-mood="excited">
+                            <span class="text-2xl mb-1">🤩</span>
+                            <span class="text-xs text-slate-500">兴奋</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="flex space-x-3">
@@ -952,27 +1290,51 @@
                     </div>
                 </div>
 
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">分组</label>
+                        <select class="input">
+                            <option value="family">家人</option>
+                            <option value="friend">朋友</option>
+                            <option value="colleague">同事</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">MBTI</label>
+                        <select class="input">
+                            <option value="">请选择</option>
+                            <option>INTJ</option>
+                            <option>INTP</option>
+                            <option>ENTJ</option>
+                            <option>ENTP</option>
+                            <option>INFJ</option>
+                            <option>INFP</option>
+                            <option>ENFJ</option>
+                            <option>ENFP</option>
+                            <option>ISTJ</option>
+                            <option>ISFJ</option>
+                            <option>ESTJ</option>
+                            <option>ESFJ</option>
+                            <option>ISTP</option>
+                            <option>ISFP</option>
+                            <option>ESTP</option>
+                            <option>ESFP</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Theme Color Picker -->
                 <div>
-                    <label class="text-slate-700 text-sm font-medium mb-1 block">MBTI</label>
-                    <select class="input">
-                        <option value="">请选择</option>
-                        <option>INTJ</option>
-                        <option>INTP</option>
-                        <option>ENTJ</option>
-                        <option>ENTP</option>
-                        <option>INFJ</option>
-                        <option>INFP</option>
-                        <option>ENFJ</option>
-                        <option>ENFP</option>
-                        <option>ISTJ</option>
-                        <option>ISFJ</option>
-                        <option>ESTJ</option>
-                        <option>ESFJ</option>
-                        <option>ISTP</option>
-                        <option>ISFP</option>
-                        <option>ESTP</option>
-                        <option>ESFP</option>
-                    </select>
+                    <label class="text-slate-700 text-sm font-medium mb-2 block">印象主题色</label>
+                    <div class="flex space-x-3">
+                        <button class="w-8 h-8 rounded-full bg-rose-400 ring-2 ring-offset-2 ring-rose-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-blue-400 hover:ring-2 hover:ring-offset-2 hover:ring-blue-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-amber-400 hover:ring-2 hover:ring-offset-2 hover:ring-amber-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-purple-400 hover:ring-2 hover:ring-offset-2 hover:ring-purple-400"></button>
+                        <button class="w-8 h-8 rounded-full bg-primary hover:ring-2 hover:ring-offset-2 hover:ring-primary"></button>
+                        <button class="w-8 h-8 rounded-full bg-slate-400 hover:ring-2 hover:ring-offset-2 hover:ring-slate-400"></button>
+                    </div>
                 </div>
 
                 <div>
@@ -989,6 +1351,81 @@
             <button class="w-full bg-primary text-white py-3 rounded-xl font-bold mt-6 hover:bg-primary-dark transition-colors">
                 保存
             </button>
+        </div>
+    </div>
+
+    <!-- ==================== 补签弹窗 ==================== -->
+    <div id="makeupCheckinModal" class="hidden">
+        <div class="overlay" onclick="closeMakeupCheckin()"></div>
+        <div class="modal p-6 pb-10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-lg font-bold text-slate-800">补签打卡</h3>
+                <button onclick="closeMakeupCheckin()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fa-solid fa-calendar-plus text-amber-600 text-2xl"></i>
+                </div>
+                <p class="text-slate-700 font-medium mb-1">补签 <span id="makeupDate" class="text-primary">1月4日</span></p>
+                <p class="text-slate-500 text-sm">本月剩余补签次数：<span class="text-amber-600 font-bold">2</span>/3</p>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6">
+                <p class="text-amber-700 text-sm">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    补签规则：仅可补签过去7天内的记录，每月最多3次
+                </p>
+            </div>
+
+            <p class="text-slate-500 text-sm mb-4">记录一下当天有意义的事（可选）</p>
+            <textarea class="w-full h-20 p-3 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent mb-6" placeholder="回忆一下那天发生了什么..."></textarea>
+
+            <button onclick="doMakeupCheckin()" class="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-dark transition-colors">
+                确认补签
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 里程碑庆祝弹窗 ==================== -->
+    <div id="milestoneModal" class="hidden">
+        <div class="overlay" onclick="closeMilestone()"></div>
+        <div class="modal p-6 pb-10 text-center">
+            <div class="relative mb-6">
+                <div class="w-24 h-24 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                    <i class="fa-solid fa-trophy text-white text-4xl"></i>
+                </div>
+                <div class="absolute -top-2 -right-2 w-8 h-8 bg-accent rounded-full flex items-center justify-center text-white text-xs font-bold shadow animate-bounce">
+                    7
+                </div>
+            </div>
+
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">连续打卡 7 天！</h3>
+            <p class="text-slate-500 mb-6">连续7天，你是真的在认真活着</p>
+
+            <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-4 mb-6">
+                <p class="text-amber-700 text-sm font-medium">
+                    <i class="fa-solid fa-medal mr-2"></i>
+                    获得徽章：「初心者」
+                </p>
+            </div>
+
+            <button onclick="closeMilestone()" class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-8 py-3 rounded-xl font-bold hover:from-amber-600 hover:to-orange-600 transition-colors">
+                太棒了！
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 打卡成功浮层 ==================== -->
+    <div id="checkinSuccessOverlay" class="hidden fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div class="bg-white rounded-2xl p-8 shadow-2xl text-center animate-checkin max-w-xs mx-4">
+            <div class="w-20 h-20 bg-primary-light rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-check text-primary text-4xl"></i>
+            </div>
+            <p id="checkinSuccessTitle" class="text-slate-800 font-bold text-xl mb-2">恭喜你又活过了一天！</p>
+            <p id="checkinSuccessSubtitle" class="text-slate-500 text-sm">今天也辛苦了</p>
         </div>
     </div>
 
@@ -1068,6 +1505,94 @@
             showToast('已退出登录', 'success');
         });
 
+        // ========== 忘记密码 ==========
+        document.getElementById('toForgotBtn').addEventListener('click', function() {
+            showPage('page-forgot');
+        });
+
+        document.getElementById('backFromForgotBtn').addEventListener('click', function() {
+            showPage('page-login');
+        });
+
+        document.getElementById('sendCodeBtn').addEventListener('click', function() {
+            showLoading();
+            setTimeout(() => {
+                hideLoading();
+                document.getElementById('forgotStep1').classList.add('hidden');
+                document.getElementById('forgotStep2').classList.remove('hidden');
+                showToast('验证码已发送', 'success');
+            }, 1000);
+        });
+
+        document.getElementById('verifyCodeBtn').addEventListener('click', function() {
+            showLoading();
+            setTimeout(() => {
+                hideLoading();
+                document.getElementById('forgotStep2').classList.add('hidden');
+                document.getElementById('forgotStep3').classList.remove('hidden');
+            }, 800);
+        });
+
+        document.getElementById('resetPasswordBtn').addEventListener('click', function() {
+            showLoading();
+            setTimeout(() => {
+                hideLoading();
+                document.getElementById('forgotStep3').classList.add('hidden');
+                document.getElementById('forgotSuccess').classList.remove('hidden');
+                showToast('密码重置成功', 'success');
+            }, 1000);
+        });
+
+        document.getElementById('backToLoginFromForgot').addEventListener('click', function() {
+            // 重置所有步骤
+            document.getElementById('forgotStep1').classList.remove('hidden');
+            document.getElementById('forgotStep2').classList.add('hidden');
+            document.getElementById('forgotStep3').classList.add('hidden');
+            document.getElementById('forgotSuccess').classList.add('hidden');
+            showPage('page-login');
+        });
+
+        // ========== 密码强度检测 ==========
+        function updatePasswordStrength(password) {
+            const s1 = document.getElementById('strength1');
+            const s2 = document.getElementById('strength2');
+            const s3 = document.getElementById('strength3');
+            const text = document.getElementById('strengthText');
+
+            // Reset
+            s1.className = 'h-1 flex-1 rounded bg-slate-200';
+            s2.className = 'h-1 flex-1 rounded bg-slate-200';
+            s3.className = 'h-1 flex-1 rounded bg-slate-200';
+
+            if (password.length === 0) {
+                text.textContent = '密码强度';
+                text.className = 'text-xs text-slate-400';
+                return;
+            }
+
+            let strength = 0;
+            if (password.length >= 6) strength++;
+            if (/[a-zA-Z]/.test(password) && /[0-9]/.test(password)) strength++;
+            if (password.length >= 10 && /[^a-zA-Z0-9]/.test(password)) strength++;
+
+            if (strength === 1) {
+                s1.className = 'h-1 flex-1 rounded bg-red-400';
+                text.textContent = '弱';
+                text.className = 'text-xs text-red-500';
+            } else if (strength === 2) {
+                s1.className = 'h-1 flex-1 rounded bg-amber-400';
+                s2.className = 'h-1 flex-1 rounded bg-amber-400';
+                text.textContent = '中';
+                text.className = 'text-xs text-amber-500';
+            } else if (strength === 3) {
+                s1.className = 'h-1 flex-1 rounded bg-primary';
+                s2.className = 'h-1 flex-1 rounded bg-primary';
+                s3.className = 'h-1 flex-1 rounded bg-primary';
+                text.textContent = '强';
+                text.className = 'text-xs text-primary';
+            }
+        }
+
         // ========== 打卡弹窗 ==========
         document.getElementById('openCheckinModal').addEventListener('click', function() {
             if (!this.classList.contains('completed')) {
@@ -1089,6 +1614,18 @@
             completeCheckin();
         }
 
+        // 随机鼓励文案
+        const encourageMessages = [
+            { title: '恭喜你又活过了一天！', subtitle: '今天也辛苦了' },
+            { title: '又是元气满满的一天！', subtitle: '你很棒' },
+            { title: '生存确认成功！', subtitle: '继续加油' },
+            { title: '今天也在好好活着呢！', subtitle: '明天见' },
+            { title: '打卡成功！', subtitle: '每一天都值得被记录' },
+            { title: '活着真好！', subtitle: '珍惜当下' },
+            { title: '又度过了一天！', subtitle: '你是最棒的' },
+            { title: '存活确认！', subtitle: '期待明天的你' },
+        ];
+
         function completeCheckin() {
             document.getElementById('checkinStep1').classList.add('hidden');
             document.getElementById('checkinStep2').classList.remove('hidden');
@@ -1098,9 +1635,29 @@
             checkinBtn.classList.add('completed');
             checkinBtn.innerHTML = '<i class="fa-solid fa-check text-2xl mb-1"></i><span class="text-sm">已确认</span>';
 
-            document.getElementById('statusTitle').textContent = '恭喜你又活过了一天！';
-            document.getElementById('statusText').textContent = '今日已确认存活';
-            document.getElementById('feedbackArea').classList.remove('hidden');
+            document.getElementById('statusTitle').textContent = '今日已确认存活';
+            document.getElementById('statusText').textContent = '明天记得再来打卡哦';
+
+            // 显示随机鼓励浮层
+            const randomMsg = encourageMessages[Math.floor(Math.random() * encourageMessages.length)];
+            document.getElementById('checkinSuccessTitle').textContent = randomMsg.title;
+            document.getElementById('checkinSuccessSubtitle').textContent = randomMsg.subtitle;
+
+            const overlay = document.getElementById('checkinSuccessOverlay');
+            const overlayContent = overlay.querySelector('div');
+            overlay.classList.remove('hidden');
+            overlayContent.classList.remove('animate-fadeOut');
+            overlayContent.classList.add('animate-checkin');
+
+            // 1.5秒后开始淡出，2秒后完全隐藏
+            setTimeout(() => {
+                overlayContent.classList.remove('animate-checkin');
+                overlayContent.classList.add('animate-fadeOut');
+            }, 1500);
+
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 1800);
         }
 
         // ========== 人物详情弹窗 ==========
@@ -1120,6 +1677,64 @@
         function closeAddPerson() {
             document.getElementById('addPersonModal').classList.add('hidden');
         }
+
+        // ========== 补签弹窗 ==========
+        function showMakeupCheckin(date) {
+            document.getElementById('makeupDate').textContent = date || '1月4日';
+            document.getElementById('makeupCheckinModal').classList.remove('hidden');
+        }
+
+        function closeMakeupCheckin() {
+            document.getElementById('makeupCheckinModal').classList.add('hidden');
+        }
+
+        function doMakeupCheckin() {
+            closeMakeupCheckin();
+            showToast('补签成功！', 'success');
+        }
+
+        // ========== 里程碑弹窗 ==========
+        function showMilestone() {
+            document.getElementById('milestoneModal').classList.remove('hidden');
+        }
+
+        function closeMilestone() {
+            document.getElementById('milestoneModal').classList.add('hidden');
+        }
+
+        // ========== 心情选择 ==========
+        document.querySelectorAll('.mood-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.mood-btn').forEach(b => {
+                    b.classList.remove('bg-primary-light', 'ring-2', 'ring-primary');
+                });
+                this.classList.add('bg-primary-light', 'ring-2', 'ring-primary');
+            });
+        });
+
+        // ========== 分组筛选 ==========
+        document.querySelectorAll('.group-filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.group-filter-btn').forEach(b => {
+                    b.classList.remove('bg-primary', 'text-white');
+                    b.classList.add('bg-slate-100', 'text-slate-600');
+                });
+                this.classList.remove('bg-slate-100', 'text-slate-600');
+                this.classList.add('bg-primary', 'text-white');
+            });
+        });
+
+        // ========== 排序切换 ==========
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.sort-btn').forEach(b => {
+                    b.classList.remove('bg-primary-light', 'text-primary-dark');
+                    b.classList.add('bg-slate-100', 'text-slate-500');
+                });
+                this.classList.remove('bg-slate-100', 'text-slate-500');
+                this.classList.add('bg-primary-light', 'text-primary-dark');
+            });
+        });
 
         // ========== Toast 消息 ==========
         function showToast(message, type = 'success') {

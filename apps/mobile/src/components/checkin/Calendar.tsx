@@ -2,13 +2,13 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
-import type { Checkin } from '@still-alive/types';
+import type { LocalCheckin } from '@still-alive/local-storage';
 import { colors } from '../../theme/colors';
 import CalendarDay from './CalendarDay';
 
 interface CalendarProps {
   currentMonth: Date;
-  checkins: Checkin[];
+  checkins: LocalCheckin[];
   onMonthChange: (date: Date) => void;
   onDayPress?: (date: string) => void;
 }

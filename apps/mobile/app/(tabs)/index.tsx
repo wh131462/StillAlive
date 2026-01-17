@@ -1,6 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import type { MoodType } from '@still-alive/local-storage';
 import { useCheckinStore } from '../../src/stores/checkinStore';
 import { usePersonStore } from '../../src/stores/personStore';
 import { useUIStore } from '../../src/stores/uiStore';
@@ -11,8 +12,18 @@ import {
   QuickEntry,
   MissedDayHint,
   CheckinModal,
+  CheckinSuccessOverlay,
 } from '../../src/components/home';
 import { colors } from '../../src/theme/colors';
+
+// 里程碑定义
+const MILESTONES = [
+  { days: 7, name: '初来乍到' },
+  { days: 30, name: '月度坚持' },
+  { days: 100, name: '百日成就' },
+  { days: 365, name: '一周年纪念' },
+  { days: 1000, name: '千日传奇' },
+];
 
 export default function HomeScreen() {
   const {
@@ -20,32 +31,40 @@ export default function HomeScreen() {
     isCheckinLoading,
     checkTodayStatus,
     checkinToday,
+    stats,
   } = useCheckinStore();
 
-  const { todayBirthdays, fetchTodayBirthdays } = usePersonStore();
+  const { todayBirthdays, checkTodayBirthdays } = usePersonStore();
 
   const {
     isCheckinModalOpen,
-    checkinModalStep,
     openCheckinModal,
     closeCheckinModal,
-    setCheckinModalStep,
     showToast,
   } = useUIStore();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+  const [currentMilestone, setCurrentMilestone] = useState<{ days: number; name: string } | null>(null);
+
+  // 检查是否达到里程碑
+  const checkMilestone = useMemo(() => {
+    return (totalDays: number) => {
+      return MILESTONES.find((m) => m.days === totalDays) || null;
+    };
+  }, []);
 
   // Fetch data on mount and focus
   useFocusEffect(
     useCallback(() => {
       checkTodayStatus();
-      fetchTodayBirthdays();
-    }, [checkTodayStatus, fetchTodayBirthdays])
+      checkTodayBirthdays();
+    }, [checkTodayStatus, checkTodayBirthdays])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([checkTodayStatus(), fetchTodayBirthdays()]);
+    await Promise.all([checkTodayStatus(), checkTodayBirthdays()]);
     setRefreshing(false);
   };
 
@@ -55,14 +74,26 @@ export default function HomeScreen() {
     }
   };
 
-  const handleCheckin = async (content?: string) => {
+  const handleCheckin = async (data: { content?: string; mood?: MoodType }) => {
     try {
-      await checkinToday(content);
-      setCheckinModalStep('success');
-      showToast({ type: 'success', message: '打卡成功！' });
+      await checkinToday(data.content, undefined, data.mood);
+      closeCheckinModal();
+
+      // 检查里程碑
+      const newTotalDays = (stats?.totalDays || 0) + 1;
+      const milestone = checkMilestone(newTotalDays);
+      setCurrentMilestone(milestone);
+
+      // 显示成功浮层
+      setShowSuccessOverlay(true);
     } catch {
       showToast({ type: 'error', message: '打卡失败，请重试' });
     }
+  };
+
+  const handleSuccessOverlayDismiss = () => {
+    setShowSuccessOverlay(false);
+    setCurrentMilestone(null);
   };
 
   const handleQuickSave = async (content: string) => {
@@ -125,10 +156,17 @@ export default function HomeScreen() {
       {/* Checkin Modal */}
       <CheckinModal
         visible={isCheckinModalOpen}
-        step={checkinModalStep}
         onClose={closeCheckinModal}
         onCheckin={handleCheckin}
         isLoading={isCheckinLoading}
+      />
+
+      {/* Success Overlay */}
+      <CheckinSuccessOverlay
+        visible={showSuccessOverlay}
+        onDismiss={handleSuccessOverlayDismiss}
+        streak={stats?.streak}
+        milestone={currentMilestone}
       />
     </View>
   );

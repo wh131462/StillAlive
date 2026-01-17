@@ -4,7 +4,8 @@
 
 .PHONY: help dev build deploy ssl logs restart stop clean
 
-ENV_FILE ?= .env.production
+ENV_FILE ?= configs/.env.production
+DOCKER_COMPOSE = docker-compose -f docker/docker-compose.yml
 
 help: ## 显示帮助信息
 	@echo "StillAlive - 可用命令:"
@@ -16,28 +17,34 @@ help: ## 显示帮助信息
 dev: ## 启动开发环境
 	pnpm dev
 
+dev-db: ## 启动开发数据库
+	docker-compose -f docker/docker-compose.dev.yml up -d
+
+dev-db-stop: ## 停止开发数据库
+	docker-compose -f docker/docker-compose.dev.yml down
+
 install: ## 安装依赖
 	pnpm install
 
 # ==================== Docker ====================
 
 build: ## 构建 Docker 镜像
-	docker-compose --env-file $(ENV_FILE) build
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) build
 
 up: ## 启动所有服务
-	docker-compose --env-file $(ENV_FILE) up -d
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) up -d
 
 down: ## 停止所有服务
-	docker-compose --env-file $(ENV_FILE) down
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) down
 
 restart: ## 重启所有服务
-	docker-compose --env-file $(ENV_FILE) restart
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) restart
 
 logs: ## 查看日志
-	docker-compose --env-file $(ENV_FILE) logs -f
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) logs -f
 
 ps: ## 查看服务状态
-	docker-compose --env-file $(ENV_FILE) ps
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) ps
 
 # ==================== 部署 ====================
 
@@ -50,13 +57,13 @@ ssl: ## 初始化 SSL 证书
 # ==================== 数据库 ====================
 
 db-migrate: ## 运行数据库迁移
-	docker-compose --env-file $(ENV_FILE) run --rm server npx prisma migrate deploy
+	$(DOCKER_COMPOSE) --env-file $(ENV_FILE) run --rm server npx prisma migrate deploy
 
 db-studio: ## 启动 Prisma Studio
 	cd apps/server && pnpm db:studio
 
 db-backup: ## 备份数据库
-	docker-compose exec postgres pg_dump -U stillalive stillalive > backup_$$(date +%Y%m%d_%H%M%S).sql
+	$(DOCKER_COMPOSE) exec postgres pg_dump -U stillalive stillalive > backup_$$(date +%Y%m%d_%H%M%S).sql
 
 # ==================== 清理 ====================
 

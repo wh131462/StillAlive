@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Checkin } from '@still-alive/types';
+import type { LocalCheckin } from '@still-alive/local-storage';
 import { colors } from '../../theme/colors';
 import RecordItem from './RecordItem';
 
 interface RecordListProps {
-  records: Checkin[];
+  records: LocalCheckin[];
   isLoading?: boolean;
   hasMore?: boolean;
   onLoadMore?: () => void;

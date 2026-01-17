@@ -1,14 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Person } from '@still-alive/types';
+import type { LocalPerson } from '@still-alive/local-storage';
 import Avatar from '../ui/Avatar';
-import Button from '../ui/Button';
 import { colors } from '../../theme/colors';
 
 interface BirthdaySectionProps {
-  persons: Person[];
-  onPersonPress: (person: Person) => void;
+  persons: LocalPerson[];
+  onPersonPress: (person: LocalPerson) => void;
 }
 
 export default function BirthdaySection({ persons, onPersonPress }: BirthdaySectionProps) {

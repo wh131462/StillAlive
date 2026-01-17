@@ -4,3 +4,6 @@ export { default as PersonCard } from './PersonCard';
 export { default as BirthdaySection } from './BirthdaySection';
 export { default as FloatingAddButton } from './FloatingAddButton';
 export { default as PersonFormModal } from './PersonFormModal';
+export { default as GroupFilter } from './GroupFilter';
+export type { Group } from './GroupFilter';
+export { default as PersonDetailModal } from './PersonDetailModal';

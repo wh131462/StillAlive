@@ -6,7 +6,8 @@ const footerLinks = {
   product: {
     title: '产品',
     links: [
-      { label: '功能介绍', href: '#features' },
+      { label: '功能特色', href: '#features' },
+      { label: '产品理念', href: '#values' },
       { label: '下载应用', href: '#download' },
       { label: '网页版', href: 'https://app.still-alive.me' },
     ],
@@ -37,9 +38,10 @@ export default function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span className="text-2xl">💚</span>
-              <span className="text-xl font-bold">StillAlive</span>
+              <span className="text-xl font-bold">今天又活了一天</span>
             </div>
-            <p className="text-gray-500 text-sm">记录每一天，证明你还活着</p>
+            <p className="text-gray-500 text-sm">生存确认 · 记忆沉淀</p>
+            <p className="text-gray-600 text-xs mt-2">"还活着吗？" — 每一天都值得被记录</p>
           </div>
 
           {/* Links */}
@@ -67,7 +69,7 @@ export default function Footer() {
         {/* Bottom */}
         <div className="pt-8 border-t border-white/10 text-center">
           <p className="text-gray-500 text-sm">
-            &copy; {new Date().getFullYear()} StillAlive. All rights reserved.
+            &copy; {new Date().getFullYear()} 今天又活了一天 (StillAlive). All rights reserved.
           </p>
         </div>
       </div>

@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import type { Person, CreatePersonRequest } from '@still-alive/types';
+import type { LocalPerson } from '@still-alive/local-storage';
 import { usePersonStore } from '../../src/stores/personStore';
 import { useUIStore } from '../../src/stores/uiStore';
 import {
@@ -12,56 +12,112 @@ import {
   BirthdaySection,
   FloatingAddButton,
   PersonFormModal,
+  PersonDetailModal,
 } from '../../src/components/people';
 import { colors } from '../../src/theme/colors';
 
+// 创建人物请求类型
+interface CreatePersonRequest {
+  name: string;
+  gender?: 'male' | 'female' | 'other';
+  birthday?: string;
+  birthYear?: number;
+  photo?: string;
+  mbti?: string;
+  impression?: string;
+  experience?: string;
+}
+
 export default function PeopleScreen() {
   const {
-    persons,
     isLoading,
     sortBy,
     searchKeyword,
     todayBirthdays,
     filteredPersons,
     fetchPersons,
-    fetchTodayBirthdays,
+    checkTodayBirthdays,
     setSearchKeyword,
     setSortBy,
     createPerson,
+    updatePerson,
+    deletePerson,
     isCreating,
+    isUpdating,
+    currentPerson,
+    fetchPersonDetail,
+    clearCurrentPerson,
   } = usePersonStore();
 
   const {
     isPersonFormOpen,
+    isPersonDetailOpen,
     personFormMode,
     openPersonForm,
     closePersonForm,
+    openPersonDetail,
+    closePersonDetail,
     showToast,
   } = useUIStore();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<LocalPerson | null>(null);
 
   // Fetch data on mount and focus
   useFocusEffect(
     useCallback(() => {
       fetchPersons();
-      fetchTodayBirthdays();
-    }, [fetchPersons, fetchTodayBirthdays])
+      checkTodayBirthdays();
+    }, [fetchPersons, checkTodayBirthdays])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchPersons(), fetchTodayBirthdays()]);
+    await Promise.all([fetchPersons(), checkTodayBirthdays()]);
     setRefreshing(false);
   };
 
   const handleAddPerson = () => {
+    setSelectedPerson(null);
     openPersonForm('create');
   };
 
-  const handlePersonPress = (person: Person) => {
-    // TODO: Navigate to person detail or open detail modal
-    console.log('Person pressed:', person.id);
+  const handlePersonPress = (person: LocalPerson) => {
+    setSelectedPerson(person);
+    openPersonDetail();
+  };
+
+  const handleEditPerson = () => {
+    if (selectedPerson) {
+      closePersonDetail();
+      openPersonForm('edit');
+    }
+  };
+
+  const handleDeletePerson = () => {
+    if (!selectedPerson) return;
+
+    Alert.alert(
+      '确认删除',
+      `确定要删除"${selectedPerson.name}"吗？此操作无法撤销。`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deletePerson(selectedPerson.id);
+              closePersonDetail();
+              setSelectedPerson(null);
+              showToast({ type: 'success', message: '删除成功' });
+            } catch {
+              showToast({ type: 'error', message: '删除失败' });
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleCreatePerson = async (data: CreatePersonRequest) => {
@@ -72,6 +128,31 @@ export default function PeopleScreen() {
     } catch {
       showToast({ type: 'error', message: '添加失败' });
     }
+  };
+
+  const handleUpdatePerson = async (data: CreatePersonRequest) => {
+    if (!selectedPerson) return;
+    try {
+      const updated = await updatePerson(selectedPerson.id, data);
+      setSelectedPerson(updated);
+      closePersonForm();
+      showToast({ type: 'success', message: '更新成功' });
+    } catch {
+      showToast({ type: 'error', message: '更新失败' });
+    }
+  };
+
+  const handleFormSubmit = (data: CreatePersonRequest) => {
+    if (personFormMode === 'create') {
+      handleCreatePerson(data);
+    } else {
+      handleUpdatePerson(data);
+    }
+  };
+
+  const handleCloseDetail = () => {
+    closePersonDetail();
+    setSelectedPerson(null);
   };
 
   const displayedPersons = filteredPersons();
@@ -158,9 +239,19 @@ export default function PeopleScreen() {
       <PersonFormModal
         visible={isPersonFormOpen}
         mode={personFormMode}
+        initialData={personFormMode === 'edit' ? selectedPerson : undefined}
         onClose={closePersonForm}
-        onSubmit={handleCreatePerson}
-        isLoading={isCreating}
+        onSubmit={handleFormSubmit}
+        isLoading={personFormMode === 'create' ? isCreating : isUpdating}
+      />
+
+      {/* Person Detail Modal */}
+      <PersonDetailModal
+        visible={isPersonDetailOpen}
+        person={selectedPerson}
+        onClose={handleCloseDetail}
+        onEdit={handleEditPerson}
+        onDelete={handleDeletePerson}
       />
     </View>
   );

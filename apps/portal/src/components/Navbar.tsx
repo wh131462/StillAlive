@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 
 const navLinks = [
-  { label: '功能', href: '#features' },
+  { label: '功能特色', href: '#features' },
+  { label: '产品理念', href: '#values' },
   { label: '下载', href: '#download' },
-  { label: '文档', href: '#docs' },
   { label: '关于', href: '#about' },
 ];
 
@@ -34,7 +34,8 @@ export default function Navbar() {
           {/* Logo */}
           <a href="/" className="flex items-center gap-2">
             <span className="text-2xl">💚</span>
-            <span className="text-xl font-bold">StillAlive</span>
+            <span className="text-xl font-bold hidden sm:inline">今天又活了一天</span>
+            <span className="text-xl font-bold sm:hidden">StillAlive</span>
           </a>
 
           {/* Desktop Navigation */}

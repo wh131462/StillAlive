@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import type { CheckinStats } from '@still-alive/types';
+import type { CheckinStats } from '@still-alive/local-storage';
 import { colors } from '../../theme/colors';
 
 interface StatsOverviewProps {

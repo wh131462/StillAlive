@@ -53,6 +53,7 @@ export const colors = {
 
   // Semantic aliases
   background: '#f8fafc',
+  surface: '#f1f5f9',
   cardBackground: '#ffffff',
   border: '#e2e8f0',
   textPrimary: '#1e293b',

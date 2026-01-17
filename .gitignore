@@ -20,8 +20,10 @@ out/
 .env
 .env.local
 .env.*.local
-.env.development
-.env.production
+
+# Config environment files (keep .env.example)
+configs/.env.development
+configs/.env.production
 
 # Logs
 *.log

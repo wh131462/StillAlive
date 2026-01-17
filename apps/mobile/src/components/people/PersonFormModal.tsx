@@ -9,9 +9,21 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Person, CreatePersonRequest } from '@still-alive/types';
+import type { LocalPerson } from '@still-alive/local-storage';
 import { colors } from '../../theme/colors';
-import { Button, Input, Avatar } from '../ui';
+import { Button, Input } from '../ui';
+
+// 创建人物请求类型
+interface CreatePersonRequest {
+  name: string;
+  gender?: 'male' | 'female' | 'other';
+  birthday?: string;
+  birthYear?: number;
+  photo?: string;
+  mbti?: string;
+  impression?: string;
+  experience?: string;
+}
 
 const MBTI_OPTIONS = [
   'INTJ', 'INTP', 'ENTJ', 'ENTP',
@@ -23,7 +35,7 @@ const MBTI_OPTIONS = [
 interface PersonFormModalProps {
   visible: boolean;
   mode: 'create' | 'edit';
-  person?: Person | null;
+  initialData?: LocalPerson | null;
   onClose: () => void;
   onSubmit: (data: CreatePersonRequest) => void;
   isLoading?: boolean;
@@ -32,7 +44,7 @@ interface PersonFormModalProps {
 export default function PersonFormModal({
   visible,
   mode,
-  person,
+  initialData,
   onClose,
   onSubmit,
   isLoading,
@@ -46,13 +58,13 @@ export default function PersonFormModal({
   const [nameError, setNameError] = useState('');
 
   useEffect(() => {
-    if (person && mode === 'edit') {
-      setName(person.name);
-      setGender(person.gender || '');
-      setBirthday(person.birthday || '');
-      setMbti(person.mbti || '');
-      setImpression(person.impression || '');
-      setExperience(person.experience || '');
+    if (initialData && mode === 'edit') {
+      setName(initialData.name);
+      setGender(initialData.gender || '');
+      setBirthday(initialData.birthday || '');
+      setMbti(initialData.mbti || '');
+      setImpression(initialData.impression || '');
+      setExperience(initialData.experience || '');
     } else {
       // Reset form
       setName('');
@@ -63,7 +75,7 @@ export default function PersonFormModal({
       setExperience('');
     }
     setNameError('');
-  }, [person, mode, visible]);
+  }, [initialData, mode, visible]);
 
   const handleSubmit = () => {
     if (!name.trim()) {

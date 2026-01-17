@@ -9,6 +9,11 @@ export type SyncStatus = 'pending' | 'synced' | 'conflict';
 // ============ 本地数据结构 ============
 
 /**
+ * 心情类型
+ */
+export type MoodType = 'happy' | 'calm' | 'tired' | 'sad' | 'anxious' | 'excited';
+
+/**
  * 本地打卡记录
  */
 export interface LocalCheckin {
@@ -16,6 +21,8 @@ export interface LocalCheckin {
   date: string;                  // YYYY-MM-DD (作为唯一键)
   content?: string;              // 有意义的事
   photo?: string;                // 本地文件路径或 base64
+  mood?: MoodType;               // 心情
+  isMakeup?: boolean;            // 是否为补签
   createdAt: number;             // Unix timestamp (ms)
   updatedAt: number;             // 最后修改时间
   syncStatus: SyncStatus;        // 同步状态

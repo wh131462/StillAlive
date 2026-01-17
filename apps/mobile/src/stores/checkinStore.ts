@@ -5,9 +5,13 @@
 
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { LocalCheckin, CheckinStats } from '@still-alive/local-storage';
+import type { LocalCheckin, CheckinStats, MoodType } from '@still-alive/local-storage';
 import { calculateCheckinStats } from '@still-alive/local-storage';
 import { getLocalStorage } from '../lib/localStorage';
+
+// 补签配置
+const MAKEUP_LIMIT = 3; // 每月最多补签次数
+const MAKEUP_DAYS_LIMIT = 7; // 只能补签7天内
 
 interface CheckinState {
   // Today's checkin state
@@ -28,18 +32,28 @@ interface CheckinState {
   checkins: LocalCheckin[];
   isListLoading: boolean;
 
+  // Makeup (补签)
+  makeupCount: number;
+  makeupLimit: number;
+  isMakeupLoading: boolean;
+
   // Error
   error: string | null;
 
   // Actions
   initialize: () => Promise<void>;
   checkTodayStatus: () => Promise<void>;
-  checkinToday: (content?: string, photo?: string) => Promise<void>;
+  checkinToday: (content?: string, photo?: string, mood?: MoodType) => Promise<void>;
   calculateStats: () => void;
   fetchMonthlyCheckins: (year?: number, month?: number) => Promise<void>;
   setCurrentMonth: (date: Date) => void;
   fetchAllCheckins: () => Promise<void>;
   reset: () => void;
+
+  // Makeup actions
+  getMakeupCount: () => void;
+  canMakeup: (date: string) => boolean;
+  makeupCheckin: (date: string, content?: string, mood?: MoodType) => Promise<void>;
 }
 
 /**
@@ -65,6 +79,9 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   isCalendarLoading: false,
   checkins: [],
   isListLoading: false,
+  makeupCount: 0,
+  makeupLimit: MAKEUP_LIMIT,
+  isMakeupLoading: false,
   error: null,
 
   /**
@@ -115,7 +132,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   /**
    * 今日打卡 (本地)
    */
-  checkinToday: async (content, photo) => {
+  checkinToday: async (content, photo, mood) => {
     set({ isCheckinLoading: true, error: null });
 
     try {
@@ -131,6 +148,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
         date: today,
         content: content || existing?.content,
         photo: photo || existing?.photo,
+        mood: mood || existing?.mood,
         createdAt: existing?.createdAt || now,
         updatedAt: now,
         syncStatus: 'pending', // 标记待同步
@@ -230,6 +248,102 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
       stats: null,
       monthlyCheckins: [],
       checkins: [],
+      makeupCount: 0,
       error: null,
     }),
+
+  /**
+   * 获取当月补签次数
+   */
+  getMakeupCount: () => {
+    const { checkins } = get();
+    const today = new Date();
+    const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+    // 统计当月补签记录数
+    const count = checkins.filter(
+      (c) => c.isMakeup && c.date.startsWith(yearMonth)
+    ).length;
+
+    set({ makeupCount: count });
+  },
+
+  /**
+   * 检查是否可以补签指定日期
+   */
+  canMakeup: (date: string) => {
+    const { checkins, makeupCount } = get();
+
+    // 检查是否已有该日期的记录
+    const hasCheckin = checkins.some((c) => c.date === date);
+    if (hasCheckin) return false;
+
+    // 检查是否在7天内
+    const targetDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((today.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays > MAKEUP_DAYS_LIMIT || diffDays < 1) return false;
+
+    // 检查当月补签次数
+    if (makeupCount >= MAKEUP_LIMIT) return false;
+
+    return true;
+  },
+
+  /**
+   * 补签打卡
+   */
+  makeupCheckin: async (date, content, mood) => {
+    const { canMakeup } = get();
+
+    if (!canMakeup(date)) {
+      throw new Error('无法补签该日期');
+    }
+
+    set({ isMakeupLoading: true, error: null });
+
+    try {
+      const storage = getLocalStorage();
+      const now = Date.now();
+
+      const checkin: LocalCheckin = {
+        id: uuidv4(),
+        date,
+        content,
+        mood,
+        isMakeup: true,
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending',
+      };
+
+      // 保存到本地存储
+      await storage.saveCheckin(checkin);
+
+      // 更新 state
+      set((state) => ({
+        isMakeupLoading: false,
+        makeupCount: state.makeupCount + 1,
+        checkins: [checkin, ...state.checkins],
+      }));
+
+      // 重新计算统计
+      get().calculateStats();
+
+      // 更新当月打卡 (如果补签的是当月)
+      const targetDate = new Date(date);
+      const currentMonth = get().currentMonth;
+      if (
+        targetDate.getFullYear() === currentMonth.getFullYear() &&
+        targetDate.getMonth() === currentMonth.getMonth()
+      ) {
+        await get().fetchMonthlyCheckins();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '补签失败';
+      set({ error: message, isMakeupLoading: false });
+      throw error;
+    }
+  },
 }));

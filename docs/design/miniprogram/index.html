@@ -6,24 +6,69 @@
     <title>今天又活了一天 - 微信小程序原型</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        wechat: {
+                            light: '#e6f7ef',
+                            DEFAULT: '#07c160',
+                            dark: '#06ad56'
+                        },
+                        accent: {
+                            light: '#ffe4e6',
+                            DEFAULT: '#f43f5e',
+                            dark: '#e11d48'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        @keyframes heartBeat {
-            0% { transform: scale(1); }
-            14% { transform: scale(1.3); }
+        /* ========== 动画系统 ========== */
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            14% { transform: scale(1.1); }
             28% { transform: scale(1); }
-            42% { transform: scale(1.3); }
+            42% { transform: scale(1.1); }
             70% { transform: scale(1); }
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .animate-heartbeat {
-            animation: heartBeat 1.5s infinite;
+        @keyframes checkIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
         }
-        .animate-fadeIn {
-            animation: fadeIn 0.3s ease-out;
+        @keyframes fadeOut {
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.9); }
         }
+        @keyframes scaleIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        @keyframes breathe {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-checkin { animation: checkIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        .animate-fadeOut { animation: fadeOut 0.3s ease-out forwards; }
+        .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+        .animate-slideUp { animation: slideUp 0.3s ease-out; }
+        .animate-breathe { animation: breathe 2s ease-in-out infinite; }
+
         body {
             background-color: #ededed;
             font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
@@ -93,6 +138,36 @@
             background: rgba(255, 255, 255, 0.5);
             margin: 0 8px;
         }
+        /* 遮罩层 */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 40;
+        }
+        /* 弹窗样式 */
+        .modal {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 16px 16px 0 0;
+            z-index: 50;
+            animation: slideUp 0.3s ease-out;
+        }
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 100;
+            animation: scaleIn 0.2s ease-out;
+        }
     </style>
 </head>
 <body class="flex justify-center items-start min-h-screen py-8 px-4">
@@ -108,7 +183,7 @@
         </div>
 
         <!-- Mini Program Frame -->
-        <div class="w-[375px] bg-white rounded-[40px] shadow-2xl overflow-hidden border-8 border-slate-800">
+        <div class="w-[375px] bg-white rounded-[40px] shadow-2xl overflow-hidden border-8 border-slate-800 relative">
             <!-- iPhone Status Bar -->
             <div class="bg-slate-800 text-white px-6 py-2 flex justify-between items-center text-xs">
                 <span>9:41</span>
@@ -147,18 +222,13 @@
                             <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <i class="fa-solid fa-heart-pulse text-red-500 text-3xl animate-heartbeat"></i>
                             </div>
-                            <p class="text-slate-500 text-sm" id="statusText">生存状态：确认中...</p>
+                            <p class="text-slate-800 font-medium text-lg mb-1" id="statusTitle">还活着吗？</p>
+                            <p class="text-slate-500 text-sm" id="statusText">今日尚未确认存活</p>
                         </div>
                         <button id="checkInBtn" class="wx-btn w-full py-3 text-lg">
                             确认存活打卡
                         </button>
                         <p class="text-slate-400 text-xs mt-3">"还活着吗？"</p>
-                    </div>
-
-                    <!-- Success Feedback -->
-                    <div id="feedbackArea" class="hidden wx-card bg-green-50 border border-green-100 p-4 text-center mb-4">
-                        <p class="wechat-green-text font-bold mb-1">恭喜你又活过了一天！</p>
-                        <p class="text-green-600 text-sm">今天也辛苦了</p>
                     </div>
 
                     <!-- Birthday Reminder -->
@@ -169,7 +239,7 @@
                             </div>
                             <div class="flex-grow">
                                 <p class="text-amber-800 font-medium text-sm">今日生日提醒</p>
-                                <p class="text-amber-600 text-xs">张三 今天生日</p>
+                                <p class="text-amber-600 text-xs">张三 今天生日，记得送上祝福</p>
                             </div>
                             <button class="text-amber-600 text-sm">查看</button>
                         </div>
@@ -177,24 +247,55 @@
 
                     <!-- Daily Quote -->
                     <div class="wx-card wechat-green p-4 mb-4">
-                        <p class="text-white/60 text-xs mb-2">每日信息差</p>
+                        <p class="text-white/60 text-xs mb-2">每日信息差 · 2026年1月12日</p>
                         <p class="text-white text-sm mb-2">"人生中最重要的不是所站的位置，而是所朝的方向。"</p>
                         <p class="text-white/70 text-xs">—— 奥利弗·温德尔·霍姆斯</p>
                     </div>
 
-                    <!-- Quick Record -->
+                    <!-- Quick Record with Mood Selector -->
                     <div class="wx-card p-4 mb-4">
                         <h3 class="font-medium text-slate-800 mb-3 flex items-center text-sm">
                             <i class="fa-solid fa-feather-pointed mr-2 wechat-green-text"></i>
                             今日有意义的事
                         </h3>
                         <textarea class="w-full h-20 p-3 bg-slate-50 rounded-lg text-sm placeholder-slate-400 border-none resize-none" placeholder="记录下今天的一些有意义的事件..."></textarea>
-                        <div class="flex justify-between items-center mt-3">
+
+                        <!-- Mood Selector -->
+                        <div class="mt-3 mb-3">
+                            <p class="text-slate-500 text-xs mb-2">今天心情如何？</p>
+                            <div class="flex justify-around">
+                                <button class="mood-btn flex flex-col items-center p-2 rounded-lg" data-mood="happy">
+                                    <span class="text-xl mb-0.5">😊</span>
+                                    <span class="text-[10px] text-slate-500">开心</span>
+                                </button>
+                                <button class="mood-btn flex flex-col items-center p-2 rounded-lg" data-mood="calm">
+                                    <span class="text-xl mb-0.5">😌</span>
+                                    <span class="text-[10px] text-slate-500">平静</span>
+                                </button>
+                                <button class="mood-btn flex flex-col items-center p-2 rounded-lg" data-mood="tired">
+                                    <span class="text-xl mb-0.5">😫</span>
+                                    <span class="text-[10px] text-slate-500">疲惫</span>
+                                </button>
+                                <button class="mood-btn flex flex-col items-center p-2 rounded-lg" data-mood="sad">
+                                    <span class="text-xl mb-0.5">😢</span>
+                                    <span class="text-[10px] text-slate-500">难过</span>
+                                </button>
+                                <button class="mood-btn flex flex-col items-center p-2 rounded-lg" data-mood="anxious">
+                                    <span class="text-xl mb-0.5">😰</span>
+                                    <span class="text-[10px] text-slate-500">焦虑</span>
+                                </button>
+                                <button class="mood-btn flex flex-col items-center p-2 rounded-lg" data-mood="excited">
+                                    <span class="text-xl mb-0.5">🤩</span>
+                                    <span class="text-[10px] text-slate-500">兴奋</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-3 border-t border-slate-100">
                             <div class="flex space-x-4">
                                 <button class="text-slate-400"><i class="fa-solid fa-image"></i></button>
-                                <button class="text-slate-400"><i class="fa-solid fa-face-smile"></i></button>
                             </div>
-                            <button class="wx-btn px-4 py-1.5 text-sm">保存</button>
+                            <button class="wx-btn px-4 py-1.5 text-sm">保存记忆</button>
                         </div>
                     </div>
 
@@ -202,7 +303,7 @@
                     <div class="wx-card bg-blue-50 p-3">
                         <p class="text-blue-600 text-xs">
                             <i class="fa-solid fa-circle-info mr-1"></i>
-                            一定是因为昨天过的很开心吧，才忘了打卡。
+                            一定是因为昨天过得很开心吧，才忘了打卡。
                         </p>
                     </div>
 
@@ -214,15 +315,15 @@
                     <!-- Stats -->
                     <div class="grid grid-cols-3 gap-3 mb-4">
                         <div class="wx-card p-3 text-center">
-                            <p class="text-xl font-bold wechat-green-text">365</p>
+                            <p class="text-xl font-bold wechat-green-text font-mono">365</p>
                             <p class="text-slate-500 text-xs">总打卡天数</p>
                         </div>
                         <div class="wx-card p-3 text-center">
-                            <p class="text-xl font-bold text-orange-500">28</p>
+                            <p class="text-xl font-bold text-orange-500 font-mono">28</p>
                             <p class="text-slate-500 text-xs">连续打卡</p>
                         </div>
                         <div class="wx-card p-3 text-center">
-                            <p class="text-xl font-bold text-blue-500">42</p>
+                            <p class="text-xl font-bold text-blue-500 font-mono">42</p>
                             <p class="text-slate-500 text-xs">记录条数</p>
                         </div>
                     </div>
@@ -231,7 +332,7 @@
                     <div class="wx-card p-4 mb-4">
                         <div class="flex justify-between items-center mb-4">
                             <button class="text-slate-400 p-1"><i class="fa-solid fa-chevron-left"></i></button>
-                            <h3 class="font-medium text-slate-800 text-sm">2024年1月</h3>
+                            <h3 class="font-medium text-slate-800 text-sm">2026年1月</h3>
                             <button class="text-slate-400 p-1"><i class="fa-solid fa-chevron-right"></i></button>
                         </div>
                         <div class="grid grid-cols-7 gap-1 text-center text-xs text-slate-500 mb-2">
@@ -239,30 +340,35 @@
                         </div>
                         <div class="grid grid-cols-7 gap-1 text-center text-sm">
                             <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-300"></span>
                             <span class="calendar-day rounded-lg p-1.5 checked">1</span>
                             <span class="calendar-day rounded-lg p-1.5 checked">2</span>
                             <span class="calendar-day rounded-lg p-1.5 checked">3</span>
-                            <span class="calendar-day rounded-lg p-1.5 checked">4</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400 bg-slate-100" onclick="showMakeupCheckin('1月4日')">4</span>
                             <span class="calendar-day rounded-lg p-1.5 checked">5</span>
-                            <span class="calendar-day rounded-lg p-1.5 text-slate-400 bg-slate-100">6</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">6</span>
                             <span class="calendar-day rounded-lg p-1.5 checked">7</span>
                             <span class="calendar-day rounded-lg p-1.5 checked">8</span>
                             <span class="calendar-day rounded-lg p-1.5 checked">9</span>
-                            <span class="calendar-day rounded-lg p-1.5 today bg-green-50 font-bold">10</span>
-                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">11</span>
-                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">12</span>
+                            <span class="calendar-day rounded-lg p-1.5 checked">10</span>
+                            <span class="calendar-day rounded-lg p-1.5 text-slate-400 bg-slate-100" onclick="showMakeupCheckin('1月11日')">11</span>
+                            <span class="calendar-day rounded-lg p-1.5 today bg-green-50 font-bold">12</span>
                             <span class="calendar-day rounded-lg p-1.5 text-slate-400">13</span>
                             <span class="calendar-day rounded-lg p-1.5 text-slate-400">14</span>
                             <span class="calendar-day rounded-lg p-1.5 text-slate-400">15</span>
                             <span class="calendar-day rounded-lg p-1.5 text-slate-400">16</span>
                             <span class="calendar-day rounded-lg p-1.5 text-slate-400">17</span>
                             <span class="calendar-day rounded-lg p-1.5 text-slate-400">18</span>
-                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">19</span>
-                            <span class="calendar-day rounded-lg p-1.5 text-slate-400">20</span>
                         </div>
-                        <div class="flex items-center justify-center mt-3 space-x-4 text-xs">
-                            <span class="flex items-center"><span class="w-2 h-2 bg-green-500 rounded mr-1"></span>已打卡</span>
-                            <span class="flex items-center"><span class="w-2 h-2 border-2 border-green-500 rounded mr-1"></span>今天</span>
+                        <div class="flex items-center justify-between mt-3 text-xs">
+                            <div class="flex items-center space-x-3">
+                                <span class="flex items-center"><span class="w-2 h-2 bg-green-500 rounded mr-1"></span>已打卡</span>
+                                <span class="flex items-center"><span class="w-2 h-2 border-2 border-green-500 rounded mr-1"></span>今天</span>
+                            </div>
+                            <button onclick="showMakeupCheckin()" class="wechat-green-text font-medium">
+                                <i class="fa-solid fa-calendar-plus mr-1"></i>补签
+                            </button>
                         </div>
                     </div>
 
@@ -272,22 +378,28 @@
                         <div class="space-y-3">
                             <div class="bg-slate-50 rounded-lg p-3">
                                 <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-09</span>
-                                    <span class="bg-green-100 wechat-green-text text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    <span class="text-slate-500 text-xs">2026-01-11 · 周六</span>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-sm">😊</span>
+                                        <span class="bg-green-100 wechat-green-text text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    </div>
                                 </div>
                                 <p class="text-slate-700 text-sm mb-2">今天完成了项目的第一个里程碑。</p>
                                 <img src="https://picsum.photos/seed/day1/200/80" class="w-full h-16 rounded-lg object-cover">
                             </div>
                             <div class="bg-slate-50 rounded-lg p-3">
                                 <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-08</span>
-                                    <span class="bg-green-100 wechat-green-text text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    <span class="text-slate-500 text-xs">2026-01-10 · 周五</span>
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-sm">😌</span>
+                                        <span class="bg-green-100 wechat-green-text text-xs px-2 py-0.5 rounded">已打卡</span>
+                                    </div>
                                 </div>
                                 <p class="text-slate-700 text-sm">早起跑了5公里，感觉精神很好。</p>
                             </div>
                             <div class="bg-slate-50 rounded-lg p-3 opacity-60">
                                 <div class="flex justify-between items-start mb-2">
-                                    <span class="text-slate-500 text-xs">2024-01-06</span>
+                                    <span class="text-slate-500 text-xs">2026-01-04 · 周六</span>
                                     <span class="bg-slate-200 text-slate-500 text-xs px-2 py-0.5 rounded">未打卡</span>
                                 </div>
                                 <p class="text-slate-400 text-sm italic">这一天没有记录</p>
@@ -305,9 +417,33 @@
                             <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                             <input type="text" placeholder="搜索人物..." class="w-full pl-9 pr-3 py-2 bg-white rounded-lg text-sm border-none">
                         </div>
-                        <button class="wx-btn px-3 rounded-lg">
+                        <button onclick="showAddPerson()" class="wx-btn px-3 rounded-lg">
                             <i class="fa-solid fa-plus"></i>
                         </button>
+                    </div>
+
+                    <!-- Group Filter -->
+                    <div class="flex space-x-2 mb-3 overflow-x-auto pb-1">
+                        <button class="group-filter-btn px-3 py-1.5 bg-wechat text-white text-xs rounded-lg font-medium whitespace-nowrap" data-group="all">全部 (5)</button>
+                        <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium whitespace-nowrap" data-group="family">
+                            <i class="fa-solid fa-house-heart mr-1"></i>家人 (1)
+                        </button>
+                        <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium whitespace-nowrap" data-group="friend">
+                            <i class="fa-solid fa-user-group mr-1"></i>朋友 (2)
+                        </button>
+                        <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium whitespace-nowrap" data-group="colleague">
+                            <i class="fa-solid fa-briefcase mr-1"></i>同事 (1)
+                        </button>
+                        <button class="group-filter-btn px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg font-medium whitespace-nowrap" data-group="other">
+                            <i class="fa-solid fa-ellipsis mr-1"></i>其他 (1)
+                        </button>
+                    </div>
+
+                    <!-- Sort Options -->
+                    <div class="flex space-x-2 mb-3">
+                        <span class="text-slate-400 text-xs leading-6">排序：</span>
+                        <button class="sort-btn px-2 py-1 bg-wechat-light wechat-green-text text-xs rounded font-medium" data-sort="time">按添加时间</button>
+                        <button class="sort-btn px-2 py-1 bg-slate-100 text-slate-500 text-xs rounded font-medium" data-sort="birthday">按生日临近</button>
                     </div>
 
                     <!-- Birthday Today -->
@@ -316,11 +452,14 @@
                             <i class="fa-solid fa-cake-candles mr-2"></i> 今日生日
                         </h3>
                         <div class="flex items-center">
-                            <div class="w-12 h-12 bg-white rounded-full overflow-hidden border-2 border-amber-300 mr-3">
+                            <div class="w-12 h-12 bg-white rounded-full overflow-hidden border-2 border-amber-300 mr-3 ring-2 ring-rose-200">
                                 <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
                             </div>
                             <div class="flex-grow">
-                                <h4 class="font-medium text-slate-800 text-sm">张三</h4>
+                                <div class="flex items-center mb-0.5">
+                                    <h4 class="font-medium text-slate-800 text-sm mr-2">张三</h4>
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded">家人</span>
+                                </div>
                                 <p class="text-slate-500 text-xs">INFP · 今天 25 岁</p>
                             </div>
                             <button class="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs">送祝福</button>
@@ -331,64 +470,72 @@
                     <div class="wx-card overflow-hidden">
                         <h3 class="font-medium text-slate-500 text-xs px-4 pt-3 pb-2">全部人物 (5)</h3>
                         <div class="divide-y divide-slate-100">
-                            <div class="flex items-center p-4">
-                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                            <div class="flex items-center p-4" onclick="showPersonDetail()">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3 ring-2 ring-rose-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h4 class="font-medium text-slate-800 text-sm">张三</h4>
-                                    <p class="text-slate-400 text-xs">INFP · 1月10日生日</p>
+                                    <div class="flex items-center mb-0.5">
+                                        <h4 class="font-medium text-slate-800 text-sm mr-2">张三</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded">家人</span>
+                                    </div>
+                                    <p class="text-slate-400 text-xs">INFP · 1月12日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
                             </div>
                             <div class="flex items-center p-4">
-                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3 ring-2 ring-blue-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h4 class="font-medium text-slate-800 text-sm">李四</h4>
+                                    <div class="flex items-center mb-0.5">
+                                        <h4 class="font-medium text-slate-800 text-sm mr-2">李四</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">朋友</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">ENFJ · 5月12日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
                             </div>
                             <div class="flex items-center p-4">
-                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3 ring-2 ring-blue-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Luna" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h4 class="font-medium text-slate-800 text-sm">王五</h4>
+                                    <div class="flex items-center mb-0.5">
+                                        <h4 class="font-medium text-slate-800 text-sm mr-2">王五</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">朋友</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">INTJ · 8月23日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
                             </div>
                             <div class="flex items-center p-4">
-                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3 ring-2 ring-amber-200">
                                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Max" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h4 class="font-medium text-slate-800 text-sm">赵六</h4>
+                                    <div class="flex items-center mb-0.5">
+                                        <h4 class="font-medium text-slate-800 text-sm mr-2">赵六</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded">同事</span>
+                                    </div>
                                     <p class="text-slate-400 text-xs">ESTP · 11月5日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
                             </div>
                             <div class="flex items-center p-4">
-                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3">
-                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Bella" alt="avatar" class="w-full h-full">
+                                <div class="w-11 h-11 bg-slate-100 rounded-full overflow-hidden mr-3 ring-2 ring-slate-200">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sam" alt="avatar" class="w-full h-full">
                                 </div>
                                 <div class="flex-grow">
-                                    <h4 class="font-medium text-slate-800 text-sm">小美</h4>
-                                    <p class="text-slate-400 text-xs">ISFJ · 3月18日生日</p>
+                                    <div class="flex items-center mb-0.5">
+                                        <h4 class="font-medium text-slate-800 text-sm mr-2">钱七</h4>
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">其他</span>
+                                    </div>
+                                    <p class="text-slate-400 text-xs">ISFJ · 3月15日生日</p>
                                 </div>
                                 <i class="fa-solid fa-chevron-right text-slate-300 text-xs"></i>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Add Button -->
-                    <div class="fixed bottom-20 right-6" style="right: calc(50% - 375px/2 + 16px);">
-                        <button class="w-12 h-12 wechat-green text-white rounded-full shadow-lg flex items-center justify-center">
-                            <i class="fa-solid fa-user-plus"></i>
-                        </button>
                     </div>
                 </div>
 
@@ -401,7 +548,10 @@
                             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Me" alt="avatar" class="w-full h-full">
                         </div>
                         <h2 class="font-bold text-slate-800 text-lg">用户昵称</h2>
-                        <p class="text-slate-500 text-sm">已存活 365 天</p>
+                        <p class="text-slate-500 text-sm">已存活 <span class="wechat-green-text font-mono font-bold">365</span> 天</p>
+                        <button class="mt-2 wechat-green-text text-sm">
+                            <i class="fa-solid fa-pen mr-1"></i> 编辑资料
+                        </button>
                     </div>
 
                     <!-- Stats -->
@@ -411,22 +561,140 @@
                                 <i class="fa-solid fa-heart wechat-green-text mr-2"></i>
                                 <span class="text-slate-600 text-xs">生存天数</span>
                             </div>
-                            <p class="text-2xl font-bold wechat-green-text">365</p>
+                            <p class="text-2xl font-bold wechat-green-text font-mono">365</p>
                         </div>
                         <div class="wx-card bg-blue-50 p-4">
                             <div class="flex items-center mb-2">
                                 <i class="fa-solid fa-users text-blue-500 mr-2"></i>
                                 <span class="text-slate-600 text-xs">记录人物</span>
                             </div>
-                            <p class="text-2xl font-bold text-blue-500">5</p>
+                            <p class="text-2xl font-bold text-blue-500 font-mono">5</p>
+                        </div>
+                    </div>
+
+                    <!-- Milestone Badges -->
+                    <div class="wx-card p-4 mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-medium text-slate-800 text-sm flex items-center">
+                                <i class="fa-solid fa-medal text-amber-500 mr-2"></i> 里程碑徽章
+                            </h3>
+                            <span class="text-slate-400 text-xs">已获得 4/5</span>
+                        </div>
+                        <div class="flex justify-around">
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-1 shadow">
+                                    <span class="text-white font-bold">7</span>
+                                </div>
+                                <p class="text-slate-700 text-[10px]">初心者</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-gradient-to-br from-sky-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-1 shadow">
+                                    <span class="text-white font-bold">30</span>
+                                </div>
+                                <p class="text-slate-700 text-[10px]">坚持者</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-violet-500 rounded-full flex items-center justify-center mx-auto mb-1 shadow">
+                                    <span class="text-white font-bold text-sm">100</span>
+                                </div>
+                                <p class="text-slate-700 text-[10px]">证明者</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-12 h-12 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-1 shadow">
+                                    <span class="text-white font-bold text-sm">365</span>
+                                </div>
+                                <p class="text-slate-700 text-[10px]">史诗</p>
+                            </div>
+                            <div class="text-center opacity-40">
+                                <div class="w-12 h-12 bg-slate-300 rounded-full flex items-center justify-center mx-auto mb-1">
+                                    <i class="fa-solid fa-lock text-slate-500 text-sm"></i>
+                                </div>
+                                <p class="text-slate-500 text-[10px]">传说</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Year Heatmap -->
+                    <div class="wx-card p-4 mb-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-medium text-slate-800 text-sm flex items-center">
+                                <i class="fa-solid fa-fire text-orange-500 mr-2"></i> 年度热力图
+                            </h3>
+                            <span class="text-slate-400 text-xs">2026年</span>
+                        </div>
+                        <!-- Heatmap Grid -->
+                        <div class="flex overflow-x-auto">
+                            <div class="flex flex-col text-[8px] text-slate-400 mr-1">
+                                <span class="h-2 leading-2">一</span>
+                                <span class="h-2 leading-2"></span>
+                                <span class="h-2 leading-2">三</span>
+                                <span class="h-2 leading-2"></span>
+                                <span class="h-2 leading-2">五</span>
+                                <span class="h-2 leading-2"></span>
+                                <span class="h-2 leading-2">日</span>
+                            </div>
+                            <div class="flex gap-[2px]">
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-60"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-40"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                </div>
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-wechat"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-60"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-40"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-80"></div>
+                                </div>
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-60"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-80"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-40"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-wechat opacity-60"></div>
+                                </div>
+                                <div class="flex flex-col gap-[2px]">
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="w-2 h-2 rounded-sm bg-slate-200"></div>
+                                </div>
+                                <div class="flex items-center text-slate-300 text-xs ml-1">...</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end mt-2 text-[8px] text-slate-400">
+                            <span class="mr-1">少</span>
+                            <div class="w-2 h-2 rounded-sm bg-slate-200 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-wechat opacity-40 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-wechat opacity-60 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-wechat opacity-80 mr-[2px]"></div>
+                            <div class="w-2 h-2 rounded-sm bg-wechat mr-1"></div>
+                            <span>多</span>
                         </div>
                     </div>
 
                     <!-- Death Confirmation -->
                     <div class="wx-card bg-red-50 p-4 mb-4">
-                        <h3 class="text-red-800 font-medium text-sm mb-2 flex items-center">
-                            <i class="fa-solid fa-skull-crossbones mr-2"></i> 死亡确认设置
-                        </h3>
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-red-800 font-medium text-sm flex items-center">
+                                <i class="fa-solid fa-skull-crossbones mr-2"></i> 死亡确认设置
+                            </h3>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked class="sr-only peer">
+                                <div class="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
+                            </label>
+                        </div>
                         <p class="text-red-600 text-xs mb-3">若连续多日未打卡，将发送确认邮件至紧急联系人</p>
                         <div class="space-y-3">
                             <div>
@@ -532,10 +800,257 @@
             <div class="bg-slate-800 py-2 flex justify-center">
                 <div class="w-32 h-1 bg-white rounded-full"></div>
             </div>
+
+            <!-- ==================== 打卡成功浮层 ==================== -->
+            <div id="checkinSuccessOverlay" class="hidden absolute inset-0 z-50 flex items-center justify-center pointer-events-none" style="top: 44px; bottom: 24px;">
+                <div class="bg-white rounded-2xl p-6 shadow-2xl text-center animate-checkin max-w-xs mx-4">
+                    <div class="w-16 h-16 bg-wechat-light rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fa-solid fa-check wechat-green-text text-3xl"></i>
+                    </div>
+                    <p id="checkinSuccessTitle" class="text-slate-800 font-bold text-lg mb-1">恭喜你又活过了一天！</p>
+                    <p id="checkinSuccessSubtitle" class="text-slate-500 text-sm">今天也辛苦了</p>
+                </div>
+            </div>
         </div>
 
         <!-- Device Info -->
         <p class="text-center text-slate-400 text-xs mt-4">微信小程序原型 · iPhone 14 Pro</p>
+    </div>
+
+    <!-- ==================== 补签弹窗 ==================== -->
+    <div id="makeupCheckinModal" class="hidden fixed inset-0 z-50">
+        <div class="overlay" onclick="closeMakeupCheckin()"></div>
+        <div class="modal p-6 pb-8 max-w-[375px] mx-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-slate-800">补签打卡</h3>
+                <button onclick="closeMakeupCheckin()" class="text-slate-400">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="text-center mb-4">
+                <div class="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fa-solid fa-calendar-plus text-amber-600 text-2xl"></i>
+                </div>
+                <p class="text-slate-700 font-medium mb-1">补签 <span id="makeupDate" class="wechat-green-text">1月4日</span></p>
+                <p class="text-slate-500 text-sm">本月剩余补签次数：<span class="text-amber-600 font-bold">2</span>/3</p>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
+                <p class="text-amber-700 text-xs">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    补签规则：仅可补签过去7天内的记录，每月最多3次
+                </p>
+            </div>
+
+            <p class="text-slate-500 text-sm mb-2">记录一下当天有意义的事（可选）</p>
+            <textarea class="w-full h-16 p-3 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 resize-none mb-4" placeholder="回忆一下那天发生了什么..."></textarea>
+
+            <button onclick="doMakeupCheckin()" class="w-full wechat-green text-white py-3 rounded-xl font-bold">
+                确认补签
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 里程碑庆祝弹窗 ==================== -->
+    <div id="milestoneModal" class="hidden fixed inset-0 z-50">
+        <div class="overlay" onclick="closeMilestone()"></div>
+        <div class="modal p-6 pb-8 max-w-[375px] mx-auto text-center">
+            <div class="relative mb-4">
+                <div class="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                    <i class="fa-solid fa-trophy text-white text-3xl"></i>
+                </div>
+                <div class="absolute top-0 right-1/4 w-7 h-7 bg-accent rounded-full flex items-center justify-center text-white text-xs font-bold shadow animate-bounce">
+                    7
+                </div>
+            </div>
+
+            <h3 class="text-xl font-bold text-slate-800 mb-2">连续打卡 7 天！</h3>
+            <p class="text-slate-500 text-sm mb-4">连续7天，你是真的在认真活着</p>
+
+            <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-3 mb-4">
+                <p class="text-amber-700 text-sm font-medium">
+                    <i class="fa-solid fa-medal mr-2"></i>
+                    获得徽章：「初心者」
+                </p>
+            </div>
+
+            <button onclick="closeMilestone()" class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-2.5 rounded-xl font-bold">
+                太棒了！
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== 人物详情弹窗 ==================== -->
+    <div id="personDetailModal" class="hidden fixed inset-0 z-50">
+        <div class="overlay" onclick="closePersonDetail()"></div>
+        <div class="modal p-6 pb-8 max-w-[375px] mx-auto max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <button onclick="closePersonDetail()" class="text-slate-400">
+                    <i class="fa-solid fa-arrow-left text-xl"></i>
+                </button>
+                <div class="flex space-x-3">
+                    <button class="wechat-green-text"><i class="fa-solid fa-pen"></i></button>
+                    <button class="text-red-500"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+
+            <div class="text-center mb-4">
+                <div class="w-20 h-20 bg-slate-100 rounded-full mx-auto mb-3 overflow-hidden border-4 border-white shadow-lg">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" class="w-full h-full">
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-1">张三</h3>
+                <p class="text-slate-500 text-sm">INFP · 25岁</p>
+            </div>
+
+            <div class="space-y-3">
+                <div class="bg-slate-50 rounded-xl p-4">
+                    <h4 class="text-xs font-medium text-slate-500 mb-2">基本信息</h4>
+                    <div class="grid grid-cols-3 gap-2 text-sm">
+                        <div>
+                            <span class="text-slate-400 text-xs">性别</span>
+                            <p class="text-slate-700 font-medium">男</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 text-xs">生日</span>
+                            <p class="text-slate-700 font-medium">1月12日</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 text-xs">MBTI</span>
+                            <p class="text-slate-700 font-medium">INFP</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 rounded-xl p-4">
+                    <h4 class="text-xs font-medium text-slate-500 mb-2">个人印象</h4>
+                    <p class="text-slate-700 text-sm">一个很有趣的人，喜欢哲学和艺术，总是能在平凡的事物中发现美好。</p>
+                </div>
+
+                <div class="bg-slate-50 rounded-xl p-4">
+                    <h4 class="text-xs font-medium text-slate-500 mb-2">共同经历</h4>
+                    <div class="space-y-2">
+                        <div class="flex">
+                            <div class="w-2 h-2 bg-wechat rounded-full mt-1.5 mr-2"></div>
+                            <div>
+                                <p class="text-slate-700 text-sm">2025年一起去了日本旅行</p>
+                                <p class="text-slate-400 text-xs">2025-03</p>
+                            </div>
+                        </div>
+                        <div class="flex">
+                            <div class="w-2 h-2 bg-wechat rounded-full mt-1.5 mr-2"></div>
+                            <div>
+                                <p class="text-slate-700 text-sm">大学室友，一起度过了四年时光</p>
+                                <p class="text-slate-400 text-xs">2018-09</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="mt-2 wechat-green-text text-sm font-medium">
+                        <i class="fa-solid fa-plus mr-1"></i> 添加经历
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 添加人物弹窗 ==================== -->
+    <div id="addPersonModal" class="hidden fixed inset-0 z-50">
+        <div class="overlay" onclick="closeAddPerson()"></div>
+        <div class="modal p-6 pb-8 max-w-[375px] mx-auto max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-slate-800">添加人物</h3>
+                <button onclick="closeAddPerson()" class="text-slate-400">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Avatar Upload -->
+            <div class="text-center mb-4">
+                <div class="w-16 h-16 bg-slate-100 rounded-full mx-auto mb-2 flex items-center justify-center border-2 border-dashed border-slate-300">
+                    <i class="fa-solid fa-camera text-slate-400 text-xl"></i>
+                </div>
+                <p class="text-slate-500 text-xs">点击上传照片</p>
+            </div>
+
+            <!-- Form -->
+            <div class="space-y-3">
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">姓名/称呼 <span class="text-accent">*</span></label>
+                    <input type="text" placeholder="输入姓名或称呼" class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">性别</label>
+                        <select class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm">
+                            <option value="">请选择</option>
+                            <option value="male">男</option>
+                            <option value="female">女</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">生日</label>
+                        <input type="text" placeholder="MM-DD" class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">分组</label>
+                        <select class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm">
+                            <option value="family">家人</option>
+                            <option value="friend">朋友</option>
+                            <option value="colleague">同事</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-slate-700 text-sm font-medium mb-1 block">MBTI</label>
+                        <select class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm">
+                            <option value="">请选择</option>
+                            <option>INTJ</option><option>INTP</option><option>ENTJ</option><option>ENTP</option>
+                            <option>INFJ</option><option>INFP</option><option>ENFJ</option><option>ENFP</option>
+                            <option>ISTJ</option><option>ISFJ</option><option>ESTJ</option><option>ESFJ</option>
+                            <option>ISTP</option><option>ISFP</option><option>ESTP</option><option>ESFP</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Theme Color Picker -->
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-2 block">印象主题色</label>
+                    <div class="flex space-x-3">
+                        <button class="w-7 h-7 rounded-full bg-rose-400 ring-2 ring-offset-2 ring-rose-400"></button>
+                        <button class="w-7 h-7 rounded-full bg-blue-400"></button>
+                        <button class="w-7 h-7 rounded-full bg-amber-400"></button>
+                        <button class="w-7 h-7 rounded-full bg-purple-400"></button>
+                        <button class="w-7 h-7 rounded-full bg-wechat"></button>
+                        <button class="w-7 h-7 rounded-full bg-slate-400"></button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">个人印象</label>
+                    <textarea placeholder="描述一下这个人给你的印象..." class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm h-16 resize-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="text-slate-700 text-sm font-medium mb-1 block">共同经历</label>
+                    <textarea placeholder="记录你们的重要共同经历..." class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm h-16 resize-none"></textarea>
+                </div>
+            </div>
+
+            <button class="w-full wechat-green text-white py-3 rounded-xl font-bold mt-4">
+                保存
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== Toast 消息 ==================== -->
+    <div id="toast" class="hidden toast bg-wechat-light wechat-green-text">
+        <i class="fa-solid fa-check-circle mr-2"></i>
+        <span id="toastMessage">操作成功</span>
     </div>
 
     <script>
@@ -560,15 +1075,133 @@
             });
         });
 
+        // 随机鼓励文案
+        const encourageMessages = [
+            { title: '恭喜你又活过了一天！', subtitle: '今天也辛苦了' },
+            { title: '又是元气满满的一天！', subtitle: '你很棒' },
+            { title: '生存确认成功！', subtitle: '继续加油' },
+            { title: '今天也在好好活着呢！', subtitle: '明天见' },
+            { title: '打卡成功！', subtitle: '每一天都值得被记录' },
+            { title: '活着真好！', subtitle: '珍惜当下' },
+            { title: '又度过了一天！', subtitle: '你是最棒的' },
+            { title: '存活确认！', subtitle: '期待明天的你' },
+        ];
+
         // Check-in Button
         document.getElementById('checkInBtn').addEventListener('click', function() {
             this.textContent = '已确认存活 ✓';
-            this.style.backgroundColor = '#f0fdf4';
+            this.style.backgroundColor = '#e6f7ef';
             this.style.color = '#07c160';
             this.disabled = true;
-            document.getElementById('statusText').textContent = '生存状态：已确认';
-            document.getElementById('feedbackArea').classList.remove('hidden');
+            document.getElementById('statusTitle').textContent = '今日已确认存活';
+            document.getElementById('statusText').textContent = '明天记得再来打卡哦';
+
+            // 显示随机鼓励浮层
+            const randomMsg = encourageMessages[Math.floor(Math.random() * encourageMessages.length)];
+            document.getElementById('checkinSuccessTitle').textContent = randomMsg.title;
+            document.getElementById('checkinSuccessSubtitle').textContent = randomMsg.subtitle;
+
+            const overlay = document.getElementById('checkinSuccessOverlay');
+            const overlayContent = overlay.querySelector('div');
+            overlay.classList.remove('hidden');
+            overlayContent.classList.remove('animate-fadeOut');
+            overlayContent.classList.add('animate-checkin');
+
+            setTimeout(() => {
+                overlayContent.classList.remove('animate-checkin');
+                overlayContent.classList.add('animate-fadeOut');
+            }, 1500);
+
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 1800);
         });
+
+        // Mood Selection
+        document.querySelectorAll('.mood-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.mood-btn').forEach(b => {
+                    b.classList.remove('bg-wechat-light', 'ring-2', 'ring-wechat');
+                });
+                this.classList.add('bg-wechat-light', 'ring-2', 'ring-wechat');
+            });
+        });
+
+        // Group Filter
+        document.querySelectorAll('.group-filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.group-filter-btn').forEach(b => {
+                    b.classList.remove('bg-wechat', 'text-white');
+                    b.classList.add('bg-slate-100', 'text-slate-600');
+                });
+                this.classList.remove('bg-slate-100', 'text-slate-600');
+                this.classList.add('bg-wechat', 'text-white');
+            });
+        });
+
+        // Sort Selection
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.sort-btn').forEach(b => {
+                    b.classList.remove('bg-wechat-light', 'wechat-green-text');
+                    b.classList.add('bg-slate-100', 'text-slate-500');
+                });
+                this.classList.remove('bg-slate-100', 'text-slate-500');
+                this.classList.add('bg-wechat-light', 'wechat-green-text');
+            });
+        });
+
+        // Makeup Checkin Modal
+        function showMakeupCheckin(date) {
+            document.getElementById('makeupDate').textContent = date || '1月4日';
+            document.getElementById('makeupCheckinModal').classList.remove('hidden');
+        }
+
+        function closeMakeupCheckin() {
+            document.getElementById('makeupCheckinModal').classList.add('hidden');
+        }
+
+        function doMakeupCheckin() {
+            closeMakeupCheckin();
+            showToast('补签成功！');
+        }
+
+        // Milestone Modal
+        function showMilestone() {
+            document.getElementById('milestoneModal').classList.remove('hidden');
+        }
+
+        function closeMilestone() {
+            document.getElementById('milestoneModal').classList.add('hidden');
+        }
+
+        // Person Detail Modal
+        function showPersonDetail() {
+            document.getElementById('personDetailModal').classList.remove('hidden');
+        }
+
+        function closePersonDetail() {
+            document.getElementById('personDetailModal').classList.add('hidden');
+        }
+
+        // Add Person Modal
+        function showAddPerson() {
+            document.getElementById('addPersonModal').classList.remove('hidden');
+        }
+
+        function closeAddPerson() {
+            document.getElementById('addPersonModal').classList.add('hidden');
+        }
+
+        // Toast Message
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2000);
+        }
     </script>
 </body>
 </html>

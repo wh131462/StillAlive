@@ -3,6 +3,7 @@ import type {
   Checkin,
   CheckinStats,
   Person,
+  PersonGroup,
   EmergencyConfig,
   LoginRequest,
   RegisterRequest,
@@ -10,6 +11,16 @@ import type {
   CreateCheckinRequest,
   CreatePersonRequest,
   UpdatePersonRequest,
+  MoodType,
+  MakeupCheckinRequest,
+  MakeupCountResponse,
+  ForgotPasswordRequest,
+  VerifyResetCodeRequest,
+  ResetPasswordRequest,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
+  HeatmapData,
+  CheckinResponse,
 } from '@still-alive/types';
 
 type RequestOptions = {
@@ -82,6 +93,26 @@ export class ApiClient {
     return this.request('/auth/register', { method: 'POST', body: data });
   }
 
+  async refreshToken(data: RefreshTokenRequest): Promise<RefreshTokenResponse> {
+    return this.request('/auth/refresh-token', { method: 'POST', body: data });
+  }
+
+  async forgotPassword(data: ForgotPasswordRequest): Promise<{ message: string; code?: string }> {
+    return this.request('/auth/forgot-password', { method: 'POST', body: data });
+  }
+
+  async verifyResetCode(data: VerifyResetCodeRequest): Promise<{ valid: boolean }> {
+    return this.request('/auth/verify-reset-code', { method: 'POST', body: data });
+  }
+
+  async resetPassword(data: ResetPasswordRequest): Promise<{ message: string }> {
+    return this.request('/auth/reset-password', { method: 'POST', body: data });
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    return this.request('/auth/logout', { method: 'POST', body: { refreshToken } });
+  }
+
   // User
   async getMe(): Promise<User> {
     return this.request('/user/me');
@@ -119,13 +150,63 @@ export class ApiClient {
     return this.request('/checkin/stats');
   }
 
+  async makeupCheckin(data: MakeupCheckinRequest): Promise<CheckinResponse> {
+    return this.request('/checkin/makeup', { method: 'POST', body: data });
+  }
+
+  async getMakeupCount(month?: string): Promise<MakeupCountResponse> {
+    const params = month ? `?month=${month}` : '';
+    return this.request(`/checkin/makeup-count${params}`);
+  }
+
+  async getHeatmap(year: number): Promise<HeatmapData> {
+    return this.request(`/checkin/heatmap/${year}`);
+  }
+
+  async getCheckinDetail(date: string): Promise<{ checkin: Checkin | null }> {
+    return this.request(`/checkin/detail/${date}`);
+  }
+
+  async updateCheckinDetail(date: string, data: { content?: string; photo?: string; mood?: MoodType }): Promise<{ checkin: Checkin }> {
+    return this.request(`/checkin/detail/${date}`, { method: 'PUT', body: data });
+  }
+
   // People
-  async getPeople(): Promise<Person[]> {
-    return this.request('/people');
+  async getPeople(options?: { groupId?: string; sortBy?: 'createdAt' | 'birthday' }): Promise<Person[]> {
+    const params = new URLSearchParams();
+    if (options?.groupId) params.append('groupId', options.groupId);
+    if (options?.sortBy) params.append('sortBy', options.sortBy);
+    const query = params.toString();
+    return this.request(`/people${query ? `?${query}` : ''}`);
   }
 
   async getTodayBirthdays(): Promise<Person[]> {
     return this.request('/people/birthday/today');
+  }
+
+  async getUpcomingBirthdays(): Promise<Person[]> {
+    return this.request('/people/birthday/upcoming');
+  }
+
+  async searchPeople(keyword: string): Promise<Person[]> {
+    return this.request(`/people/search?keyword=${encodeURIComponent(keyword)}`);
+  }
+
+  // Person Groups
+  async getPersonGroups(): Promise<PersonGroup[]> {
+    return this.request('/people/groups');
+  }
+
+  async createPersonGroup(data: { name: string; icon?: string; color?: string }): Promise<PersonGroup> {
+    return this.request('/people/groups', { method: 'POST', body: data });
+  }
+
+  async updatePersonGroup(id: string, data: { name?: string; icon?: string; color?: string; sortOrder?: number }): Promise<PersonGroup> {
+    return this.request(`/people/groups/${id}`, { method: 'PUT', body: data });
+  }
+
+  async deletePersonGroup(id: string): Promise<void> {
+    return this.request(`/people/groups/${id}`, { method: 'DELETE' });
   }
 
   async getPerson(id: string): Promise<Person> {

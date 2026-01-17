@@ -4,6 +4,12 @@
   "description": "Cross-platform local storage for StillAlive",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mobile": "./src/mobile/index.ts",
+    "./web": "./src/web/index.ts",
+    "./miniprogram": "./src/miniprogram/index.ts"
+  },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist"

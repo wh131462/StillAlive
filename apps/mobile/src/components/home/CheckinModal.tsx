@@ -7,37 +7,53 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   TextInput,
-  Animated,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { MoodType } from '@still-alive/types';
 import { colors } from '../../theme/colors';
 import Button from '../ui/Button';
+import MoodSelector from './MoodSelector';
+
+interface CheckinData {
+  content?: string;
+  mood?: MoodType;
+}
 
 interface CheckinModalProps {
   visible: boolean;
-  step: 'input' | 'success';
   onClose: () => void;
-  onCheckin: (content?: string) => void;
+  onCheckin: (data: CheckinData) => void;
   isLoading?: boolean;
 }
 
 export default function CheckinModal({
   visible,
-  step,
   onClose,
   onCheckin,
   isLoading,
 }: CheckinModalProps) {
   const [content, setContent] = useState('');
+  const [mood, setMood] = useState<MoodType | undefined>(undefined);
 
   const handleCheckinWithContent = () => {
-    onCheckin(content || undefined);
-    setContent('');
+    onCheckin({ content: content || undefined, mood });
+    resetForm();
   };
 
   const handleCheckinSimple = () => {
-    onCheckin();
+    onCheckin({ mood });
+    resetForm();
+  };
+
+  const resetForm = () => {
     setContent('');
+    setMood(undefined);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
   };
 
   return (
@@ -45,81 +61,66 @@ export default function CheckinModal({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
+      <TouchableWithoutFeedback onPress={handleClose}>
         <View style={styles.overlay} />
       </TouchableWithoutFeedback>
 
       <View style={styles.modalContainer}>
         <View style={styles.modal}>
+          {/* Handle bar */}
+          <View style={styles.handleBar} />
+
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>确认今日存活</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          {step === 'input' ? (
-            /* Step 1: Input */
-            <View>
-              <Text style={styles.subtitle}>
-                记录一下今天有意义的事（可选）
-              </Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Mood Selector */}
+            <MoodSelector value={mood} onChange={setMood} disabled={isLoading} />
 
-              <TextInput
-                style={styles.textArea}
-                placeholder="今天发生了什么值得记住的事..."
-                placeholderTextColor={colors.textMuted}
-                multiline
-                value={content}
-                onChangeText={setContent}
-                editable={!isLoading}
-              />
+            {/* Content Input */}
+            <Text style={styles.subtitle}>记录一下今天有意义的事（可选）</Text>
+            <TextInput
+              style={styles.textArea}
+              placeholder="今天发生了什么值得记住的事..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              value={content}
+              onChangeText={setContent}
+              editable={!isLoading}
+            />
 
-              <View style={styles.mediaButtons}>
-                <TouchableOpacity style={styles.mediaButton}>
-                  <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.mediaButtonText}>添加照片</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.mediaButton}>
-                  <Ionicons name="happy-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.mediaButtonText}>心情</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.buttonRow}>
-                <Button
-                  title="确认打卡"
-                  onPress={handleCheckinWithContent}
-                  loading={isLoading}
-                  style={styles.primaryButton}
-                />
-                <Button
-                  title="纯打卡"
-                  onPress={handleCheckinSimple}
-                  variant="secondary"
-                  loading={isLoading}
-                  style={styles.secondaryButton}
-                />
-              </View>
+            {/* Media Buttons */}
+            <View style={styles.mediaButtons}>
+              <TouchableOpacity style={styles.mediaButton}>
+                <Ionicons name="image-outline" size={18} color={colors.textSecondary} />
+                <Text style={styles.mediaButtonText}>添加照片</Text>
+              </TouchableOpacity>
             </View>
-          ) : (
-            /* Step 2: Success */
-            <View style={styles.successContainer}>
-              <View style={styles.successIcon}>
-                <Ionicons name="checkmark" size={48} color={colors.primary} />
-              </View>
-              <Text style={styles.successTitle}>恭喜你又活过了一天！</Text>
-              <Text style={styles.successSubtitle}>今天也辛苦了</Text>
-              <Button
-                title="完成"
-                onPress={onClose}
-                style={styles.doneButton}
-              />
-            </View>
-          )}
+          </ScrollView>
+
+          {/* Action Buttons */}
+          <View style={styles.buttonRow}>
+            <Button
+              title="确认打卡"
+              onPress={handleCheckinWithContent}
+              loading={isLoading}
+              style={styles.primaryButton}
+            />
+            <Button
+              title="纯打卡"
+              onPress={handleCheckinSimple}
+              variant="secondary"
+              loading={isLoading}
+              style={styles.secondaryButton}
+            />
+          </View>
         </View>
       </View>
     </Modal>
@@ -136,6 +137,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    maxHeight: '80%',
   },
   modal: {
     backgroundColor: colors.white,
@@ -144,11 +146,19 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 40,
   },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.slate300,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
     fontSize: 18,
@@ -169,7 +179,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 12,
     padding: 12,
-    minHeight: 100,
+    minHeight: 80,
     fontSize: 14,
     color: colors.textPrimary,
     textAlignVertical: 'top',
@@ -202,32 +212,5 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     paddingHorizontal: 24,
-  },
-  successContainer: {
-    alignItems: 'center',
-    paddingVertical: 24,
-  },
-  successIcon: {
-    width: 80,
-    height: 80,
-    backgroundColor: colors.primaryLight,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  successTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 8,
-  },
-  successSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 24,
-  },
-  doneButton: {
-    minWidth: 120,
   },
 });

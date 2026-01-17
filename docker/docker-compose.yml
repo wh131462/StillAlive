@@ -2,9 +2,9 @@
 # StillAlive - Docker Compose 配置
 # ============================================
 # 使用方法:
-#   1. 复制 .env.example 为 .env.production
+#   1. 复制 configs/.env.example 为 configs/.env.production
 #   2. 填写实际配置值
-#   3. docker-compose --env-file .env.production up -d
+#   3. docker-compose -f docker/docker-compose.yml --env-file configs/.env.production up -d
 # ============================================
 
 version: '3.8'
@@ -32,8 +32,8 @@ services:
   # ==================== API Server ====================
   server:
     build:
-      context: .
-      dockerfile: Dockerfile.server
+      context: ..
+      dockerfile: docker/Dockerfile.server
     image: stillalive-server:${IMAGE_TAG:-latest}
     container_name: stillalive-server
     restart: unless-stopped
@@ -58,8 +58,8 @@ services:
   # ==================== Web App ====================
   web:
     build:
-      context: .
-      dockerfile: Dockerfile.web
+      context: ..
+      dockerfile: docker/Dockerfile.web
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api.still-alive.me}
     image: stillalive-web:${IMAGE_TAG:-latest}
@@ -73,8 +73,8 @@ services:
   # ==================== Portal Website ====================
   portal:
     build:
-      context: .
-      dockerfile: Dockerfile.portal
+      context: ..
+      dockerfile: docker/Dockerfile.portal
     image: stillalive-portal:${IMAGE_TAG:-latest}
     container_name: stillalive-portal
     restart: unless-stopped
@@ -98,9 +98,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./certbot/conf:/etc/letsencrypt:ro
-      - ./certbot/www:/var/www/certbot:ro
-      - ./downloads:/var/www/downloads:ro
+      - ../certbot/conf:/etc/letsencrypt:ro
+      - ../certbot/www:/var/www/certbot:ro
+      - ../downloads:/var/www/downloads:ro
     networks:
       - stillalive-network
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
@@ -111,8 +111,8 @@ services:
     container_name: stillalive-certbot
     restart: unless-stopped
     volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
+      - ../certbot/conf:/etc/letsencrypt
+      - ../certbot/www:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 networks:

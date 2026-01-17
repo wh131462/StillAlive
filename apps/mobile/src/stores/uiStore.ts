@@ -11,7 +11,6 @@ interface ToastConfig {
 interface UIState {
   // Modals
   isCheckinModalOpen: boolean;
-  checkinModalStep: 'input' | 'success';
   isPersonDetailOpen: boolean;
   isPersonFormOpen: boolean;
   personFormMode: 'create' | 'edit';
@@ -26,7 +25,6 @@ interface UIState {
   // Actions
   openCheckinModal: () => void;
   closeCheckinModal: () => void;
-  setCheckinModalStep: (step: 'input' | 'success') => void;
   openPersonDetail: () => void;
   closePersonDetail: () => void;
   openPersonForm: (mode?: 'create' | 'edit') => void;
@@ -39,7 +37,6 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   // Initial state
   isCheckinModalOpen: false,
-  checkinModalStep: 'input',
   isPersonDetailOpen: false,
   isPersonFormOpen: false,
   personFormMode: 'create',
@@ -48,9 +45,8 @@ export const useUIStore = create<UIState>((set) => ({
   toast: null,
 
   // Modal actions
-  openCheckinModal: () => set({ isCheckinModalOpen: true, checkinModalStep: 'input' }),
+  openCheckinModal: () => set({ isCheckinModalOpen: true }),
   closeCheckinModal: () => set({ isCheckinModalOpen: false }),
-  setCheckinModalStep: (step) => set({ checkinModalStep: step }),
 
   openPersonDetail: () => set({ isPersonDetailOpen: true }),
   closePersonDetail: () => set({ isPersonDetailOpen: false }),

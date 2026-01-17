@@ -1,4 +1,4 @@
-# 主题风格设计规范 - 今天又活了一天
+# 设计规范 - 今天又活了一天
 
 ## 1. 设计理念
 
@@ -15,18 +15,18 @@
 
 ### 1.2 情绪映射
 
-```
-主页模块     → 温暖、有生命力 → 绿色点缀，心跳动画
-打卡模块     → 清晰、有成就感 → 日历绿色标记，数据可视化
-人物模块     → 温情、有记忆感 → 暖色调，照片质感
-我的模块     → 简洁、功能性   → 中性灰色调，清晰层级
-```
+| 模块 | 情绪 | 表达方式 |
+|------|------|----------|
+| 主页 | 温暖、有生命力 | 绿色点缀，心跳动画 |
+| 打卡 | 清晰、有成就感 | 日历绿色标记，数据可视化 |
+| 人物 | 温情、有记忆感 | 暖色调，照片质感 |
+| 我的 | 简洁、功能性 | 中性灰色调，清晰层级 |
 
 ---
 
 ## 2. 色彩系统
 
-### 2.1 基础色板（Slate 灰度体系）
+### 2.1 基础灰度（Slate 色系）
 
 采用 Tailwind CSS 的 Slate 色系作为基础灰度：
 
@@ -50,29 +50,29 @@
 
 | 名称 | 色值 | 用途 |
 |------|------|------|
-| primary-light | `#d1fae5` (emerald-100) | 浅色背景、标签底色 |
-| primary | `#10b981` (emerald-500) | 主按钮、打卡成功、已确认状态 |
-| primary-dark | `#059669` (emerald-600) | 按钮悬停、强调 |
+| primary-light | `#d1fae5` | 浅色背景、标签底色 |
+| primary | `#10b981` | 主按钮、打卡成功、已确认状态 |
+| primary-dark | `#059669` | 按钮悬停、强调 |
 
 #### 强调色（心跳红）
 代表"心跳"、"生命体征"、"重要提醒"
 
 | 名称 | 色值 | 用途 |
 |------|------|------|
-| accent-light | `#ffe4e6` (rose-100) | 浅色背景 |
-| accent | `#f43f5e` (rose-500) | 心跳动画、生日提醒、重要标记 |
-| accent-dark | `#e11d48` (rose-600) | 悬停状态 |
+| accent-light | `#ffe4e6` | 浅色背景 |
+| accent | `#f43f5e` | 心跳动画、生日提醒、重要标记 |
+| accent-dark | `#e11d48` | 悬停状态 |
 
 #### 功能色彩
 
 | 类型 | 色值 | 用途 |
 |------|------|------|
-| success | `#22c55e` (green-500) | 成功状态 |
-| warning | `#f59e0b` (amber-500) | 警告、未打卡提醒 |
-| error | `#ef4444` (red-500) | 错误状态 |
-| info | `#3b82f6` (blue-500) | 信息提示 |
+| success | `#22c55e` | 成功状态 |
+| warning | `#f59e0b` | 警告、未打卡提醒 |
+| error | `#ef4444` | 错误状态 |
+| info | `#3b82f6` | 信息提示 |
 
-### 2.3 深色模式配色
+### 2.3 深色模式
 
 | 元素 | 浅色模式 | 深色模式 |
 |------|----------|----------|
@@ -111,29 +111,9 @@
 | body-sm | 14px | 1.5 | 400 | 次要正文、描述 |
 | caption | 12px | 1.4 | 400 | 辅助说明、时间戳 |
 
-### 3.3 特殊文字样式
-
-```css
-/* 核心文案 - 如"还活着吗？" */
-.text-headline {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--slate-800);
-}
-
-/* 数字统计 */
-.text-statistic {
-  font-family: var(--font-mono);
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--primary);
-}
-```
-
 ---
 
-## 4. 间距系统
+## 4. 间距与布局
 
 ### 4.1 基础间距（Base: 4px）
 
@@ -146,22 +126,18 @@
 | spacing-5 | 20px | 区块间距 |
 | spacing-6 | 24px | 卡片内间距 |
 | spacing-8 | 32px | 大区块间距 |
-| spacing-10 | 40px | 页面边距 |
-| spacing-12 | 48px | 大留白 |
 
-### 4.2 页面布局间距
+### 4.2 页面布局
 
-```
-页面水平边距: 16px (移动端) / 24px (平板)
-卡片间距: 12px
-区块间距: 24px
-底部导航高度: 56px
-安全区域底部: env(safe-area-inset-bottom)
-```
+| 属性 | 值 |
+|------|-----|
+| 页面水平边距 | 16px (移动端) / 24px (平板) |
+| 卡片间距 | 12px |
+| 区块间距 | 24px |
+| 底部导航高度 | 56px |
+| 安全区域底部 | `env(safe-area-inset-bottom)` |
 
----
-
-## 5. 圆角系统
+### 4.3 圆角系统
 
 | 名称 | 值 | 用途 |
 |------|-----|------|
@@ -174,9 +150,9 @@
 
 ---
 
-## 6. 阴影系统
+## 5. 阴影系统
 
-### 6.1 阴影层级
+### 5.1 阴影层级
 
 ```css
 /* 轻微浮起 - 卡片默认状态 */
@@ -195,12 +171,11 @@
              0 8px 10px -6px rgb(0 0 0 / 0.1);
 ```
 
-### 6.2 深色模式阴影
+### 5.2 深色模式阴影
 
-深色模式下使用更深的阴影或边框代替：
+深色模式下使用边框代替阴影：
 
 ```css
-/* 深色模式卡片 */
 .dark .card {
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.1);
 }
@@ -208,25 +183,18 @@
 
 ---
 
-## 7. 动效规范
+## 6. 动效规范
 
-### 7.1 缓动函数
+### 6.1 缓动函数
 
 ```css
-/* 标准缓动 */
---ease-default: cubic-bezier(0.4, 0, 0.2, 1);
-
-/* 进入动画 */
---ease-in: cubic-bezier(0.4, 0, 1, 1);
-
-/* 退出动画 */
---ease-out: cubic-bezier(0, 0, 0.2, 1);
-
-/* 弹性效果 */
---ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+--ease-default: cubic-bezier(0.4, 0, 0.2, 1);  /* 标准缓动 */
+--ease-in: cubic-bezier(0.4, 0, 1, 1);          /* 进入动画 */
+--ease-out: cubic-bezier(0, 0, 0.2, 1);         /* 退出动画 */
+--ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55); /* 弹性效果 */
 ```
 
-### 7.2 动画时长
+### 6.2 动画时长
 
 | 类型 | 时长 | 用途 |
 |------|------|------|
@@ -236,26 +204,16 @@
 | slow | 300ms | 页面切换、大元素 |
 | slower | 500ms | 复杂动画 |
 
-### 7.3 特色动画
+### 6.3 特色动画
 
 #### 心跳动画（生存状态）
 ```css
 @keyframes heartbeat {
-  0%, 100% {
-    transform: scale(1);
-  }
-  14% {
-    transform: scale(1.1);
-  }
-  28% {
-    transform: scale(1);
-  }
-  42% {
-    transform: scale(1.1);
-  }
-  70% {
-    transform: scale(1);
-  }
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.1); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.1); }
+  70% { transform: scale(1); }
 }
 
 .heartbeat {
@@ -266,17 +224,9 @@
 #### 打卡成功动画
 ```css
 @keyframes checkIn {
-  0% {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .check-in-success {
@@ -284,15 +234,24 @@
 }
 ```
 
+#### 里程碑庆祝动画
+```css
+@keyframes milestone {
+  0% { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+  50% { transform: scale(1.2) rotate(5deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.milestone-celebrate {
+  animation: milestone 1.5s ease-in-out;
+}
+```
+
 #### 呼吸效果（提醒状态）
 ```css
 @keyframes breathe {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 .breathe {
@@ -300,9 +259,70 @@
 }
 ```
 
+#### 骨架屏闪烁
+```css
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+```
+
 ---
 
-## 8. 组件样式规范
+## 7. 交互规范
+
+### 7.1 交互反馈
+
+| 交互类型 | 反馈方式 |
+|----------|----------|
+| 按钮点击 | 轻微缩放 (scale: 0.98) + 触感反馈 |
+| 卡片点击 | 阴影加深 + 轻微缩放 |
+| 下拉刷新 | 顶部加载指示器 |
+| 操作成功 | Toast提示 + 轻微震动 |
+| 操作失败 | 错误Toast + 中等震动 |
+
+### 7.2 加载状态
+
+#### 骨架屏
+| 应用场景 | 说明 |
+|----------|------|
+| 列表加载 | 打卡记录、人物列表首次加载时展示 |
+| 卡片加载 | 数据统计卡片、热力图加载时展示 |
+| 详情页 | 人物详情页首次加载时展示 |
+
+#### 下拉刷新
+| 应用场景 | 说明 |
+|----------|------|
+| 主页 | 下拉刷新今日状态和提醒 |
+| 记录列表 | 下拉刷新最新记录 |
+| 人物列表 | 下拉刷新人物数据 |
+
+### 7.3 空状态设计
+
+| 场景 | 文案 | 引导操作 |
+|------|------|----------|
+| 无打卡记录 | "开始你的第一次打卡吧" | 显示打卡按钮 |
+| 无人物记录 | "添加一个重要的人" | 显示添加按钮 |
+| 搜索无结果 | "没有找到相关内容" | 建议调整搜索词 |
+| 无意义记录 | "今天有什么有意义的事吗？" | 显示快速记录入口 |
+
+### 7.4 安全区域适配
+
+| 区域 | 说明 |
+|------|------|
+| 顶部安全区 | 适配刘海屏/挖孔屏 |
+| 底部安全区 | 适配全面屏手势区域 |
+| 底部导航 | 使用 `env(safe-area-inset-bottom)` 适配 |
+
+---
+
+## 8. 组件规范
 
 ### 8.1 卡片组件
 
@@ -425,11 +445,41 @@
 }
 ```
 
+### 8.5 Toast 消息
+
+```css
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 100;
+  animation: scaleIn 0.2s ease-out;
+}
+
+.toast-success {
+  background: #d1fae5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.toast-error {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+```
+
 ---
 
 ## 9. 图标规范
 
 ### 9.1 图标库
+
 推荐使用 **Font Awesome 6** 或 **Heroicons**
 
 ### 9.2 底部导航图标
@@ -519,8 +569,10 @@
 - [ ] 动画时长适中，不影响操作效率
 - [ ] 深色模式下所有元素可读性良好
 - [ ] 心跳动画自然，不引起视觉疲劳
+- [ ] 空状态有明确的引导操作
+- [ ] 加载状态有骨架屏或指示器
 
 ---
 
-*文档版本: v1.0*
-*最后更新: 2026-01-12*
+*文档版本: v2.0*
+*最后更新: 2026-01-16*

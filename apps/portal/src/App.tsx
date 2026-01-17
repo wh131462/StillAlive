@@ -1,7 +1,9 @@
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Features from './components/Features';
+import Values from './components/Values';
 import HowItWorks from './components/HowItWorks';
+import Milestones from './components/Milestones';
 import Download from './components/Download';
 import Docs from './components/Docs';
 import About from './components/About';
@@ -14,6 +16,8 @@ export default function App() {
       <main>
         <Hero />
         <Features />
+        <Values />
+        <Milestones />
         <HowItWorks />
         <Download />
         <Docs />

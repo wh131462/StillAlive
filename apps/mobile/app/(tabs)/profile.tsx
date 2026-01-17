@@ -2,13 +2,16 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/stores/authStore';
-import { useSettingsStore } from '../../src/stores/settingsStore';
+import { useSettingsStore, type ThemeMode } from '../../src/stores/settingsStore';
+import { useCheckinStore } from '../../src/stores/checkinStore';
 import { useUIStore } from '../../src/stores/uiStore';
 import {
   ProfileHeader,
   QuickStats,
-  DeathConfirmation,
   SettingsList,
+  MilestoneBadges,
+  YearHeatmap,
+  ThemeToggle,
 } from '../../src/components/profile';
 import { colors } from '../../src/theme/colors';
 
@@ -16,16 +19,12 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const {
-    totalDays,
     totalPersons,
-    emergencyConfig,
-    isConfigLoading,
-    isConfigUpdating,
     reminderTime,
-    fetchQuickStats,
-    fetchEmergencyConfig,
-    updateEmergencyConfig,
+    theme,
+    setTheme,
   } = useSettingsStore();
+  const { checkins, stats, fetchAllCheckins, calculateStats } = useCheckinStore();
   const { showToast } = useUIStore();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -33,14 +32,15 @@ export default function ProfileScreen() {
   // Fetch data on mount and focus
   useFocusEffect(
     useCallback(() => {
-      fetchQuickStats();
-      fetchEmergencyConfig();
-    }, [fetchQuickStats, fetchEmergencyConfig])
+      fetchAllCheckins();
+      calculateStats();
+    }, [fetchAllCheckins, calculateStats])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchQuickStats(), fetchEmergencyConfig()]);
+    await fetchAllCheckins();
+    calculateStats();
     setRefreshing(false);
   };
 
@@ -50,14 +50,13 @@ export default function ProfileScreen() {
     router.replace('/(auth)/login');
   };
 
-  const handleEmergencyUpdate = async (data: Parameters<typeof updateEmergencyConfig>[0]) => {
-    try {
-      await updateEmergencyConfig(data);
-      showToast({ type: 'success', message: '设置已保存' });
-    } catch {
-      showToast({ type: 'error', message: '保存失败' });
-    }
+  const handleThemeChange = (newTheme: ThemeMode) => {
+    setTheme(newTheme);
+    showToast({ type: 'success', message: '主题已切换' });
   };
+
+  // Use local stats
+  const localTotalDays = stats?.totalDays || 0;
 
   return (
     <View style={styles.container}>
@@ -76,24 +75,30 @@ export default function ProfileScreen() {
         {/* Profile Header */}
         <ProfileHeader
           user={user}
-          totalDays={totalDays}
+          totalDays={localTotalDays}
           onEditPress={() => {
             // TODO: Navigate to edit profile
           }}
         />
 
-        {/* Quick Stats */}
+        {/* Milestone Badges */}
         <View style={styles.section}>
-          <QuickStats totalDays={totalDays} totalPersons={totalPersons} />
+          <MilestoneBadges totalDays={localTotalDays} />
         </View>
 
-        {/* Death Confirmation Settings */}
+        {/* Year Heatmap */}
         <View style={styles.section}>
-          <DeathConfirmation
-            config={emergencyConfig}
-            isLoading={isConfigLoading || isConfigUpdating}
-            onUpdate={handleEmergencyUpdate}
-          />
+          <YearHeatmap checkins={checkins} />
+        </View>
+
+        {/* Quick Stats */}
+        <View style={styles.section}>
+          <QuickStats totalDays={localTotalDays} totalPersons={totalPersons} />
+        </View>
+
+        {/* Theme Toggle */}
+        <View style={styles.section}>
+          <ThemeToggle value={theme} onChange={handleThemeChange} />
         </View>
 
         {/* Settings List */}

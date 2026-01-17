@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { EmergencyConfig } from '@still-alive/types';
 import { apiClient } from '../lib/api';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 interface SettingsState {
   // Quick stats
   totalDays: number;
@@ -19,6 +21,9 @@ interface SettingsState {
   reminderEnabled: boolean;
   reminderTime: string; // HH:mm format
 
+  // Theme (local)
+  theme: ThemeMode;
+
   error: string | null;
 
   // Actions
@@ -26,6 +31,7 @@ interface SettingsState {
   updateEmergencyConfig: (data: Partial<EmergencyConfig>) => Promise<void>;
   setReminderEnabled: (enabled: boolean) => void;
   setReminderTime: (time: string) => void;
+  setTheme: (theme: ThemeMode) => void;
   fetchQuickStats: () => Promise<void>;
   reset: () => void;
 }
@@ -42,6 +48,7 @@ export const useSettingsStore = create<SettingsState>()(
       isConfigUpdating: false,
       reminderEnabled: true,
       reminderTime: '21:00',
+      theme: 'system',
       error: null,
 
       fetchEmergencyConfig: async () => {
@@ -69,6 +76,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setReminderEnabled: (enabled) => set({ reminderEnabled: enabled }),
       setReminderTime: (time) => set({ reminderTime: time }),
+      setTheme: (theme) => set({ theme }),
 
       fetchQuickStats: async () => {
         try {
@@ -100,6 +108,7 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: (state) => ({
         reminderEnabled: state.reminderEnabled,
         reminderTime: state.reminderTime,
+        theme: state.theme,
       }),
     }
   )

@@ -105,6 +105,12 @@ export default function LoginScreen() {
             style={styles.loginButton}
           />
 
+          <Link href="/(auth)/forgot-password" asChild>
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>忘记密码？</Text>
+            </TouchableOpacity>
+          </Link>
+
           <View style={styles.registerLink}>
             <Text style={styles.registerText}>还没有账号？</Text>
             <Link href="/(auth)/register" asChild>
@@ -162,6 +168,14 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     marginTop: 8,
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginTop: 12,
+  },
+  forgotPasswordText: {
+    color: colors.textSecondary,
+    fontSize: 14,
   },
   registerLink: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { FileText, Palette, Server, Rocket, Layout } from 'lucide-react';
+import { FileText, Palette, Server, Rocket, Layout, Database } from 'lucide-react';
 
 // 获取 base URL，用于内部链接
 const baseUrl = import.meta.env.BASE_URL || '/';
@@ -24,16 +24,23 @@ const docs = [
   {
     icon: Palette,
     title: '设计规范',
-    description: '主题配色、字体规范、组件样式指南',
-    href: 'https://github.com/wh131462/StillAlive/blob/master/docs/ThemeStyle.md',
-    file: 'ThemeStyle.md',
+    description: '视觉规范、交互设计、组件样式指南',
+    href: 'https://github.com/wh131462/StillAlive/blob/master/docs/DESIGN_SPEC.md',
+    file: 'DESIGN_SPEC.md',
+  },
+  {
+    icon: Database,
+    title: '技术架构',
+    description: '整体架构设计、数据模型、技术选型',
+    href: 'https://github.com/wh131462/StillAlive/blob/master/docs/ARCHITECTURE.md',
+    file: 'ARCHITECTURE.md',
   },
   {
     icon: Server,
-    title: '后端架构',
-    description: '轻后端设计理念、API 接口、数据同步方案',
-    href: 'https://github.com/wh131462/StillAlive/blob/master/docs/BACKEND_ARCHITECTURE.md',
-    file: 'BACKEND_ARCHITECTURE.md',
+    title: '后端文档',
+    description: 'API 设计、数据接口、增值服务方案',
+    href: 'https://github.com/wh131462/StillAlive/blob/master/docs/BACKEND.md',
+    file: 'BACKEND.md',
   },
   {
     icon: Rocket,
@@ -55,9 +62,12 @@ export default function Docs() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">开发文档</h2>
+          <span className="inline-block px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-4">
+            开发文档
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4">深入了解项目</h2>
           <p className="text-gray-400 text-lg">
-            深入了解 StillAlive 的设计与实现
+            完整的设计规范与技术文档
           </p>
         </motion.div>
 
@@ -67,7 +77,7 @@ export default function Docs() {
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="group block p-8 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 border border-primary/30 hover:border-primary/50 transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 mb-8 max-w-4xl mx-auto"
+          className="group block p-8 rounded-2xl bg-gradient-to-br from-primary/20 to-emerald-500/20 border border-primary/30 hover:border-primary/50 transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 mb-8 max-w-4xl mx-auto"
         >
           <div className="flex items-center gap-6">
             <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/30 transition-colors">
@@ -78,7 +88,7 @@ export default function Docs() {
                 设计原型预览
               </h3>
               <p className="text-gray-400">
-                查看完整的 UI 设计稿、交互原型和页面流程
+                查看完整的 UI 设计稿、交互原型和页面流程，包含主页、打卡、人物、我的四大模块
               </p>
             </div>
             <div className="hidden sm:block text-primary">
@@ -90,7 +100,7 @@ export default function Docs() {
         </motion.a>
 
         {/* Docs Grid */}
-        <div className="grid sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {docs.slice(1).map((doc, index) => (
             <motion.a
               key={doc.title}
@@ -103,21 +113,19 @@ export default function Docs() {
               transition={{ delay: index * 0.1 }}
               className="group p-6 rounded-2xl bg-surface border border-white/5 hover:border-primary/50 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5"
             >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/20 transition-colors">
+              <div className="flex flex-col">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                   <doc.icon className="w-6 h-6 text-primary" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold mb-1 group-hover:text-primary transition-colors">
-                    {doc.title}
-                  </h3>
-                  <p className="text-gray-400 text-sm leading-relaxed mb-2">
-                    {doc.description}
-                  </p>
-                  <span className="text-xs text-gray-500 font-mono">
-                    {doc.file}
-                  </span>
-                </div>
+                <h3 className="text-lg font-semibold mb-2 group-hover:text-primary transition-colors">
+                  {doc.title}
+                </h3>
+                <p className="text-gray-400 text-sm leading-relaxed mb-3 flex-grow">
+                  {doc.description}
+                </p>
+                <span className="text-xs text-gray-500 font-mono">
+                  {doc.file}
+                </span>
               </div>
             </motion.a>
           ))}

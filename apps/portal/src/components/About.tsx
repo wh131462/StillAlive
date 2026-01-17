@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Github, Mail } from 'lucide-react';
+import { Github, Mail, Heart } from 'lucide-react';
 
 export default function About() {
   return (
@@ -11,24 +11,36 @@ export default function About() {
           viewport={{ once: true }}
           className="max-w-3xl mx-auto text-center"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold mb-8">关于 StillAlive</h2>
+          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-8">
+            <Heart className="w-10 h-10 text-primary" />
+          </div>
+
+          <h2 className="text-3xl sm:text-4xl font-bold mb-8">关于「今天又活了一天」</h2>
 
           <div className="space-y-6 text-lg text-gray-400 leading-relaxed mb-10">
             <p>
-              StillAlive 诞生于一个简单的想法：在这个忙碌的世界里，
-              我们需要一种简单的方式来告诉在乎我们的人——我还好。
+              这是一款以"生存确认"和"记忆沉淀"为核心概念的打卡工具。
+              它通过轻量化的每日互动，引导你记录生活中的意义，
+              并为重要的人建立情感档案。
             </p>
 
             <p>
-              无论你是独居青年、经常出差的商务人士、还是喜欢户外探险的冒险家，
-              StillAlive 都能在你最需要的时候，替你发出那个重要的信号。
+              我们相信，不是每一天都需要轰轰烈烈。
+              有时候，仅仅是确认"今天又活了一天"，
+              就是对生活最真实的记录。
             </p>
 
-            <p className="text-white">
-              每一次打卡，都是对生活的一次确认。
+            <p className="text-white font-medium">
+              活着本身，就是意义。
               <br />
-              记录不是为了回忆，而是为了证明我们真实地活过。
+              写下来的过程，就是加深记忆的过程。
             </p>
+          </div>
+
+          {/* Core Message */}
+          <div className="bg-background rounded-2xl p-6 mb-10 border border-white/5">
+            <p className="text-primary text-xl font-medium mb-2">"还活着吗？"</p>
+            <p className="text-gray-400">每一天都值得被记录</p>
           </div>
 
           {/* Links */}

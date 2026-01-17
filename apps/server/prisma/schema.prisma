@@ -20,7 +20,11 @@ model User {
   // 关联
   checkins        Checkin[]
   people          Person[]
+  personGroups    PersonGroup[]
   emergencyConfig EmergencyConfig?
+  passwordResets  PasswordReset[]
+  refreshTokens   RefreshToken[]
+  makeupRecords   MakeupRecord[]
 
   @@map("users")
 }
@@ -32,6 +36,8 @@ model Checkin {
   date      DateTime @db.Date
   content   String?  // 有意义的事
   photo     String?  // 今日照片URL
+  mood      String?  // 心情: happy, calm, tired, sad, anxious, excited
+  isMakeup  Boolean  @default(false) // 是否为补签
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -45,20 +51,41 @@ model Checkin {
 model Person {
   id         String   @id @default(cuid())
   userId     String
+  groupId    String?  // 分组ID
   name       String
   gender     String?  // male, female, other
   birthday   String?  // MM-DD 格式
   birthYear  Int?     // 出生年份(可选)
   photo      String?
   mbti       String?
+  themeColor String?  // 主题色: rose, blue, amber, purple, green, slate
   impression String?  // 个人印象
   experience String?  // 共同经历
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group PersonGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@map("people")
+}
+
+// 人物分组表
+model PersonGroup {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String   // 分组名称: 家人, 朋友, 同事, 其他
+  icon      String?  // 图标名称
+  color     String?  // 分组颜色
+  sortOrder Int      @default(0) // 排序顺序
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  people Person[]
+
+  @@unique([userId, name])
+  @@map("person_groups")
 }
 
 // 紧急联系人配置(死亡确认)
@@ -98,4 +125,46 @@ model YearlySummary {
 
   @@unique([userId, year])
   @@map("yearly_summaries")
+}
+
+// 补签记录表 (用于限制每月补签次数)
+model MakeupRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  yearMonth String   // YYYY-MM 格式
+  count     Int      @default(0) // 当月已补签次数
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, yearMonth])
+  @@map("makeup_records")
+}
+
+// 密码重置验证码表
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String   // 6位验证码
+  expiresAt DateTime // 过期时间
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+// 刷新Token表
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
 }

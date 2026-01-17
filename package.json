@@ -14,12 +14,13 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "clean": "turbo run clean && rm -rf node_modules",
+    "clean": "rm -rf ./**/**/node_modules ./**/**/*-lock.*",
     "dev:mobile": "turbo run dev --filter=@still-alive/mobile",
     "dev:web": "turbo run dev --filter=@still-alive/web",
     "dev:miniprogram": "turbo run dev --filter=@still-alive/miniprogram",
     "dev:server": "turbo run dev --filter=@still-alive/server",
-    "dev:portal": "turbo run dev --filter=@still-alive/portal"
+    "dev:portal": "turbo run dev --filter=@still-alive/portal",
+    "preview:design": "npx serve docs/design -p 3000"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
