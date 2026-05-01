@@ -1,12 +1,12 @@
 {
-  "name": "@stillalive/mobile",
+  "name": "@stillalive/miniapp",
   "version": "0.0.1",
   "private": true,
-  "description": "React Native App (iOS / Android)",
+  "description": "Taro 微信小程序",
   "scripts": {
-    "dev": "echo 'Mobile app — bootstrap pending'",
-    "build": "echo 'Mobile app — bootstrap pending'",
-    "typecheck": "echo 'Mobile app — bootstrap pending'",
+    "dev": "echo 'Miniapp — bootstrap pending'",
+    "build": "echo 'Miniapp — bootstrap pending'",
+    "typecheck": "echo 'Miniapp — bootstrap pending'",
     "clean": "rm -rf dist"
   },
   "dependencies": {

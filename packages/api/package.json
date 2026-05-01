@@ -1,5 +1,5 @@
 {
-  "name": "@stillalive/types",
+  "name": "@stillalive/api",
   "version": "0.0.1",
   "private": true,
   "main": "./src/index.ts",
@@ -7,6 +7,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@stillalive/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

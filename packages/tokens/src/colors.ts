@@ -1,0 +1,43 @@
+export const colors = {
+  light: {
+    bg: '#fafafa',
+    surface: '#ffffff',
+    text: '#1e293b',
+    textSecondary: '#64748b',
+    textMuted: '#94a3b8',
+    border: '#f1f5f9',
+    borderSecondary: '#e2e8f0',
+    primary: '#10b981',
+    primaryLight: '#d1fae5',
+    accent: '#f43f5e',
+    accentLight: '#ffe4e6',
+    success: '#22c55e',
+    warning: '#f59e0b',
+    error: '#ef4444',
+    checkedIn: '#10b981',
+    missed: '#d1d5db',
+    retroactive: '#94a3b8',
+  },
+  dark: {
+    bg: '#0f172a',
+    surface: '#1e293b',
+    text: '#f1f5f9',
+    textSecondary: '#94a3b8',
+    textMuted: '#475569',
+    border: '#1e293b',
+    borderSecondary: '#334155',
+    primary: '#34d399',
+    primaryLight: '#064e3b',
+    accent: '#fb7185',
+    accentLight: '#4c0519',
+    success: '#4ade80',
+    warning: '#fbbf24',
+    error: '#f87171',
+    checkedIn: '#34d399',
+    missed: '#475569',
+    retroactive: '#64748b',
+  },
+} as const;
+
+export type ColorScheme = keyof typeof colors;
+export type ColorToken = keyof (typeof colors)['light'];
