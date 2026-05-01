@@ -786,10 +786,6 @@ Docker Compose
 | 文档 | 说明 |
 |------|------|
 | [DESIGN_SPEC.md](./DESIGN_SPEC.md) | 设计规范（视觉、交互、组件） |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | 技术架构详细设计 |
-| [BACKEND.md](./BACKEND.md) | 后端 API 设计 |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | 部署指南 |
-| [WEBSITE_PRD.md](./WEBSITE_PRD.md) | (历史归档) 早期独立网站构想，已融合至本 PRD |
 
 ---
 
