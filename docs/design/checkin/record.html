@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>记录今天 · 还活着</title>
+  <link rel="stylesheet" href="../shared/breathe.css">
+  <script src="../shared/theme.js"></script>
+  <style>
+    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 0; display: flex; flex-direction: column; }
+    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: center; }
+    .back { background: none; border: none; color: var(--ink-faint); font-size: 14px; }
+    .top-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--ink); text-transform: uppercase; }
+    #theme-toggle { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
+    #theme-toggle::before { content: '🌙'; font-size: 13px; }
+    html.dark #theme-toggle::before { content: '☀'; }
+    .hero { padding: 48px 0 24px; }
+    .hero h1 { font-family: var(--font-display); font-style: italic; font-size: 42px; margin: 0; line-height: 1; }
+    .hero h1 .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 28px; margin-top: 4px; }
+    .hero-sub { font-family: var(--font-display); font-style: italic; color: var(--ink-soft); font-size: 14px; margin-top: 16px; line-height: 1.7; }
+    .section-t { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin: 32px 0 12px; }
+    .photo-drop { aspect-ratio: 4/3; border: 1px dashed var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--ink-faint); transition: border-color 0.3s; }
+    .photo-drop:hover { border-color: var(--life); color: var(--life); }
+    .photo-drop p { font-family: var(--font-display); font-style: italic; font-size: 13px; margin: 0; }
+    .text-area {
+      width: 100%; min-height: 200px; border: none; outline: none; resize: none;
+      background: transparent; padding: 16px 0;
+      font-family: var(--font-display); font-style: italic; font-size: 17px; line-height: 1.85;
+      color: var(--ink); border-bottom: 1px solid var(--line);
+    }
+    .text-area::placeholder { color: var(--ink-faint); }
+    .word-count { display: flex; justify-content: flex-end; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: var(--ink-faint); margin-top: 6px; }
+    .moods { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .mood {
+      padding: 8px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase; border: 1px solid var(--line); background: transparent; color: var(--ink-soft);
+      transition: all 0.3s; cursor: pointer;
+    }
+    .mood.active { background: var(--life); color: var(--bg); border-color: var(--life); }
+    .mood:hover { color: var(--life); border-color: var(--life); }
+    .actions { display: flex; gap: 12px; padding: 24px 0 32px; margin-top: 40px; border-top: 1px solid var(--line); }
+    .skip { flex: 1; padding: 16px; background: transparent; border: 1px solid var(--line); color: var(--ink-soft); font-family: var(--font-display); font-style: italic; font-size: 14px; }
+    .save { flex: 1; padding: 16px; background: var(--life); color: var(--bg); border: none; font-family: var(--font-display); font-style: italic; font-size: 14px; letter-spacing: 0.05em; position: relative; overflow: hidden; }
+    .save:hover { animation: breathe 1.5s var(--ease-breath) infinite; }
+  </style>
+</head>
+<body class="grain">
+  <div class="frame">
+    <div class="top">
+      <a href="index.html" class="back">← Back</a>
+      <span class="top-title">RECORD</span>
+      <button id="theme-toggle" aria-label="theme"></button>
+    </div>
+
+    <div class="hero">
+      <h1 class="fade-up fade-up-1">Today<span class="zh">今天有意义的事</span></h1>
+      <p class="hero-sub fade-up fade-up-2">2026·05·01 · A small gift to your future self.<br>—— 也可以什么都不写。</p>
+    </div>
+
+    <div class="fade-up fade-up-3">
+      <div class="section-t">PHOTO · 今天的一张</div>
+      <div class="photo-drop">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+        <p>upload one frame of today</p>
+      </div>
+    </div>
+
+    <div class="fade-up fade-up-4">
+      <div class="section-t">WORDS · 文字记录</div>
+      <textarea class="text-area" placeholder="什么让你觉得今天和昨天不一样？...">下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。</textarea>
+      <div class="word-count">142 / 500</div>
+    </div>
+
+    <div class="fade-up fade-up-5">
+      <div class="section-t">MOOD · 心情（可选）</div>
+      <div class="moods">
+        <button class="mood active">😊 开心</button>
+        <button class="mood">😌 平静</button>
+        <button class="mood">😔 低落</button>
+        <button class="mood">😴 疲惫</button>
+        <button class="mood">😡 烦躁</button>
+        <button class="mood">🥲 感动</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <a href="index.html" class="skip" style="text-align:center">什么都不写 · Skip</a>
+      <a href="milestone.html" class="save" style="text-align:center;text-decoration:none">Save · 保存</a>
+    </div>
+  </div>
+</body>
+</html>

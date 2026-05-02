@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="sa-tab" content="profile">
+  <title>我的 · 还活着</title>
+  <link rel="stylesheet" href="../shared/breathe.css">
+  <script src="../shared/theme.js"></script>
+  <script src="../shared/nav.js"></script>
+  <style>
+    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 96px; }
+    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: start; }
+    .top-mark { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; line-height: 1.6; }
+    .top-mark span { color: var(--life); }
+    #theme-toggle { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
+    #theme-toggle::before { content: '🌙'; font-size: 13px; }
+    html.dark #theme-toggle::before { content: '☀'; }
+
+    h1.title { font-family: var(--font-display); font-style: italic; font-size: 48px; margin: 32px 0 4px; line-height: 1; }
+    h1.title .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 32px; margin-top: 4px; }
+
+    /* Identity card */
+    .identity { margin-top: 32px; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; }
+    .avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--life), var(--green)); display: flex; align-items: center; justify-content: center; color: var(--bg); font-family: var(--font-body); font-weight: 700; font-size: 28px; animation: breathe 3s var(--ease-breath) infinite; }
+    .id-info { flex: 1; }
+    .id-name { font-family: var(--font-body); font-weight: 700; font-size: 20px; }
+    .id-meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); margin-top: 4px; letter-spacing: 0.05em; }
+    .id-meta span { color: var(--life); font-family: var(--font-display); font-style: italic; font-size: 16px; }
+
+    /* Stats grid */
+    .section-t { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin: 32px 0 16px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; border: 1px solid var(--line); }
+    .stat { padding: 20px 12px; text-align: center; border-right: 1px solid var(--line); }
+    .stat:last-child { border-right: none; }
+    .stat-num { font-family: var(--font-display); font-size: 28px; line-height: 1; }
+    .stat-num.life { color: var(--life); }
+    .stat-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; margin-top: 6px; }
+
+    /* Heatmap */
+    .heatmap-wrap { margin-top: 24px; padding: 20px; border: 1px solid var(--line); }
+    .heatmap-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+    .heatmap-h h3 { font-family: var(--font-display); font-style: italic; font-size: 16px; margin: 0; }
+    .heatmap-h span { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); letter-spacing: 0.1em; }
+    .heatmap { display: grid; grid-template-columns: repeat(52, 1fr); gap: 2px; }
+    .cell { aspect-ratio: 1; }
+    .legend-h { display: flex; gap: 4px; align-items: center; justify-content: flex-end; margin-top: 10px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); letter-spacing: 0.1em; }
+    .lc { width: 10px; height: 10px; }
+
+    /* Badges */
+    .badges { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+    .badge { flex-shrink: 0; text-align: center; }
+    .badge-circle { width: 56px; height: 56px; border-radius: 50%; background: var(--bg-subtle); display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 6px; }
+    .badge.done .badge-circle { background: var(--green-soft); }
+    .badge.now .badge-circle { background: var(--life-soft); border: 2px solid var(--life); }
+    .badge.locked { opacity: 0.4; }
+    .badge-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--ink-faint); text-transform: uppercase; }
+    .badge.now .badge-lbl { color: var(--life); }
+
+    /* Menu */
+    .menu { display: flex; flex-direction: column; border-top: 1px solid var(--line); margin-top: 24px; }
+    .menu-item { display: flex; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); transition: padding 0.3s; }
+    .menu-item:hover { padding-left: 8px; }
+    .menu-icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .menu-icon svg { width: 20px; height: 20px; stroke: var(--ink-soft); stroke-width: 1.5; fill: none; }
+    .menu-icon.danger svg { stroke: #c44; }
+    .menu-icon.life svg { stroke: var(--life); }
+    .menu-info { flex: 1; min-width: 0; }
+    .menu-title { font-size: 15px; font-weight: 500; }
+    .menu-sub { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); margin-top: 2px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .menu-arrow { color: var(--ink-faint); font-size: 12px; }
+  </style>
+</head>
+<body class="grain">
+  <div class="frame">
+    <div class="top">
+      <div class="top-mark fade-up">PROFILE · MINE<br><span>Day 127</span></div>
+      <button id="theme-toggle" aria-label="theme"></button>
+    </div>
+
+    <h1 class="title fade-up fade-up-1">Mine<span class="zh">我的</span></h1>
+
+    <div class="identity fade-up fade-up-2">
+      <div class="avatar">L</div>
+      <div class="id-info">
+        <div class="id-name">Let me</div>
+        <div class="id-meta">已确认存活 <span>127</span> 天</div>
+      </div>
+      <span class="menu-arrow">→</span>
+    </div>
+
+    <div class="section-t">Stats · 数据</div>
+    <div class="stats fade-up fade-up-3">
+      <div class="stat"><div class="stat-num life">127</div><div class="stat-lbl">DAYS · 生存</div></div>
+      <div class="stat"><div class="stat-num">8</div><div class="stat-lbl">PEOPLE · 人物</div></div>
+      <div class="stat"><div class="stat-num">42</div><div class="stat-lbl">RECORDS · 记录</div></div>
+    </div>
+
+    <div class="heatmap-wrap fade-up fade-up-4">
+      <div class="heatmap-h"><h3>2026 in pixels</h3><span>52 weeks · 365 days</span></div>
+      <div class="heatmap" id="hm"></div>
+      <script>
+        var hm = document.getElementById('hm');
+        for(var w=0;w<52;w++){for(var d=0;d<7;d++){var c=document.createElement('div');c.className='cell';var doy=w*7+d;var bg='#E8E0D8';if(doy>121){bg='var(--bg-subtle)'}else if(Math.random()>0.15){var i=Math.random();if(i>0.7)bg='var(--life)';else if(i>0.4)bg='rgba(194,77,44,0.55)';else bg='rgba(194,77,44,0.25)'}c.style.background=bg;hm.appendChild(c)}}
+      </script>
+      <div class="legend-h">LESS<span class="lc" style="background:rgba(194,77,44,0.25)"></span><span class="lc" style="background:rgba(194,77,44,0.55)"></span><span class="lc" style="background:var(--life)"></span>MORE</div>
+    </div>
+
+    <div class="section-t">Milestones · 成就</div>
+    <div class="badges fade-up fade-up-5">
+      <div class="badge done"><div class="badge-circle">🌱</div><div class="badge-lbl">7 DAYS</div></div>
+      <div class="badge done"><div class="badge-circle">🌿</div><div class="badge-lbl">30 DAYS</div></div>
+      <div class="badge now"><div class="badge-circle">🌳</div><div class="badge-lbl">100 DAYS</div></div>
+      <div class="badge locked"><div class="badge-circle">🏔</div><div class="badge-lbl">365 DAYS</div></div>
+      <div class="badge locked"><div class="badge-circle">⭐</div><div class="badge-lbl">1000 DAYS</div></div>
+    </div>
+
+    <div class="section-t">Settings · 设置</div>
+    <div class="menu fade-up fade-up-6">
+      <a href="death-confirm.html" class="menu-item">
+        <div class="menu-icon danger"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 00-7 7v4l2 2v3h2v2h6v-2h2v-3l2-2V9a7 7 0 00-7-7zM9 11h.01M15 11h.01"/></svg></div>
+        <div class="menu-info"><div class="menu-title">死亡确认</div><div class="menu-sub">DEATH CONFIRMATION · NOTIFY KIN</div></div>
+        <span class="menu-arrow">→</span>
+      </a>
+      <a href="#" class="menu-item">
+        <div class="menu-icon life"><svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 00-8.49-8.49L5 10.5V19h8.5zM16 8L2 22M17.5 15H9"/></svg></div>
+        <div class="menu-info"><div class="menu-title">我的投稿</div><div class="menu-sub">SUBMITTED · STORIES</div></div>
+        <span class="menu-arrow">→</span>
+      </a>
+      <a href="settings.html" class="menu-item">
+        <div class="menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1z"/></svg></div>
+        <div class="menu-info"><div class="menu-title">设置</div><div class="menu-sub">REMINDERS · THEME · PRIVACY</div></div>
+        <span class="menu-arrow">→</span>
+      </a>
+      <a href="#" class="menu-item">
+        <div class="menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></div>
+        <div class="menu-info"><div class="menu-title">关于我们</div><div class="menu-sub">YOUR DAYS DESERVE TO BE REMEMBERED</div></div>
+        <span class="menu-arrow">→</span>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

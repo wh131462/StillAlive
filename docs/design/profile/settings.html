@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>设置 · 还活着</title>
+  <link rel="stylesheet" href="../shared/breathe.css">
+  <script src="../shared/theme.js"></script>
+  <style>
+    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 40px; }
+    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: center; }
+    .back { background: none; border: none; color: var(--ink-faint); font-size: 14px; }
+    .top-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--ink); text-transform: uppercase; }
+    #theme-toggle { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
+    #theme-toggle::before { content: '🌙'; font-size: 13px; }
+    html.dark #theme-toggle::before { content: '☀'; }
+    h1.title { font-family: var(--font-display); font-style: italic; font-size: 36px; margin: 32px 0 4px; line-height: 1.1; }
+    h1.title .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 24px; margin-top: 4px; }
+    .section-t { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin-top: 32px; margin-bottom: 0; }
+    .group { border-top: 1px solid var(--line); margin-top: 12px; }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .row-info h3 { font-size: 14px; margin: 0 0 2px; }
+    .row-info p { font-size: 10px; color: var(--ink-faint); margin: 0; font-family: var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; }
+    .toggle-sw { width: 44px; height: 24px; background: var(--life); border-radius: 12px; padding: 2px; flex-shrink: 0; }
+    .toggle-sw .dot { width: 20px; height: 20px; background: var(--bg); border-radius: 50%; margin-left: 20px; }
+    .toggle-sw.off { background: var(--line); }
+    .toggle-sw.off .dot { margin-left: 0; }
+    .val { font-family: var(--font-mono); font-size: 13px; color: var(--life); letter-spacing: 0.1em; }
+    .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .theme-opt { padding: 14px 8px; text-align: center; border: 1px solid var(--line); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.3s; }
+    .theme-opt.active { background: var(--life-soft); border-color: var(--life); color: var(--life); }
+    .theme-opt .ico { font-size: 18px; display: block; margin-bottom: 6px; }
+    .menu-item { display: flex; justify-content: space-between; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--line); transition: padding 0.3s; }
+    .menu-item:hover { padding-left: 8px; }
+    .menu-item h3 { font-size: 14px; margin: 0 0 2px; }
+    .menu-item p { font-size: 10px; color: var(--ink-faint); margin: 0; font-family: var(--font-mono); letter-spacing: 0.05em; }
+    .logout { margin-top: 32px; padding: 16px; width: 100%; border: 1px solid #c44; background: transparent; color: #c44; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; text-align: center; transition: all 0.3s; }
+    .logout:hover { background: #c44; color: var(--bg); }
+    .version { text-align: center; margin-top: 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); }
+  </style>
+</head>
+<body class="grain">
+  <div class="frame">
+    <div class="top"><a href="index.html" class="back">&larr; Back</a><span class="top-title">SETTINGS</span><button id="theme-toggle" aria-label="theme"></button></div>
+    <h1 class="title fade-up fade-up-1">Settings<span class="zh">设置</span></h1>
+
+    <div class="section-t">REMINDER · 打卡提醒</div>
+    <div class="group fade-up fade-up-2">
+      <div class="row"><div class="row-info"><h3>每日提醒</h3><p>DAILY NOTIFICATION</p></div><div class="toggle-sw"><div class="dot"></div></div></div>
+      <div class="row"><div class="row-info"><h3>提醒时间</h3><p>PUSH · LOCAL / WECHAT / BROWSER</p></div><span class="val">21:00</span></div>
+    </div>
+
+    <div class="section-t">APPEARANCE · 外观</div>
+    <div class="themes fade-up fade-up-3">
+      <div class="theme-opt"><span class="ico">☀</span>LIGHT</div>
+      <div class="theme-opt"><span class="ico">🌙</span>DARK</div>
+      <div class="theme-opt active"><span class="ico">◐</span>SYSTEM</div>
+    </div>
+
+    <div class="section-t">NOTIFICATIONS · 通知</div>
+    <div class="group fade-up fade-up-4">
+      <div class="row"><div class="row-info"><h3>生日提醒</h3></div><div class="toggle-sw"><div class="dot"></div></div></div>
+      <div class="row"><div class="row-info"><h3>里程碑通知</h3></div><div class="toggle-sw"><div class="dot"></div></div></div>
+      <div class="row"><div class="row-info"><h3>投稿审核</h3></div><div class="toggle-sw off"><div class="dot"></div></div></div>
+    </div>
+
+    <div class="section-t">DATA &amp; PRIVACY · 数据</div>
+    <div class="group fade-up fade-up-5">
+      <a href="#" class="menu-item"><div><h3>数据备份</h3><p>EXPORT ALL DATA</p></div><span style="color:var(--ink-faint)">→</span></a>
+      <a href="#" class="menu-item"><div><h3>清除缓存</h3><p>12.3 MB</p></div><span style="color:var(--ink-faint)">→</span></a>
+    </div>
+
+    <div class="section-t">HELP · 帮助</div>
+    <div class="group fade-up fade-up-6">
+      <a href="#" class="menu-item"><div><h3>帮助与反馈</h3></div><span style="color:var(--ink-faint)">→</span></a>
+      <a href="#" class="menu-item"><div><h3>用户协议</h3></div><span style="color:var(--ink-faint)">→</span></a>
+      <a href="#" class="menu-item"><div><h3>隐私政策</h3></div><span style="color:var(--ink-faint)">→</span></a>
+    </div>
+
+    <button class="logout fade-up fade-up-6">LOG OUT · 退出登录</button>
+    <p class="version">v3.0 · YOUR DAYS DESERVE TO BE REMEMBERED</p>
+  </div>
+</body>
+</html>

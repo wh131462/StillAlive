@@ -1,148 +1,246 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>今天又活了一天 - 设计原型</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .float-animation {
-            animation: float 3s ease-in-out infinite;
-        }
-        .card-hover {
-            transition: all 0.3s ease;
-        }
-        .card-hover:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        }
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .coming-soon {
-            position: relative;
-            overflow: hidden;
-        }
-        .coming-soon::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(2px);
-            z-index: 1;
-        }
-        .coming-soon-badge {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 2;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>还活着 · Still Alive</title>
+  <link rel="stylesheet" href="shared/breathe.css">
+  <script src="shared/theme.js"></script>
+  <style>
+    body { min-height: 100vh; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 80px 48px 120px; }
+
+    /* Hero — typography as the hero */
+    .hero { padding: 80px 0 120px; position: relative; }
+    .hero-mark {
+      position: absolute; top: 80px; right: 48px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--ink-faint);
+    }
+    .hero h1 {
+      font-family: var(--font-display); font-style: italic; font-weight: 400;
+      font-size: clamp(64px, 12vw, 168px); line-height: 0.95; margin: 0;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 .zh {
+      display: block; font-family: var(--font-body); font-style: normal; font-weight: 700;
+      font-size: clamp(48px, 9vw, 128px); margin-top: 8px; letter-spacing: 0.02em;
+    }
+    .hero h1 .zh em {
+      font-style: normal; color: var(--life); font-weight: 700;
+      position: relative;
+    }
+    .hero h1 .zh em::after {
+      content: ''; position: absolute; bottom: 8px; left: 0; right: 0; height: 6px;
+      background: var(--life-soft); z-index: -1;
+    }
+    .hero-sub {
+      margin-top: 48px; max-width: 520px; font-size: 17px; line-height: 1.9;
+      color: var(--ink-soft);
+    }
+
+    .heartbeat {
+      position: absolute; bottom: 40px; left: 0; width: 100%;
+      pointer-events: none; opacity: 0.5;
+    }
+    .heartbeat svg { width: 100%; height: 60px; }
+    .heartbeat path {
+      stroke: var(--life); stroke-width: 1.5; fill: none;
+      stroke-dasharray: 1200; stroke-dashoffset: 1200;
+      animation: draw 4s var(--ease-breath) infinite;
+    }
+    @keyframes draw {
+      0% { stroke-dashoffset: 1200; }
+      40%, 60% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: -1200; }
+    }
+
+    /* Module index */
+    .modules { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+    .module {
+      padding: 48px 0; border-bottom: 1px solid var(--line);
+      position: relative; transition: padding 0.4s var(--ease-out);
+    }
+    .module:nth-child(odd) { padding-right: 48px; border-right: 1px solid var(--line); }
+    .module:nth-child(even) { padding-left: 48px; }
+    .module-num {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em;
+      color: var(--ink-faint); margin-bottom: 16px;
+    }
+    .module h2 {
+      font-family: var(--font-display); font-style: italic; font-weight: 400;
+      font-size: 36px; margin: 0 0 4px; letter-spacing: -0.01em;
+    }
+    .module h2 .zh {
+      font-family: var(--font-body); font-style: normal; font-weight: 700;
+      font-size: 28px; display: block; margin-top: 4px;
+    }
+    .module p { color: var(--ink-soft); font-size: 14px; margin: 16px 0 24px; max-width: 360px; }
+    .module-links { display: flex; flex-direction: column; gap: 2px; }
+    .module-links a {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; font-size: 14px; color: var(--ink);
+      border-top: 1px dashed var(--line);
+      transition: color 0.3s, padding 0.3s;
+    }
+    .module-links a:first-child { border-top: 1px solid var(--line); }
+    .module-links a::after { content: '→'; color: var(--ink-faint); transition: transform 0.3s, color 0.3s; }
+    .module-links a:hover { color: var(--life); padding-left: 8px; }
+    .module-links a:hover::after { color: var(--life); transform: translateX(4px); }
+
+    /* Theme toggle — minimal */
+    #theme-toggle {
+      position: fixed; top: 32px; right: 48px; z-index: 100;
+      width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line);
+      background: var(--surface); color: var(--ink); font-size: 16px;
+      transition: transform 0.4s var(--ease-breath), background 0.6s, border-color 0.6s;
+    }
+    #theme-toggle:hover { transform: rotate(180deg); }
+    #theme-toggle::before { content: '🌙'; }
+    html.dark #theme-toggle::before { content: '☀'; }
+
+    /* Footer */
+    footer {
+      margin-top: 80px; padding-top: 48px; border-top: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: end;
+    }
+    footer .stamp {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em;
+      color: var(--ink-faint); text-transform: uppercase; line-height: 2;
+    }
+    footer .quote {
+      font-family: var(--font-display); font-style: italic; font-size: 14px;
+      color: var(--ink-soft); max-width: 280px; text-align: right; line-height: 1.7;
+    }
+
+    @media (max-width: 720px) {
+      .container { padding: 56px 24px 80px; }
+      #theme-toggle { top: 20px; right: 20px; width: 40px; height: 40px; }
+      .hero { padding: 40px 0 80px; }
+      .hero-mark { top: 32px; right: 24px; }
+      .modules { grid-template-columns: 1fr; }
+      .module:nth-child(odd) { padding-right: 0; border-right: none; }
+      .module:nth-child(even) { padding-left: 0; }
+      footer { flex-direction: column; gap: 24px; align-items: start; }
+      footer .quote { text-align: left; }
+    }
+  </style>
 </head>
-<body class="min-h-screen gradient-bg">
-    <!-- Header -->
-    <header class="pt-12 pb-8 text-center">
-        <div class="inline-flex items-center justify-center w-20 h-20 bg-white/20 rounded-2xl mb-6 float-animation">
-            <i class="fa-solid fa-heart-pulse text-white text-4xl"></i>
-        </div>
-        <h1 class="text-4xl font-bold text-white mb-3">今天又活了一天</h1>
-        <p class="text-white/80 text-lg">设计原型展示</p>
+<body class="grain">
+
+  <button id="theme-toggle" aria-label="主题切换"></button>
+
+  <div class="container">
+
+    <header class="hero">
+      <span class="hero-mark fade-up">PRD v3.0 · 设计稿索引</span>
+
+      <h1 class="fade-up fade-up-1">
+        <span>Still</span>
+        <span class="zh">还<em>活</em>着</span>
+      </h1>
+
+      <p class="hero-sub fade-up fade-up-2">
+        以"生存确认"和"记忆沉淀"为核心的多端打卡应用。<br>
+        本目录索引覆盖账户、主页、打卡、人物、故事、个人六大模块的全部页面，<br>
+        支持<strong style="color:var(--ink)">浅色 / 深色</strong>主题切换。
+      </p>
+
+      <div class="heartbeat" aria-hidden="true">
+        <svg viewBox="0 0 1200 60" preserveAspectRatio="none">
+          <path d="M0 30 L 200 30 L 240 30 L 260 10 L 280 50 L 300 5 L 320 55 L 340 30 L 600 30 L 640 30 L 660 10 L 680 50 L 700 5 L 720 55 L 740 30 L 1200 30"/>
+        </svg>
+      </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="max-w-5xl mx-auto px-6 pb-16">
-        <div class="grid md:grid-cols-3 gap-6">
+    <section class="modules">
 
-            <!-- Mobile App -->
-            <a href="./app/" class="block">
-                <div class="bg-white rounded-2xl overflow-hidden card-hover cursor-pointer">
-                    <div class="bg-gradient-to-br from-emerald-400 to-cyan-500 p-8 text-center">
-                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                            <i class="fa-solid fa-mobile-screen text-white text-3xl"></i>
-                        </div>
-                        <h2 class="text-white text-xl font-bold">移动端 App</h2>
-                    </div>
-                    <div class="p-6">
-                        <p class="text-slate-600 text-sm mb-4">iOS / Android 移动应用原型设计，包含打卡、记录、人物管理等核心功能。</p>
-                        <div class="flex items-center justify-between">
-                            <span class="inline-flex items-center text-emerald-600 text-sm font-medium">
-                                <span class="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
-                                已完成
-                            </span>
-                            <i class="fa-solid fa-arrow-right text-slate-400"></i>
-                        </div>
-                    </div>
-                </div>
-            </a>
-
-            <!-- Desktop App -->
-            <a href="./desktop/" class="block">
-                <div class="bg-white rounded-2xl overflow-hidden card-hover cursor-pointer">
-                    <div class="bg-gradient-to-br from-indigo-400 to-purple-500 p-8 text-center">
-                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                            <i class="fa-solid fa-desktop text-white text-3xl"></i>
-                        </div>
-                        <h2 class="text-white text-xl font-bold">桌面端</h2>
-                    </div>
-                    <div class="p-6">
-                        <p class="text-slate-600 text-sm mb-4">Windows / macOS 桌面客户端原型设计，提供更丰富的数据展示与管理能力。</p>
-                        <div class="flex items-center justify-between">
-                            <span class="inline-flex items-center text-indigo-600 text-sm font-medium">
-                                <span class="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
-                                已完成
-                            </span>
-                            <i class="fa-solid fa-arrow-right text-slate-400"></i>
-                        </div>
-                    </div>
-                </div>
-            </a>
-
-            <!-- Mini Program -->
-            <a href="./miniprogram/" class="block">
-                <div class="bg-white rounded-2xl overflow-hidden card-hover cursor-pointer">
-                    <div class="bg-gradient-to-br from-green-400 to-emerald-600 p-8 text-center">
-                        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                            <i class="fa-brands fa-weixin text-white text-3xl"></i>
-                        </div>
-                        <h2 class="text-white text-xl font-bold">微信小程序</h2>
-                    </div>
-                    <div class="p-6">
-                        <p class="text-slate-600 text-sm mb-4">微信小程序原型设计，无需下载即可使用，方便快捷的打卡体验。</p>
-                        <div class="flex items-center justify-between">
-                            <span class="inline-flex items-center text-emerald-600 text-sm font-medium">
-                                <span class="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
-                                已完成
-                            </span>
-                            <i class="fa-solid fa-arrow-right text-slate-400"></i>
-                        </div>
-                    </div>
-                </div>
-            </a>
-
+      <div class="module fade-up fade-up-3">
+        <div class="module-num">01 / Account</div>
+        <h2>Identity<span class="zh">账户</span></h2>
+        <p>登录、注册、密码找回。每一次进入，都是一次确认存在的仪式。</p>
+        <div class="module-links">
+          <a href="auth/login.html">登录</a>
+          <a href="auth/register.html">注册</a>
+          <a href="auth/forgot.html">忘记密码</a>
         </div>
+      </div>
 
-        <!-- Footer Info -->
-        <div class="mt-12 text-center">
-            <div class="inline-flex items-center bg-white/10 backdrop-blur rounded-full px-6 py-3">
-                <i class="fa-solid fa-code text-white/60 mr-3"></i>
-                <span class="text-white/80 text-sm">点击卡片查看对应平台的设计原型</span>
-            </div>
+      <div class="module fade-up fade-up-3">
+        <div class="module-num">02 / Pulse</div>
+        <h2>Home<span class="zh">主页</span></h2>
+        <p>核心仪表盘。生存状态、快速打卡、生日提醒、信息差与故事入口。</p>
+        <div class="module-links">
+          <a href="home/index.html">主页 · 今日</a>
         </div>
-    </main>
+      </div>
 
-    <!-- Version -->
-    <footer class="text-center pb-8">
-        <p class="text-white/50 text-sm">Design Prototype v1.0.0</p>
+      <div class="module fade-up fade-up-4">
+        <div class="module-num">03 / Days</div>
+        <h2>Check-in<span class="zh">打卡</span></h2>
+        <p>每日生存确认。日历、意义记录、补签、连续打卡里程碑。</p>
+        <div class="module-links">
+          <a href="checkin/index.html">日历总览</a>
+          <a href="checkin/record.html">意义记录</a>
+          <a href="checkin/milestone.html">里程碑</a>
+        </div>
+      </div>
+
+      <div class="module fade-up fade-up-4">
+        <div class="module-num">04 / Bonds</div>
+        <h2>People<span class="zh">人物</span></h2>
+        <p>对自己重要的人。情感档案、生日提醒、共同经历。</p>
+        <div class="module-links">
+          <a href="person/list.html">人物列表</a>
+          <a href="person/detail.html">人物详情</a>
+        </div>
+      </div>
+
+      <div class="module fade-up fade-up-5">
+        <div class="module-num">05 / Voices</div>
+        <h2>Stories<span class="zh">故事</span></h2>
+        <p>来自仍在的人。匿名收录"差点就没了，但我现在还活着"的瞬间。</p>
+        <div class="module-links">
+          <a href="story/list.html">故事流</a>
+          <a href="story/detail.html">故事详情</a>
+          <a href="story/submit.html">投稿</a>
+        </div>
+      </div>
+
+      <div class="module fade-up fade-up-5">
+        <div class="module-num">06 / Self</div>
+        <h2>Mine<span class="zh">个人</span></h2>
+        <p>个人档案、数据统计、热力图、死亡确认与所有设置。</p>
+        <div class="module-links">
+          <a href="profile/index.html">我的</a>
+          <a href="profile/death-confirm.html">死亡确认</a>
+          <a href="profile/settings.html">设置</a>
+        </div>
+      </div>
+
+      <div class="module fade-up fade-up-6" style="grid-column:1 / -1;border-right:none;padding:48px 0">
+        <div class="module-num">07 / Web</div>
+        <h2>Desktop<span class="zh">Web 端独立路由</span></h2>
+        <p>桌面宽屏布局。<code style="font-family:var(--font-mono);background:var(--bg-subtle);padding:2px 6px;border-radius:3px;font-size:13px">/stories</code> 故事流首页，支持 SEO 与未登录访问。</p>
+        <div class="module-links" style="max-width:480px">
+          <a href="web/stories.html">桌面端故事流</a>
+        </div>
+      </div>
+
+    </section>
+
+    <footer>
+      <div class="stamp">
+        Designed with breath<br>
+        2026 · Hangzhou<br>
+        v3.0 — interface as a quiet companion
+      </div>
+      <div class="quote">
+        "活着的意义，<br>不在于活了多久，<br>而在于我们如何被记得，<br>又记得了谁。"
+      </div>
     </footer>
+
+  </div>
+
 </body>
 </html>

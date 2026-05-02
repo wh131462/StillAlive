@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="sa-tab" content="home">
+  <title>今日 · 还活着</title>
+  <link rel="stylesheet" href="../shared/breathe.css">
+  <script src="../shared/theme.js"></script>
+  <script src="../shared/nav.js"></script>
+  <style>
+    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 96px; }
+    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: start; }
+    .top-date { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; line-height: 1.6; }
+    #theme-toggle {
+      width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line);
+      background: var(--surface); transition: all 0.4s var(--ease-breath);
+    }
+    #theme-toggle::before { content: '🌙'; font-size: 13px; }
+    html.dark #theme-toggle::before { content: '☀'; }
+
+    /* Hero — The Question */
+    .question { text-align: center; padding: 56px 0 32px; }
+    .question h1 {
+      font-family: var(--font-body); font-weight: 700;
+      font-size: 48px; line-height: 1.1; margin: 0;
+      letter-spacing: 0.02em;
+    }
+    .question h1 .life { color: var(--life); position: relative; }
+    .question .en {
+      display: block; font-family: var(--font-display); font-style: italic; font-weight: 400;
+      font-size: 18px; color: var(--ink-faint); margin-top: 12px; letter-spacing: 0.05em;
+    }
+    .streak {
+      margin-top: 40px; display: flex; flex-direction: column; align-items: center;
+    }
+    .streak-num {
+      font-family: var(--font-display); font-size: 96px; line-height: 1;
+      letter-spacing: -0.04em; color: var(--ink); animation: drift 4s var(--ease-breath) infinite;
+    }
+    .streak-label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.3em;
+      color: var(--ink-faint); text-transform: uppercase; margin-top: 8px;
+    }
+
+    /* Heartbeat line */
+    .heartline { width: 100%; height: 40px; margin: 40px 0 8px; opacity: 0.4; }
+    .heartline path { stroke: var(--life); stroke-width: 1.5; fill: none; stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw 3s var(--ease-breath) infinite; }
+    @keyframes draw { 0%{stroke-dashoffset:600} 40%,60%{stroke-dashoffset:0} 100%{stroke-dashoffset:-600} }
+
+    /* CTA button */
+    .cta {
+      width: 100%; padding: 20px; margin-top: 16px;
+      background: var(--life); color: var(--bg); border: none; border-radius: 0;
+      font-family: var(--font-display); font-style: italic; font-size: 18px;
+      letter-spacing: 0.06em; transition: transform 0.4s var(--ease-breath), box-shadow 0.4s;
+      animation: breathe-glow 3s var(--ease-breath) infinite;
+      position: relative; overflow: hidden;
+    }
+    .cta:hover { transform: scale(1.02); }
+    .cta .zh { font-family: var(--font-body); font-style: normal; font-weight: 700; }
+
+    /* Sections */
+    .section { margin-top: 56px; }
+    .section-head {
+      display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;
+    }
+    .section-title {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em;
+      color: var(--ink-faint); text-transform: uppercase;
+    }
+    .section-more {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em;
+      color: var(--ink-faint); transition: color 0.3s;
+    }
+    .section-more:hover { color: var(--life); }
+
+    /* Birthday card */
+    .birthday {
+      border: 1px solid var(--line); padding: 20px;
+      display: flex; align-items: center; gap: 16px;
+      transition: border-color 0.3s;
+    }
+    .birthday:hover { border-color: var(--life); }
+    .birthday-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--life), #e8a838);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-body); font-weight: 700; color: var(--bg); font-size: 18px;
+      flex-shrink: 0;
+    }
+    .birthday-info { flex: 1; }
+    .birthday-name { font-weight: 700; font-size: 15px; }
+    .birthday-name .tag { color: var(--life); }
+    .birthday-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+    .birthday-arrow { color: var(--ink-faint); font-size: 12px; }
+
+    /* Quote */
+    .quote-card {
+      border-left: 2px solid var(--life);
+      padding: 24px 24px 24px 28px;
+      background: var(--bg-subtle);
+      margin-top: 0;
+    }
+    .quote-card blockquote {
+      font-family: var(--font-display); font-style: italic;
+      font-size: 17px; line-height: 1.8; margin: 0; color: var(--ink);
+    }
+    .quote-card .src {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em;
+      color: var(--ink-faint); margin-top: 16px; text-transform: uppercase;
+    }
+
+    /* Record quick-entry */
+    .record-quick { border: 1px solid var(--line); padding: 24px; margin-top: 0; }
+    .record-quick textarea {
+      width: 100%; border: none; background: transparent; outline: none;
+      font-size: 15px; color: var(--ink); resize: none; line-height: 1.8;
+      min-height: 80px;
+    }
+    .record-quick textarea::placeholder { color: var(--ink-faint); font-style: italic; font-family: var(--font-display); }
+    .record-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+    .record-tools { display: flex; gap: 12px; }
+    .record-tools button { background: none; border: none; color: var(--ink-faint); padding: 4px; cursor: pointer; transition: color 0.3s; }
+    .record-tools button:hover { color: var(--life); }
+    .record-save {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em;
+      text-transform: uppercase; background: var(--ink); color: var(--bg);
+      border: none; padding: 8px 20px;
+    }
+
+    /* Story preview */
+    .story-preview { border: 1px solid var(--line); padding: 28px; margin-top: 0; }
+    .story-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 16px; }
+    .story-body {
+      font-family: var(--font-display); font-style: italic;
+      font-size: 16px; line-height: 1.85; color: var(--ink);
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .story-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
+    .resonance { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.1em; display: flex; align-items: center; gap: 6px; }
+    .resonance svg { width: 14px; height: 14px; stroke: var(--life); }
+    .read-more { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; color: var(--life); text-transform: uppercase; }
+  </style>
+</head>
+<body class="grain">
+
+  <div class="frame">
+
+    <div class="top">
+      <div class="top-date fade-up">
+        2026 · MAY 01 · FRIDAY<br>
+        <span style="color:var(--life)">Day 127</span>
+      </div>
+      <button id="theme-toggle" aria-label="theme"></button>
+    </div>
+
+    <!-- The Question -->
+    <div class="question">
+      <h1 class="fade-up fade-up-1">还<span class="life">活</span>着吗？</h1>
+      <span class="en fade-up fade-up-2">Are you still alive?</span>
+
+      <div class="streak fade-up fade-up-3">
+        <span class="streak-num">127</span>
+        <span class="streak-label">consecutive days · 连续打卡</span>
+      </div>
+    </div>
+
+    <svg class="heartline fade-up fade-up-3" viewBox="0 0 600 40" preserveAspectRatio="none">
+      <path d="M0 20 L100 20 L120 20 L130 5 L140 35 L150 2 L160 38 L170 20 L300 20 L320 20 L330 5 L340 35 L350 2 L360 38 L370 20 L600 20"/>
+    </svg>
+
+    <button class="cta fade-up fade-up-4" onclick="window.location.href='../checkin/record.html'">
+      Confirm · <span class="zh">确认存活，记下今天</span>
+    </button>
+
+    <!-- Birthday -->
+    <div class="section fade-up fade-up-5">
+      <div class="section-head">
+        <span class="section-title">TODAY · 今日提醒</span>
+      </div>
+      <a href="../person/detail.html" class="birthday">
+        <div class="birthday-avatar">妈</div>
+        <div class="birthday-info">
+          <div class="birthday-name">今天是<span class="tag">「妈妈」</span>的生日</div>
+          <div class="birthday-sub">她今年 56 岁了，给她打个电话吧</div>
+        </div>
+        <span class="birthday-arrow">→</span>
+      </a>
+    </div>
+
+    <!-- Daily quote -->
+    <div class="section fade-up fade-up-5">
+      <div class="section-head">
+        <span class="section-title">DAILY · 每日信息差</span>
+      </div>
+      <div class="quote-card">
+        <blockquote>"活着的意义，不在于我们活了多久，而在于我们如何被记得，又记得了谁。"</blockquote>
+        <div class="src">— 人间清醒</div>
+      </div>
+    </div>
+
+    <!-- Quick record -->
+    <div class="section fade-up fade-up-6">
+      <div class="section-head">
+        <span class="section-title">RECORD · 今天有意义的事</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--ink-faint)">0 / 200</span>
+      </div>
+      <div class="record-quick">
+        <textarea placeholder="What made today meaningful?&#10;今天让你心头一动的瞬间..."></textarea>
+        <div class="record-actions">
+          <div class="record-tools">
+            <button title="照片">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+            </button>
+            <button title="心情">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M9 14s1 2 3 2 3-2 3-2"/></svg>
+            </button>
+          </div>
+          <button class="record-save">SAVE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Story preview -->
+    <div class="section fade-up fade-up-6">
+      <div class="section-head">
+        <span class="section-title">VOICES · 来自仍在的人</span>
+        <a href="../story/list.html" class="section-more">MORE →</a>
+      </div>
+      <a href="../story/detail.html" class="story-preview" style="display:block">
+        <div class="story-meta">2024 WINTER · 意外与事故</div>
+        <div class="story-body">车在结冰的山路上滑出去三十米，最后只是撞上了路边的护栏。下车那一刻，我看见月亮挂在松树上，像很久没见的老朋友。我想，原来活着是这样的感觉。</div>
+        <div class="story-foot">
+          <span class="resonance">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+            1,243
+          </span>
+          <span class="read-more">READ →</span>
+        </div>
+      </a>
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,152 @@
+/*
+ * Still Alive — Design System "Breathe"
+ * 一切以呼吸的节奏（1.5s）为基础
+ */
+
+/* --- Fonts (LXGW WenKai from Google) + Playfair Display --- */
+@import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai:wght@300;400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  /* Core Palette — Day (exhale) */
+  --bg: #FAF8F5;
+  --bg-subtle: #F2EDE7;
+  --surface: #FFFFFF;
+  --ink: #1A1A1A;
+  --ink-soft: #6B6B6B;
+  --ink-faint: #ACACAC;
+  --line: #E8E0D8;
+  --life: #C24D2C;           /* heartbeat red — the only accent */
+  --life-soft: rgba(194,77,44,0.12);
+  --life-glow: rgba(194,77,44,0.25);
+  --green: #5A8F6E;          /* quiet growth */
+  --green-soft: rgba(90,143,110,0.12);
+
+  /* Night (inhale) */
+  --dark-bg: #0D0F14;
+  --dark-bg-subtle: #161920;
+  --dark-surface: #1C1F28;
+  --dark-ink: #E8E4DF;
+  --dark-ink-soft: #9A9590;
+  --dark-ink-faint: #5A5754;
+  --dark-line: #2A2D36;
+  --dark-life: #E8A838;       /* amber glow in the dark */
+  --dark-life-soft: rgba(232,168,56,0.12);
+  --dark-life-glow: rgba(232,168,56,0.2);
+
+  /* Typography */
+  --font-body: 'LXGW WenKai', 'Noto Serif SC', Georgia, serif;
+  --font-display: 'Playfair Display', 'LXGW WenKai', serif;
+  --font-mono: 'SF Mono', 'Fira Code', monospace;
+
+  /* Rhythm */
+  --breath: 1.5s;
+  --ease-breath: cubic-bezier(0.45, 0, 0.15, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* Apply theme variables */
+html {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  --bg: var(--dark-bg);
+  --bg-subtle: var(--dark-bg-subtle);
+  --surface: var(--dark-surface);
+  --ink: var(--dark-ink);
+  --ink-soft: var(--dark-ink-soft);
+  --ink-faint: var(--dark-ink-faint);
+  --line: var(--dark-line);
+  --life: var(--dark-life);
+  --life-soft: var(--dark-life-soft);
+  --life-glow: var(--dark-life-glow);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  transition: background 0.6s var(--ease-breath), color 0.6s var(--ease-breath);
+}
+
+* { box-sizing: border-box; }
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+input, textarea, select { font-family: inherit; }
+
+/* --- Animations --- */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes breathe-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--life-glow); }
+  50% { box-shadow: 0 0 40px 10px var(--life-glow); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pulse-line {
+  0% { transform: scaleX(0); transform-origin: left; }
+  50% { transform: scaleX(1); transform-origin: left; }
+  50.01% { transform-origin: right; }
+  100% { transform: scaleX(0); transform-origin: right; }
+}
+
+.animate-breathe { animation: breathe var(--breath) var(--ease-breath) infinite; }
+.animate-breathe-glow { animation: breathe-glow calc(var(--breath) * 2) var(--ease-breath) infinite; }
+.animate-drift { animation: drift 4s var(--ease-breath) infinite; }
+
+.fade-up {
+  animation: fade-up 0.8s var(--ease-out) both;
+}
+.fade-up-1 { animation-delay: 0.1s; }
+.fade-up-2 { animation-delay: 0.2s; }
+.fade-up-3 { animation-delay: 0.35s; }
+.fade-up-4 { animation-delay: 0.5s; }
+.fade-up-5 { animation-delay: 0.65s; }
+.fade-up-6 { animation-delay: 0.8s; }
+
+/* --- Utilities --- */
+.font-display { font-family: var(--font-display); }
+.text-life { color: var(--life); }
+.bg-life { background: var(--life); }
+.bg-life-soft { background: var(--life-soft); }
+.text-ink-soft { color: var(--ink-soft); }
+.text-ink-faint { color: var(--ink-faint); }
+.bg-surface { background: var(--surface); }
+.border-line { border-color: var(--line); }
+
+/* Grain overlay for texture */
+.grain::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px;
+}
+
+html.dark .grain::before { opacity: 0.06; }
