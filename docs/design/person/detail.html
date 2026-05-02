@@ -3,30 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>妈妈 · 人物详情 · 还活着</title>
+  <title data-i18n-title-key="person_title">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <style>
-    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 40px; }
+    .frame {
+      width: 100%; max-width: 430px; margin: 0 auto;
+      min-height: 100vh; padding: 0 24px 40px;
+    }
+    @media (min-width: 768px) { .frame { max-width: 720px; padding: 0 40px 60px; } }
+    @media (min-width: 1024px) { .frame { max-width: 960px; padding: 0 48px 80px; } }
 
-    /* Header banner */
+    /* Banner */
     .banner {
-      position: relative; margin: 0 -28px; padding: 32px 28px 80px;
+      position: relative; margin: 0 -24px; padding: 24px 24px 64px;
       background: linear-gradient(135deg, var(--life), #a83d20);
       overflow: hidden;
     }
+    @media (min-width: 768px) { .banner { margin: 0 -40px; padding: 24px 40px 80px; } }
+    @media (min-width: 1024px) { .banner { margin: 0 -48px; padding: 32px 48px 96px; } }
     html.dark .banner { background: linear-gradient(135deg, var(--surface), #1c1f28); border-bottom: 1px solid var(--line); }
     .banner-circle { position: absolute; top: -80px; right: -60px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.08); }
-    .banner-top { display: flex; justify-content: space-between; position: relative; z-index: 2; }
-    .back { background: none; border: none; color: rgba(255,255,255,0.7); font-size: 14px; }
+    .banner-top { display: flex; justify-content: space-between; position: relative; z-index: 2; align-items: center; }
+    .back { background: none; border: none; color: rgba(255,255,255,0.7); font-size: 14px; cursor: pointer; }
     html.dark .back { color: var(--ink-faint); }
     .banner-tools { display: flex; gap: 8px; }
-    .banner-tools button { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; color: white; }
+    .banner-tools button { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.15); border: none; color: white; cursor: pointer; }
     html.dark .banner-tools button { background: var(--bg-subtle); color: var(--ink-soft); border: 1px solid var(--line); }
-    #theme-toggle::before { content: '🌙'; font-size: 13px; }
-    html.dark #theme-toggle::before { content: '☀'; }
+    #lang-toggle { background: rgba(255,255,255,0.15); color: white; border: none; }
+    html.dark #lang-toggle { background: var(--bg-subtle); color: var(--ink-soft); border: 1px solid var(--line); }
 
-    /* Avatar — protruding from banner */
+    /* Avatar */
     .avatar-wrap { display: flex; justify-content: center; margin-top: -56px; position: relative; z-index: 5; }
     .avatar {
       width: 96px; height: 96px; border-radius: 50%;
@@ -38,24 +46,31 @@
 
     .name-block { text-align: center; margin-top: 20px; }
     .name-block h1 {
-      font-family: var(--font-body); font-weight: 700; font-size: 28px; margin: 0;
+      font-family: var(--font-body); font-weight: 700; font-size: 28px; margin: 0; letter-spacing: -0.005em;
     }
-    .name-tags { display: flex; gap: 8px; justify-content: center; margin-top: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .name-tags { display: flex; gap: 8px; justify-content: center; margin-top: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; flex-wrap: wrap; }
     .name-tag { padding: 4px 10px; border: 1px solid var(--line); color: var(--ink-soft); }
     .name-tag.life { color: var(--life); border-color: var(--life); }
 
-    /* Sections */
-    .section { margin-top: 40px; }
+    /* On desktop, use 2-column main layout */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+      margin-top: 32px;
+    }
+    @media (min-width: 1024px) {
+      .main { grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+    }
+
+    .section { }
     .section-t { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 16px; display: flex; justify-content: space-between; }
     .section-t a { color: var(--life); }
 
     .info-grid { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
-    .info-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 14px;
-    }
+    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 14px; gap: 12px; }
     .info-label { color: var(--ink-soft); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
-    .info-val { color: var(--ink); font-weight: 500; }
+    .info-val { color: var(--ink); font-weight: 500; text-align: right; }
     .mbti { padding: 4px 10px; background: var(--life-soft); color: var(--life); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.15em; }
 
     .impression {
@@ -71,7 +86,7 @@
 
     .date-item { display: flex; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
     .date-icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--life-soft); color: var(--life); font-size: 16px; flex-shrink: 0; }
-    .date-info { flex: 1; }
+    .date-info { flex: 1; min-width: 0; }
     .date-name { font-size: 14px; }
     .date-val { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.05em; margin-top: 2px; }
     .date-badge { font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; background: var(--life-soft); color: var(--life); letter-spacing: 0.1em; text-transform: uppercase; }
@@ -82,55 +97,81 @@
     <div class="banner">
       <div class="banner-circle"></div>
       <div class="banner-top">
-        <a href="list.html" class="back">← Back</a>
+        <a href="list.html" class="back" data-i18n="auth_back"></a>
         <div class="banner-tools">
-          <button title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
-          <button id="theme-toggle" aria-label="theme"></button>
+          <button data-i18n-title="person_edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+          <button id="lang-toggle"></button>
+          <button id="theme-toggle" data-i18n-aria="theme_toggle"></button>
         </div>
       </div>
     </div>
 
-    <div class="avatar-wrap"><div class="avatar fade-up">妈</div></div>
+    <div class="avatar-wrap"><div class="avatar fade-up" data-i18n="person_today_card_name"></div></div>
 
     <div class="name-block fade-up fade-up-1">
-      <h1>妈妈</h1>
+      <h1 data-i18n="person_today_card_name"></h1>
       <div class="name-tags">
-        <span class="name-tag life">FAMILY</span>
-        <span class="name-tag">FEMALE · ENFJ</span>
+        <span class="name-tag life" data-i18n="person_family"></span>
+        <span class="name-tag">ENFJ</span>
       </div>
     </div>
 
-    <div class="section fade-up fade-up-2">
-      <div class="section-t">Info · 基本信息</div>
-      <div class="info-grid">
-        <div class="info-row"><span class="info-label">Birthday</span><span class="info-val">1970·05·01 · 56 yrs</span></div>
-        <div class="info-row"><span class="info-label">MBTI</span><span class="mbti">ENFJ</span></div>
-        <div class="info-row"><span class="info-label">Theme</span><div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:50%;background:var(--life)"></span><span class="info-val" style="font-family:var(--font-mono);font-size:12px">#C24D2C</span></div></div>
-      </div>
-    </div>
+    <div class="main">
+      <div>
+        <div class="section fade-up fade-up-2">
+          <div class="section-t" data-i18n="person_info"></div>
+          <div class="info-grid">
+            <div class="info-row"><span class="info-label" data-i18n="person_birthday_label"></span><span class="info-val" data-i18n="person_birthday_value"></span></div>
+            <div class="info-row"><span class="info-label">MBTI</span><span class="mbti">ENFJ</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="person_theme_label"></span><div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:50%;background:var(--life)"></span><span class="info-val" style="font-family:var(--font-mono);font-size:12px">#C24D2C</span></div></div>
+          </div>
+        </div>
 
-    <div class="section fade-up fade-up-3">
-      <div class="section-t">Impression · 个人印象</div>
-      <div class="impression">永远在厨房忙碌的人。她不太会直接说爱，但每次回家，桌上永远多一道你随口提过的菜。她年纪大了开始用微信，学得很慢，但会给你发那些很模糊的风景照，下面写着"今天天气好"。</div>
-    </div>
-
-    <div class="section fade-up fade-up-4">
-      <div class="section-t">Memories · 共同经历<a href="#">+ ADD</a></div>
-      <div class="memory" style="border-left-color:var(--life)">
-        <div class="memory-date">2024 · SPRING FESTIVAL</div>
-        <div class="memory-text">一起包了 200 个饺子。她手快得像机器，我在一旁负责把馅料团歪。那天她笑了很多次。</div>
+        <div class="section fade-up fade-up-3" style="margin-top:32px">
+          <div class="section-t" data-i18n="person_impression"></div>
+          <div class="impression" data-i18n="person_impression_text"></div>
+        </div>
       </div>
-      <div class="memory" style="border-left-color:var(--green)">
-        <div class="memory-date">2023 · SEPTEMBER</div>
-        <div class="memory-text">带她去了第一次坐飞机，落地的时候她一直拍窗户外面，像个小孩。</div>
-      </div>
-    </div>
 
-    <div class="section fade-up fade-up-5">
-      <div class="section-t">Dates · 重要日期<a href="#">+ ADD</a></div>
-      <div class="date-item"><div class="date-icon">🎂</div><div class="date-info"><div class="date-name">生日</div><div class="date-val">05/01</div></div><span class="date-badge">TODAY</span></div>
-      <div class="date-item"><div class="date-icon">❤</div><div class="date-info"><div class="date-name">母亲节</div><div class="date-val">05 · 第二个周日</div></div><span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-faint)">+10 days</span></div>
+      <div>
+        <div class="section fade-up fade-up-4">
+          <div class="section-t"><span data-i18n="person_memories"></span><a href="#" data-i18n="person_add_memory"></a></div>
+          <div class="memory" style="border-left-color:var(--life)">
+            <div class="memory-date" data-i18n="person_memory_1_date"></div>
+            <div class="memory-text" data-i18n="person_memory_1_text"></div>
+          </div>
+          <div class="memory" style="border-left-color:var(--green)">
+            <div class="memory-date" data-i18n="person_memory_2_date"></div>
+            <div class="memory-text" data-i18n="person_memory_2_text"></div>
+          </div>
+        </div>
+
+        <div class="section fade-up fade-up-5" style="margin-top:32px">
+          <div class="section-t"><span data-i18n="person_dates"></span><a href="#" data-i18n="person_add_date"></a></div>
+          <div class="date-item">
+            <div class="date-icon">🎂</div>
+            <div class="date-info"><div class="date-name" data-i18n="person_birthday"></div><div class="date-val">05/01</div></div>
+            <span class="date-badge" data-i18n="person_today_badge"></span>
+          </div>
+          <div class="date-item">
+            <div class="date-icon">❤</div>
+            <div class="date-info"><div class="date-name" data-i18n="person_mothers_day"></div><div class="date-val" data-i18n="person_mothers_day_value"></div></div>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-faint)" data-i18n-html="true" data-i18n="person_days_left">+10 days</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
+
+  <script>
+    // Substitute {n} for the simple case
+    document.addEventListener('sa:lang', applyN);
+    applyN();
+    function applyN() {
+      var el = document.querySelector('[data-i18n="person_days_left"]');
+      if (!el || !window.SA) return;
+      el.textContent = window.SA.t('person_days_left', { n: 10 });
+    }
+  </script>
 </body>
 </html>

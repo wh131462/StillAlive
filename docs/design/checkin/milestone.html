@@ -3,21 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>里程碑 · 还活着</title>
+  <title data-i18n-title-key="milestone_tag">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <style>
     body { overflow-x: hidden; }
-    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px; display: flex; flex-direction: column; position: relative; }
-    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
-    .back { background: none; border: none; color: var(--ink-faint); font-size: 14px; }
-    #theme-toggle { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
-    #theme-toggle::before { content: '🌙'; font-size: 13px; }
-    html.dark #theme-toggle::before { content: '☀'; }
+    .frame {
+      width: 100%; max-width: 430px; margin: 0 auto; min-height: 100vh;
+      padding: 0 24px; display: flex; flex-direction: column; position: relative;
+    }
+    @media (min-width: 768px) { .frame { max-width: 720px; padding: 0 40px; } }
+    @media (min-width: 1024px) { .frame { max-width: 880px; padding: 0 48px; } }
 
-    .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 48px 0; position: relative; }
+    .top { padding: 24px 0 0; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+    .back { background: none; border: none; color: var(--ink-faint); font-size: 14px; cursor: pointer; }
+    .top-actions { display: flex; gap: 8px; }
 
-    /* Confetti dots */
+    .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 0; position: relative; }
+    @media (min-width: 768px) { .stage { padding: 56px 0; } }
+
     .dot { position: absolute; border-radius: 50%; opacity: 0; }
     .d1 { top: 20%; left: 15%; width: 8px; height: 8px; background: var(--life); animation: drop 2s var(--ease-out) 0.3s forwards; }
     .d2 { top: 25%; right: 20%; width: 6px; height: 6px; background: var(--green); animation: drop 2.2s var(--ease-out) 0.5s forwards; }
@@ -26,62 +31,51 @@
     .d5 { top: 22%; left: 35%; width: 7px; height: 7px; background: var(--green); animation: drop 2.1s var(--ease-out) 0.4s forwards; }
     @keyframes drop { 0%{opacity:0;transform:translateY(0) rotate(0)} 20%{opacity:1} 100%{opacity:0;transform:translateY(120px) rotate(360deg)} }
 
-    .badge {
-      position: relative; width: 200px; height: 200px;
-      animation: breathe 3s var(--ease-breath) infinite, drift 4s var(--ease-breath) infinite;
-    }
-    .badge-ring {
-      position: absolute; inset: 0; border-radius: 50%;
-      border: 1px solid var(--life);
-    }
+    .badge { position: relative; width: 180px; height: 180px; animation: breathe 3s var(--ease-breath) infinite, drift 4s var(--ease-breath) infinite; }
+    @media (min-width: 768px) { .badge { width: 220px; height: 220px; } }
+    .badge-ring { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--life); }
     .badge-ring.r2 { inset: -16px; opacity: 0.4; animation: breathe-glow 3s var(--ease-breath) infinite; }
     .badge-ring.r3 { inset: -32px; opacity: 0.2; }
-    .badge-num {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font-family: var(--font-display); font-size: 96px; color: var(--life); line-height: 1;
-    }
-    .badge-trophy {
-      position: absolute; top: -8px; right: -8px;
-      width: 40px; height: 40px; border-radius: 50%;
-      background: var(--life); color: var(--bg);
-      display: flex; align-items: center; justify-content: center;
-      animation: drift 2s var(--ease-breath) infinite;
-    }
+    .badge-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 88px; color: var(--life); line-height: 1; }
+    @media (min-width: 768px) { .badge-num { font-size: 112px; } }
+    .badge-trophy { position: absolute; top: -8px; right: -8px; width: 40px; height: 40px; border-radius: 50%; background: var(--life); color: var(--bg); display: flex; align-items: center; justify-content: center; animation: drift 2s var(--ease-breath) infinite; }
 
-    .stage-tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3em; color: var(--ink-faint); text-transform: uppercase; margin-top: 56px; }
-    .stage-h {
-      font-family: var(--font-body); font-weight: 700; font-size: 28px; line-height: 1.3;
-      margin: 16px 0 0; max-width: 280px;
-    }
+    .stage-tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3em; color: var(--ink-faint); text-transform: uppercase; margin-top: 48px; }
+    .stage-h { font-family: var(--font-body); font-weight: 700; font-size: 26px; line-height: 1.3; margin: 16px 0 0; max-width: 320px; }
+    @media (min-width: 768px) { .stage-h { font-size: 32px; max-width: 480px; } }
     .stage-en { font-family: var(--font-display); font-style: italic; color: var(--ink-soft); margin-top: 8px; font-size: 14px; }
 
     .stage-quote {
-      max-width: 320px; margin-top: 40px; padding: 24px 0;
+      max-width: 320px; margin-top: 32px; padding: 24px 0;
       font-family: var(--font-display); font-style: italic;
       color: var(--ink-soft); font-size: 15px; line-height: 1.85;
       border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
     }
+    @media (min-width: 768px) { .stage-quote { max-width: 480px; } }
 
-    /* Timeline of milestones */
     .timeline { margin-top: 48px; padding: 32px 0; border-top: 1px solid var(--line); }
     .timeline-h { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 20px; }
     .timeline-track { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+    @media (min-width: 1024px) { .timeline-track { justify-content: center; gap: 16px; } }
     .ms { flex-shrink: 0; padding: 16px 18px; min-width: 80px; text-align: center; border: 1px solid var(--line); }
     .ms.done { background: var(--green-soft); border-color: var(--green); color: var(--green); }
     .ms.now { background: var(--life-soft); border-color: var(--life); color: var(--life); box-shadow: 0 0 0 4px var(--life-glow); }
     .ms-num { font-family: var(--font-display); font-size: 24px; line-height: 1; }
-    .ms-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; margin-top: 4px; }
+    .ms-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; margin-top: 4px; text-transform: uppercase; }
 
     .next { padding: 24px 0 32px; }
-    .next a { display: block; padding: 18px; background: var(--ink); color: var(--bg); text-align: center; font-family: var(--font-display); font-style: italic; font-size: 16px; letter-spacing: 0.05em; transition: background 0.4s; }
+    .next a { display: block; padding: 18px; background: var(--ink); color: var(--bg); text-align: center; font-family: var(--font-body); font-weight: 700; font-size: 16px; letter-spacing: 0.04em; transition: background 0.4s; text-decoration: none; }
     .next a:hover { background: var(--life); }
   </style>
 </head>
 <body class="grain">
   <div class="frame">
     <div class="top">
-      <a href="index.html" class="back">← Back</a>
-      <button id="theme-toggle" aria-label="theme"></button>
+      <a href="index.html" class="back" data-i18n="auth_back"></a>
+      <div class="top-actions">
+        <button id="lang-toggle"></button>
+        <button id="theme-toggle" data-i18n-aria="theme_toggle"></button>
+      </div>
     </div>
 
     <div class="stage">
@@ -97,31 +91,31 @@
         </div>
       </div>
 
-      <div class="stage-tag fade-up fade-up-2">MILESTONE · 100 DAYS</div>
-      <h1 class="stage-h fade-up fade-up-3">100 天，<br>你已经证明了自己</h1>
-      <p class="stage-en fade-up fade-up-3">You've proved it, gently.</p>
+      <div class="stage-tag fade-up fade-up-2" data-i18n="milestone_tag"></div>
+      <h1 class="stage-h fade-up fade-up-3"><span data-i18n="milestone_heading_a"></span><br><span data-i18n="milestone_heading_b"></span></h1>
+      <p class="stage-en fade-up fade-up-3" data-i18n="milestone_sub"></p>
 
       <div class="stage-quote fade-up fade-up-4">
-        100 个"还活着"，<br>
-        拼成了只属于你的勋章。<br>
-        认真地活，认真地记录，<br>
-        这件事本身就很了不起。
+        <span data-i18n="milestone_quote_1"></span><br>
+        <span data-i18n="milestone_quote_2"></span><br>
+        <span data-i18n="milestone_quote_3"></span><br>
+        <span data-i18n="milestone_quote_4"></span>
       </div>
     </div>
 
     <div class="timeline fade-up fade-up-5">
-      <div class="timeline-h">All milestones · 全部里程碑</div>
+      <div class="timeline-h" data-i18n="milestone_all"></div>
       <div class="timeline-track">
-        <div class="ms done"><div class="ms-num">7</div><div class="ms-lbl">DONE</div></div>
-        <div class="ms done"><div class="ms-num">30</div><div class="ms-lbl">DONE</div></div>
-        <div class="ms now"><div class="ms-num">100</div><div class="ms-lbl">TODAY</div></div>
+        <div class="ms done"><div class="ms-num">7</div><div class="ms-lbl" data-i18n="milestone_done"></div></div>
+        <div class="ms done"><div class="ms-num">30</div><div class="ms-lbl" data-i18n="milestone_done"></div></div>
+        <div class="ms now"><div class="ms-num">100</div><div class="ms-lbl" data-i18n="milestone_today_label"></div></div>
         <div class="ms"><div class="ms-num">365</div><div class="ms-lbl">+265</div></div>
         <div class="ms"><div class="ms-num">1000</div><div class="ms-lbl">+900</div></div>
       </div>
     </div>
 
     <div class="next">
-      <a href="index.html">Continue · 继续活着 →</a>
+      <a href="index.html" data-i18n="milestone_continue"></a>
     </div>
   </div>
 </body>

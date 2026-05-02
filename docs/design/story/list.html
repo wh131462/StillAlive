@@ -3,28 +3,43 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>故事 · 还活着</title>
+  <title data-i18n-title-key="story_title">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <style>
-    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 40px; }
-    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: center; }
-    .back { background: none; border: none; color: var(--ink-faint); font-size: 14px; }
+    .frame {
+      width: 100%; max-width: 430px; margin: 0 auto;
+      min-height: 100vh; padding: 0 24px 40px;
+    }
+    @media (min-width: 768px) { .frame { max-width: 720px; padding: 0 40px 60px; } }
+    @media (min-width: 1024px) { .frame { max-width: 960px; padding: 0 48px 80px; } }
+
+    .top { padding: 24px 0 0; display: flex; justify-content: space-between; align-items: center; }
+    .back { background: none; border: none; color: var(--ink-faint); font-size: 14px; cursor: pointer; }
     .top-r { display: flex; gap: 8px; }
-    .btn-icon { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; }
+    .btn-icon { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .btn-icon.primary { background: var(--life); color: var(--bg); border-color: var(--life); }
-    #theme-toggle::before { content: '🌙'; font-size: 13px; }
-    html.dark #theme-toggle::before { content: '☀'; }
-    h1.title { font-family: var(--font-display); font-style: italic; font-size: 42px; margin: 32px 0 4px; line-height: 1; }
-    h1.title .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 28px; margin-top: 4px; }
+
+    h1.title { font-family: var(--font-body); font-weight: 700; font-size: 32px; margin: 24px 0 4px; line-height: 1; letter-spacing: -0.005em; }
+    @media (min-width: 768px) { h1.title { font-size: 42px; } }
     .subtitle { font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-soft); margin-top: 12px; }
+
     .filters { display: flex; gap: 8px; overflow-x: auto; margin-top: 24px; padding-bottom: 4px; }
-    .filter { flex-shrink: 0; padding: 8px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--line); background: transparent; color: var(--ink-faint); cursor: pointer; transition: all 0.3s; }
+    .filter { flex-shrink: 0; padding: 8px 14px; font-family: var(--font-body); font-size: 12px; border: 1px solid var(--line); background: transparent; color: var(--ink-faint); cursor: pointer; transition: all 0.3s; }
     .filter.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-    .shuffle { width: 100%; padding: 12px; margin-top: 16px; border: 1px dashed var(--line); background: transparent; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-faint); display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.3s; }
+
+    .shuffle { width: 100%; padding: 12px; margin-top: 16px; border: 1px dashed var(--line); background: transparent; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-faint); display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.3s; cursor: pointer; }
     .shuffle:hover { color: var(--life); border-color: var(--life); }
+
+    /* Stories — desktop 2-col */
     .stories { margin-top: 24px; }
-    .story-card { padding: 28px 0; border-top: 1px solid var(--line); display: block; transition: padding 0.3s; }
+    @media (min-width: 1024px) {
+      .stories {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px;
+      }
+    }
+    .story-card { padding: 28px 0; border-top: 1px solid var(--line); display: block; transition: padding 0.3s; text-decoration: none; color: inherit; }
     .story-card:hover { padding-left: 8px; }
     .story-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 12px; }
     .story-title-txt { font-family: var(--font-body); font-weight: 700; font-size: 16px; margin-bottom: 8px; }
@@ -32,49 +47,64 @@
     .story-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
     .resonance { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.1em; display: flex; align-items: center; gap: 6px; }
     .resonance svg { width: 14px; height: 14px; stroke: var(--life); }
+
     .warning { margin-top: 24px; padding: 24px; border: 1px solid var(--line); border-left: 4px solid #d4a017; }
+    @media (min-width: 1024px) { .warning { grid-column: 1 / -1; } }
     .warning-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: #d4a017; text-transform: uppercase; margin-bottom: 8px; }
     .warning p { font-family: var(--font-display); font-style: italic; font-size: 13px; color: var(--ink-soft); margin: 0; }
-    .warning a { font-family: var(--font-mono); font-size: 11px; color: var(--life); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 12px; display: inline-block; }
-    .load-more { text-align: center; padding: 32px 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.15em; animation: breathe 2s var(--ease-breath) infinite; }
+    .warning a { font-family: var(--font-mono); font-size: 11px; color: var(--life); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 12px; display: inline-block; text-decoration: none; }
+
+    .load-more { text-align: center; padding: 32px 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.15em; animation: breathe 2s var(--ease-breath) infinite; text-transform: uppercase; }
+    @media (min-width: 1024px) { .load-more { grid-column: 1 / -1; } }
   </style>
 </head>
 <body class="grain">
   <div class="frame">
-    <div class="top"><a href="../home/index.html" class="back">← Back</a><div class="top-r"><a href="submit.html" class="btn-icon primary" title="投稿"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></a><button id="theme-toggle" class="btn-icon" aria-label="theme"></button></div></div>
-    <h1 class="title fade-up fade-up-1">Voices<span class="zh">故事</span></h1>
-    <p class="subtitle fade-up fade-up-2">— from those who are still here</p>
+    <div class="top">
+      <a href="../home/index.html" class="back" data-i18n="auth_back"></a>
+      <div class="top-r">
+        <a href="submit.html" class="btn-icon primary" data-i18n-title="nav_submit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></a>
+        <button id="lang-toggle" class="btn-icon"></button>
+        <button id="theme-toggle" class="btn-icon" data-i18n-aria="theme_toggle"></button>
+      </div>
+    </div>
+    <h1 class="title fade-up fade-up-1" data-i18n="story_title"></h1>
+    <p class="subtitle fade-up fade-up-2">— <span data-i18n="story_subtitle"></span></p>
     <div class="filters fade-up fade-up-3">
-      <span class="filter active">ALL</span><span class="filter">ACCIDENT</span><span class="filter">ILLNESS</span><span class="filter">MENTAL</span><span class="filter">NATURE</span>
+      <span class="filter active" data-i18n="story_all"></span>
+      <span class="filter" data-i18n="story_accident"></span>
+      <span class="filter" data-i18n="story_illness"></span>
+      <span class="filter" data-i18n="story_mental"></span>
+      <span class="filter" data-i18n="story_nature"></span>
     </div>
     <button class="shuffle fade-up fade-up-3">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3h5v5M4 20l16-16M21 16v5h-5M15 15l5 5M4 4l5 5"/></svg>
-      RANDOM STORY · 随机一则
+      <span data-i18n="story_random"></span>
     </button>
     <div class="stories">
       <a href="detail.html" class="story-card fade-up fade-up-4">
-        <div class="story-meta">2024 WINTER · ACCIDENT</div>
-        <div class="story-body-txt">车在结冰的山路上滑出去三十米，最后只是撞上了路边的护栏。下车那一刻，我看见月亮挂在松树上，像很久没见的老朋友。我想，原来活着是这样的感觉。</div>
+        <div class="story-meta" data-i18n="story_meta_winter"></div>
+        <div class="story-body-txt" data-i18n="story_card_winter_body"></div>
         <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>1,243</span></div>
       </a>
       <a href="detail.html" class="story-card fade-up fade-up-5">
-        <div class="story-meta">2023 SUMMER · ILLNESS</div>
-        <div class="story-title-txt">那三个月，我学会了和自己待着</div>
-        <div class="story-body-txt">确诊那天天气很好。医生说得很平静，像在念菜单。我走出诊室，发现走廊的阳光落在我鞋面上，那一刻什么都没想，就站着看了很久...</div>
+        <div class="story-meta" data-i18n="story_meta_summer"></div>
+        <div class="story-title-txt" data-i18n="story_card_summer_title"></div>
+        <div class="story-body-txt" data-i18n="story_card_summer_body"></div>
         <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>867</span></div>
       </a>
       <div class="warning fade-up fade-up-5">
-        <div class="warning-tag">Content warning · 内容提醒</div>
-        <p>这则故事涉及心理健康相关的敏感内容。</p>
-        <a href="detail.html">REVEAL →</a>
+        <div class="warning-tag" data-i18n="story_content_warning"></div>
+        <p data-i18n="story_content_warning_text"></p>
+        <a href="detail.html" data-i18n="story_reveal"></a>
       </div>
       <a href="detail.html" class="story-card fade-up fade-up-6">
-        <div class="story-meta">2022 AUTUMN · NATURE</div>
-        <div class="story-body-txt">在云南徒步的第四天，我在 4800 米的垭口遇到了暴风雪。向导说不能停下来。那半小时里我一直在默念回去要做的事——突然发现，我从来没这么想活过。</div>
+        <div class="story-meta" data-i18n="story_meta_autumn"></div>
+        <div class="story-body-txt" data-i18n="story_card_autumn_body"></div>
         <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>2,031</span></div>
       </a>
+      <div class="load-more" data-i18n="story_loading"></div>
     </div>
-    <div class="load-more">LOADING MORE...</div>
   </div>
 </body>
 </html>

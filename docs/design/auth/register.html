@@ -3,80 +3,96 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>注册 · 还活着</title>
+  <title data-i18n-title-key="auth_register">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <style>
-    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; padding: 0 32px; }
-    .top { display: flex; justify-content: space-between; padding: 32px 0 0; align-items: center; }
-    .back { color: var(--ink-faint); transition: color 0.3s; background: none; border: none; font-size: 14px; }
+    body { min-height: 100vh; }
+    .frame {
+      width: 100%; max-width: 430px; margin: 0 auto; min-height: 100vh;
+      display: flex; flex-direction: column; padding: 0 24px;
+    }
+    @media (min-width: 768px) { .frame { max-width: 560px; padding: 0 40px; } }
+    @media (min-width: 1024px) { .frame { max-width: 640px; padding: 0 48px; } }
+
+    .top { display: flex; justify-content: space-between; padding: 24px 0 0; align-items: center; }
+    .back { color: var(--ink-faint); transition: color 0.3s; background: none; border: none; font-size: 14px; cursor: pointer; }
     .back:hover { color: var(--life); }
-    #theme-toggle { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
-    #theme-toggle::before { content: '🌙'; font-size: 13px; }
-    html.dark #theme-toggle::before { content: '☀'; }
-    .hero { padding: 48px 0 32px; }
-    .hero h1 { font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: 42px; margin: 0; line-height: 1.1; letter-spacing: -0.02em; }
-    .hero h1 .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 32px; margin-top: 4px; }
+    .top-actions { display: flex; gap: 8px; }
+
+    .hero { padding: 40px 0 24px; }
+    @media (min-width: 768px) { .hero { padding: 56px 0 32px; } }
+    .hero h1 {
+      font-family: var(--font-body); font-weight: 700;
+      font-size: 36px; margin: 0; line-height: 1.1; letter-spacing: -0.005em;
+    }
+    @media (min-width: 768px) { .hero h1 { font-size: 44px; } }
     .hero-sub { font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-soft); margin-top: 16px; }
+    .hero-sub::before { content: '— '; }
+
     .tabs { display: flex; gap: 32px; border-bottom: 1px solid var(--line); margin-top: 32px; }
-    .tab { padding: 12px 0; font-size: 13px; color: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.05em; background: none; border: none; cursor: pointer; position: relative; }
+    .tab { padding: 12px 0; font-size: 13px; color: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.05em; background: none; border: none; cursor: pointer; position: relative; text-transform: uppercase; }
     .tab.active { color: var(--ink); }
     .tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: var(--life); }
+
     .form { margin-top: 32px; flex: 1; }
     .field { margin-bottom: 24px; }
     .label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 8px; display: flex; justify-content: space-between; }
     .input { display: flex; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 8px; transition: border-color 0.3s; }
     .input:focus-within { border-bottom-color: var(--life); }
     .input .prefix { font-family: var(--font-mono); color: var(--ink-faint); margin-right: 8px; font-size: 14px; }
-    .input input { flex: 1; border: none; background: transparent; outline: none; font-size: 16px; color: var(--ink); padding: 4px 0; }
-    .input input::placeholder { color: var(--ink-faint); font-style: italic; font-family: var(--font-display); }
-    .input .otp { font-size: 11px; color: var(--life); font-family: var(--font-mono); letter-spacing: 0.15em; background: none; border: none; border-left: 1px solid var(--line); padding-left: 12px; cursor: pointer; }
-    .strength { display: flex; gap: 4px; margin-top: 12px; height: 3px; }
-    .strength span { flex: 1; background: var(--line); }
-    .strength span.on { background: var(--life); }
-    .strength span.on.green { background: var(--green); }
-    .strength-label { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); margin-top: 6px; letter-spacing: 0.1em; }
+    .input input { flex: 1; border: none; background: transparent; outline: none; font-size: 16px; color: var(--ink); padding: 4px 0; min-width: 0; }
+    .input input::placeholder { color: var(--ink-faint); }
+    .input .otp { font-size: 11px; color: var(--life); font-family: var(--font-mono); letter-spacing: 0.15em; background: none; border: none; border-left: 1px solid var(--line); padding-left: 12px; cursor: pointer; flex-shrink: 0; }
     .agree { display: flex; gap: 12px; align-items: flex-start; margin-top: 32px; font-size: 12px; color: var(--ink-soft); line-height: 1.7; }
     .check { width: 16px; height: 16px; border: 1px solid var(--ink-faint); border-radius: 2px; flex-shrink: 0; margin-top: 2px; cursor: pointer; position: relative; }
     .check[data-on="1"] { background: var(--life); border-color: var(--life); }
     .check[data-on="1"]::after { content: '✓'; position: absolute; inset: 0; color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 11px; }
-    .submit { width: 100%; padding: 18px; margin-top: 24px; background: var(--ink); color: var(--bg); border: none; font-family: var(--font-display); font-style: italic; font-size: 17px; letter-spacing: 0.05em; position: relative; overflow: hidden; }
+    .submit { width: 100%; padding: 18px; margin-top: 24px; background: var(--ink); color: var(--bg); border: none; font-family: var(--font-display); font-style: italic; font-size: 17px; letter-spacing: 0.05em; position: relative; overflow: hidden; cursor: pointer; }
     .submit::before { content: ''; position: absolute; inset: 0; background: var(--life); transform: translateY(100%); transition: transform 0.4s var(--ease-breath); }
     .submit:hover::before { transform: translateY(0); }
     .submit span { position: relative; z-index: 1; }
     .switch { text-align: center; margin-top: 24px; font-size: 12px; color: var(--ink-faint); padding-bottom: 40px; }
     .switch a { color: var(--life); }
     .page-no { position: fixed; left: 16px; bottom: 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); writing-mode: vertical-rl; transform: rotate(180deg); }
+    @media (max-width: 767px) { .page-no { display: none; } }
   </style>
 </head>
 <body class="grain">
   <span class="page-no">01 / IDENTITY · REGISTER</span>
   <div class="frame">
-    <div class="top"><a href="login.html" class="back">← Back</a><button id="theme-toggle" aria-label="theme"></button></div>
+    <div class="top">
+      <a href="login.html" class="back" data-i18n="auth_back"></a>
+      <div class="top-actions">
+        <button id="lang-toggle"></button>
+        <button id="theme-toggle" data-i18n-aria="theme_toggle"></button>
+      </div>
+    </div>
     <div class="hero">
-      <h1 class="fade-up fade-up-1">New here<span class="zh">创建账号</span></h1>
-      <p class="hero-sub fade-up fade-up-2">— begin recording your aliveness</p>
+      <h1 class="fade-up fade-up-1" data-i18n="auth_register_title"></h1>
+      <p class="hero-sub fade-up fade-up-2" data-i18n="auth_register_sub"></p>
     </div>
     <div class="tabs fade-up fade-up-2">
-      <button class="tab active">手机号 · Phone</button>
-      <button class="tab">邮箱 · Email</button>
+      <button class="tab active" data-i18n="auth_tab_phone"></button>
+      <button class="tab" data-i18n="auth_tab_email"></button>
     </div>
     <form class="form fade-up fade-up-3" onsubmit="event.preventDefault()">
       <div class="field">
-        <div class="label"><span>手机号</span><span>PHONE</span></div>
-        <div class="input"><span class="prefix">+86</span><input type="tel" placeholder="your number"></div>
+        <div class="label"><span data-i18n="auth_phone"></span></div>
+        <div class="input"><span class="prefix">+86</span><input type="tel" data-i18n-placeholder="auth_phone_placeholder"></div>
       </div>
       <div class="field">
-        <div class="label"><span>验证码</span><span>OTP</span></div>
-        <div class="input"><input type="text" maxlength="6" placeholder="six digits"><button type="button" class="otp">SEND →</button></div>
+        <div class="label"><span data-i18n="auth_otp"></span></div>
+        <div class="input"><input type="text" maxlength="6" data-i18n-placeholder="auth_otp_placeholder"><button type="button" class="otp" data-i18n="auth_send_otp"></button></div>
       </div>
       <div class="field">
-        <div class="label"><span>昵称</span><span>NICKNAME · OPTIONAL</span></div>
-        <div class="input"><input type="text" placeholder="give yourself a name" maxlength="20"></div>
+        <div class="label"><span data-i18n="auth_nickname"></span><span data-i18n="auth_nickname_optional"></span></div>
+        <div class="input"><input type="text" data-i18n-placeholder="auth_nickname_placeholder" maxlength="20"></div>
       </div>
-      <label class="agree"><span class="check" data-on="0" onclick="this.dataset.on=this.dataset.on==='1'?'0':'1'"></span><span>已阅读并同意《用户协议》《隐私政策》</span></label>
-      <button type="submit" class="submit"><span>Create · 注册</span></button>
-      <p class="switch">已有账号？<a href="login.html">去登录</a></p>
+      <label class="agree"><span class="check" data-on="0" onclick="this.dataset.on=this.dataset.on==='1'?'0':'1'"></span><span data-i18n="auth_agree_short"></span></label>
+      <button type="submit" class="submit"><span data-i18n="auth_create"></span></button>
+      <p class="switch"><span data-i18n="auth_has_account"></span><a href="login.html" data-i18n="auth_go_login"></a></p>
     </form>
   </div>
 </body>

@@ -3,44 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>还活着 · Still Alive</title>
+  <title data-i18n-title-key="app_name">Still Alive</title>
   <link rel="stylesheet" href="shared/breathe.css">
   <script src="shared/theme.js"></script>
+  <script src="shared/i18n.js"></script>
   <style>
     body { min-height: 100vh; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 80px 48px 120px; }
+    .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 80px 24px 96px; }
 
-    /* Hero — typography as the hero */
-    .hero { padding: 80px 0 120px; position: relative; }
+    /* Hero */
+    .hero { padding: 56px 0 80px; position: relative; }
     .hero-mark {
-      position: absolute; top: 80px; right: 48px;
+      position: absolute; top: 0; right: 0;
       font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em;
       text-transform: uppercase; color: var(--ink-faint);
     }
     .hero h1 {
       font-family: var(--font-display); font-style: italic; font-weight: 400;
-      font-size: clamp(64px, 12vw, 168px); line-height: 0.95; margin: 0;
+      font-size: clamp(56px, 12vw, 168px); line-height: 0.95; margin: 0;
       letter-spacing: -0.02em;
     }
-    .hero h1 .zh {
-      display: block; font-family: var(--font-body); font-style: normal; font-weight: 700;
-      font-size: clamp(48px, 9vw, 128px); margin-top: 8px; letter-spacing: 0.02em;
-    }
-    .hero h1 .zh em {
-      font-style: normal; color: var(--life); font-weight: 700;
-      position: relative;
-    }
-    .hero h1 .zh em::after {
-      content: ''; position: absolute; bottom: 8px; left: 0; right: 0; height: 6px;
-      background: var(--life-soft); z-index: -1;
-    }
     .hero-sub {
-      margin-top: 48px; max-width: 520px; font-size: 17px; line-height: 1.9;
+      margin-top: 32px; max-width: 560px; font-size: 16px; line-height: 1.9;
       color: var(--ink-soft);
     }
 
     .heartbeat {
-      position: absolute; bottom: 40px; left: 0; width: 100%;
+      position: absolute; bottom: 24px; left: 0; width: 100%;
       pointer-events: none; opacity: 0.5;
     }
     .heartbeat svg { width: 100%; height: 60px; }
@@ -55,26 +44,41 @@
       100% { stroke-dashoffset: -1200; }
     }
 
-    /* Module index */
-    .modules { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+    /* Module index — mobile single col, tablet 2 col, desktop 2 col */
+    .modules {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+      border-top: 1px solid var(--line);
+    }
+    @media (min-width: 768px) {
+      .modules { grid-template-columns: 1fr 1fr; }
+    }
+
     .module {
-      padding: 48px 0; border-bottom: 1px solid var(--line);
+      padding: 32px 0; border-bottom: 1px solid var(--line);
       position: relative; transition: padding 0.4s var(--ease-out);
     }
-    .module:nth-child(odd) { padding-right: 48px; border-right: 1px solid var(--line); }
-    .module:nth-child(even) { padding-left: 48px; }
+    @media (min-width: 768px) {
+      .module { padding: 40px 0; }
+      .module:nth-child(odd) { padding-right: 32px; border-right: 1px solid var(--line); }
+      .module:nth-child(even) { padding-left: 32px; }
+    }
+    @media (min-width: 1024px) {
+      .module { padding: 48px 0; }
+      .module:nth-child(odd) { padding-right: 48px; }
+      .module:nth-child(even) { padding-left: 48px; }
+    }
+
     .module-num {
       font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em;
       color: var(--ink-faint); margin-bottom: 16px;
     }
     .module h2 {
-      font-family: var(--font-display); font-style: italic; font-weight: 400;
-      font-size: 36px; margin: 0 0 4px; letter-spacing: -0.01em;
+      font-family: var(--font-body); font-weight: 700;
+      font-size: 28px; margin: 0 0 4px; letter-spacing: -0.005em;
     }
-    .module h2 .zh {
-      font-family: var(--font-body); font-style: normal; font-weight: 700;
-      font-size: 28px; display: block; margin-top: 4px;
-    }
+    @media (min-width: 768px) { .module h2 { font-size: 32px; } }
     .module p { color: var(--ink-soft); font-size: 14px; margin: 16px 0 24px; max-width: 360px; }
     .module-links { display: flex; flex-direction: column; gap: 2px; }
     .module-links a {
@@ -88,21 +92,54 @@
     .module-links a:hover { color: var(--life); padding-left: 8px; }
     .module-links a:hover::after { color: var(--life); transform: translateX(4px); }
 
-    /* Theme toggle — minimal */
+    /* Module 07 spans full width */
+    .module-full {
+      border-right: none !important;
+      padding: 32px 0 !important;
+    }
+    @media (min-width: 768px) {
+      .module-full {
+        grid-column: 1 / -1;
+        padding: 40px 0 !important;
+      }
+    }
+    .module-full code {
+      font-family: var(--font-mono); background: var(--bg-subtle);
+      padding: 2px 6px; border-radius: 3px; font-size: 13px;
+    }
+
+    /* Top toolbar (theme + lang) */
+    .top-toolbar {
+      position: fixed; top: 24px; right: 24px; z-index: 100;
+      display: flex; gap: 8px; align-items: center;
+    }
+    @media (min-width: 768px) {
+      .top-toolbar { top: 32px; right: 40px; }
+    }
+    @media (min-width: 1024px) {
+      .top-toolbar { top: 32px; right: 48px; }
+    }
+
     #theme-toggle {
-      position: fixed; top: 32px; right: 48px; z-index: 100;
-      width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line);
-      background: var(--surface); color: var(--ink); font-size: 16px;
+      width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
+      background: var(--surface); color: var(--ink); font-size: 14px;
       transition: transform 0.4s var(--ease-breath), background 0.6s, border-color 0.6s;
     }
     #theme-toggle:hover { transform: rotate(180deg); }
     #theme-toggle::before { content: '🌙'; }
     html.dark #theme-toggle::before { content: '☀'; }
+    @media (min-width: 768px) {
+      #theme-toggle { width: 44px; height: 44px; font-size: 15px; }
+    }
 
     /* Footer */
     footer {
-      margin-top: 80px; padding-top: 48px; border-top: 1px solid var(--line);
-      display: flex; justify-content: space-between; align-items: end;
+      margin-top: 64px; padding-top: 40px; border-top: 1px solid var(--line);
+      display: flex; flex-direction: column; gap: 24px;
+      justify-content: space-between; align-items: start;
+    }
+    @media (min-width: 768px) {
+      footer { flex-direction: row; align-items: end; }
     }
     footer .stamp {
       font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em;
@@ -110,40 +147,40 @@
     }
     footer .quote {
       font-family: var(--font-display); font-style: italic; font-size: 14px;
-      color: var(--ink-soft); max-width: 280px; text-align: right; line-height: 1.7;
+      color: var(--ink-soft); max-width: 280px; line-height: 1.7;
+    }
+    @media (min-width: 768px) {
+      footer .quote { text-align: right; }
     }
 
-    @media (max-width: 720px) {
-      .container { padding: 56px 24px 80px; }
-      #theme-toggle { top: 20px; right: 20px; width: 40px; height: 40px; }
-      .hero { padding: 40px 0 80px; }
-      .hero-mark { top: 32px; right: 24px; }
-      .modules { grid-template-columns: 1fr; }
-      .module:nth-child(odd) { padding-right: 0; border-right: none; }
-      .module:nth-child(even) { padding-left: 0; }
-      footer { flex-direction: column; gap: 24px; align-items: start; }
-      footer .quote { text-align: left; }
+    @media (min-width: 768px) {
+      .container { padding: 80px 40px 96px; }
+    }
+    @media (min-width: 1024px) {
+      .container { padding: 80px 48px 120px; }
+      .hero { padding: 80px 0 120px; }
+      .hero-mark { top: 80px; right: 0; }
     }
   </style>
 </head>
 <body class="grain">
 
-  <button id="theme-toggle" aria-label="主题切换"></button>
+  <div class="top-toolbar">
+    <button id="lang-toggle" data-i18n-aria="lang_toggle"></button>
+    <button id="theme-toggle" data-i18n-aria="theme_toggle"></button>
+  </div>
 
   <div class="container">
 
     <header class="hero">
-      <span class="hero-mark fade-up">PRD v3.0 · 设计稿索引</span>
+      <span class="hero-mark fade-up" data-i18n="prd_version"></span>
 
-      <h1 class="fade-up fade-up-1">
-        <span>Still</span>
-        <span class="zh">还<em>活</em>着</span>
-      </h1>
+      <h1 class="fade-up fade-up-1" data-i18n="app_name"></h1>
 
       <p class="hero-sub fade-up fade-up-2">
-        以"生存确认"和"记忆沉淀"为核心的多端打卡应用。<br>
-        本目录索引覆盖账户、主页、打卡、人物、故事、个人六大模块的全部页面，<br>
-        支持<strong style="color:var(--ink)">浅色 / 深色</strong>主题切换。
+        <span data-i18n="hero_sub_a"></span><br>
+        <span data-i18n="hero_sub_b"></span><br>
+        <span data-i18n="hero_sub_c" data-i18n-html="true"></span>
       </p>
 
       <div class="heartbeat" aria-hidden="true">
@@ -156,74 +193,74 @@
     <section class="modules">
 
       <div class="module fade-up fade-up-3">
-        <div class="module-num">01 / Account</div>
-        <h2>Identity<span class="zh">账户</span></h2>
-        <p>登录、注册、密码找回。每一次进入，都是一次确认存在的仪式。</p>
+        <div class="module-num" data-i18n="mod_01_num"></div>
+        <h2 data-i18n="mod_01_title"></h2>
+        <p data-i18n="mod_01_desc"></p>
         <div class="module-links">
-          <a href="auth/login.html">登录</a>
-          <a href="auth/register.html">注册</a>
-          <a href="auth/forgot.html">忘记密码</a>
+          <a href="auth/login.html" data-i18n="mod_01_link_login"></a>
+          <a href="auth/register.html" data-i18n="mod_01_link_register"></a>
+          <a href="auth/forgot.html" data-i18n="mod_01_link_forgot"></a>
         </div>
       </div>
 
       <div class="module fade-up fade-up-3">
-        <div class="module-num">02 / Pulse</div>
-        <h2>Home<span class="zh">主页</span></h2>
-        <p>核心仪表盘。生存状态、快速打卡、生日提醒、信息差与故事入口。</p>
+        <div class="module-num" data-i18n="mod_02_num"></div>
+        <h2 data-i18n="mod_02_title"></h2>
+        <p data-i18n="mod_02_desc"></p>
         <div class="module-links">
-          <a href="home/index.html">主页 · 今日</a>
+          <a href="home/index.html" data-i18n="mod_02_link_home"></a>
         </div>
       </div>
 
       <div class="module fade-up fade-up-4">
-        <div class="module-num">03 / Days</div>
-        <h2>Check-in<span class="zh">打卡</span></h2>
-        <p>每日生存确认。日历、意义记录、补签、连续打卡里程碑。</p>
+        <div class="module-num" data-i18n="mod_03_num"></div>
+        <h2 data-i18n="mod_03_title"></h2>
+        <p data-i18n="mod_03_desc"></p>
         <div class="module-links">
-          <a href="checkin/index.html">日历总览</a>
-          <a href="checkin/record.html">意义记录</a>
-          <a href="checkin/milestone.html">里程碑</a>
+          <a href="checkin/index.html" data-i18n="mod_03_link_cal"></a>
+          <a href="checkin/record.html" data-i18n="mod_03_link_rec"></a>
+          <a href="checkin/milestone.html" data-i18n="mod_03_link_ms"></a>
         </div>
       </div>
 
       <div class="module fade-up fade-up-4">
-        <div class="module-num">04 / Bonds</div>
-        <h2>People<span class="zh">人物</span></h2>
-        <p>对自己重要的人。情感档案、生日提醒、共同经历。</p>
+        <div class="module-num" data-i18n="mod_04_num"></div>
+        <h2 data-i18n="mod_04_title"></h2>
+        <p data-i18n="mod_04_desc"></p>
         <div class="module-links">
-          <a href="person/list.html">人物列表</a>
-          <a href="person/detail.html">人物详情</a>
+          <a href="person/list.html" data-i18n="mod_04_link_list"></a>
+          <a href="person/detail.html" data-i18n="mod_04_link_detail"></a>
         </div>
       </div>
 
       <div class="module fade-up fade-up-5">
-        <div class="module-num">05 / Voices</div>
-        <h2>Stories<span class="zh">故事</span></h2>
-        <p>来自仍在的人。匿名收录"差点就没了，但我现在还活着"的瞬间。</p>
+        <div class="module-num" data-i18n="mod_05_num"></div>
+        <h2 data-i18n="mod_05_title"></h2>
+        <p data-i18n="mod_05_desc"></p>
         <div class="module-links">
-          <a href="story/list.html">故事流</a>
-          <a href="story/detail.html">故事详情</a>
-          <a href="story/submit.html">投稿</a>
+          <a href="story/list.html" data-i18n="mod_05_link_list"></a>
+          <a href="story/detail.html" data-i18n="mod_05_link_detail"></a>
+          <a href="story/submit.html" data-i18n="mod_05_link_submit"></a>
         </div>
       </div>
 
       <div class="module fade-up fade-up-5">
-        <div class="module-num">06 / Self</div>
-        <h2>Mine<span class="zh">个人</span></h2>
-        <p>个人档案、数据统计、热力图、死亡确认与所有设置。</p>
+        <div class="module-num" data-i18n="mod_06_num"></div>
+        <h2 data-i18n="mod_06_title"></h2>
+        <p data-i18n="mod_06_desc"></p>
         <div class="module-links">
-          <a href="profile/index.html">我的</a>
-          <a href="profile/death-confirm.html">死亡确认</a>
-          <a href="profile/settings.html">设置</a>
+          <a href="profile/index.html" data-i18n="mod_06_link_mine"></a>
+          <a href="profile/death-confirm.html" data-i18n="mod_06_link_death"></a>
+          <a href="profile/settings.html" data-i18n="mod_06_link_settings"></a>
         </div>
       </div>
 
-      <div class="module fade-up fade-up-6" style="grid-column:1 / -1;border-right:none;padding:48px 0">
-        <div class="module-num">07 / Web</div>
-        <h2>Desktop<span class="zh">Web 端独立路由</span></h2>
-        <p>桌面宽屏布局。<code style="font-family:var(--font-mono);background:var(--bg-subtle);padding:2px 6px;border-radius:3px;font-size:13px">/stories</code> 故事流首页，支持 SEO 与未登录访问。</p>
+      <div class="module module-full fade-up fade-up-6">
+        <div class="module-num" data-i18n="mod_07_num"></div>
+        <h2 data-i18n="mod_07_title"></h2>
+        <p data-i18n="mod_07_desc" data-i18n-html="true"></p>
         <div class="module-links" style="max-width:480px">
-          <a href="web/stories.html">桌面端故事流</a>
+          <a href="web/stories.html" data-i18n="mod_07_link_stories"></a>
         </div>
       </div>
 
@@ -231,12 +268,15 @@
 
     <footer>
       <div class="stamp">
-        Designed with breath<br>
-        2026 · Hangzhou<br>
-        v3.0 — interface as a quiet companion
+        <span data-i18n="footer_stamp_a"></span><br>
+        <span data-i18n="footer_stamp_b"></span><br>
+        <span data-i18n="footer_stamp_c"></span>
       </div>
       <div class="quote">
-        "活着的意义，<br>不在于活了多久，<br>而在于我们如何被记得，<br>又记得了谁。"
+        <span data-i18n="footer_quote_a"></span><br>
+        <span data-i18n="footer_quote_b"></span><br>
+        <span data-i18n="footer_quote_c"></span><br>
+        <span data-i18n="footer_quote_d"></span>
       </div>
     </footer>
 

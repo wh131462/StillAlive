@@ -4,42 +4,44 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="sa-tab" content="person">
-  <title>人物 · 还活着</title>
+  <title data-i18n-title-key="person_title">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <script src="../shared/nav.js"></script>
   <style>
-    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; padding: 0 28px 96px; }
-    .top { padding: 32px 0 0; display: flex; justify-content: space-between; align-items: start; }
+    .frame {
+      width: 100%; max-width: 430px; margin: 0 auto;
+      min-height: 100vh; padding: 0 24px 96px;
+    }
+    @media (min-width: 768px) { .frame { max-width: 720px; padding: 0 40px 40px; } }
+    @media (min-width: 1024px) { .frame { max-width: 1100px; padding: 0 48px 80px; margin-left: 200px; } }
+
+    .top { padding: 24px 0 0; display: flex; justify-content: space-between; align-items: start; }
     .top-mark { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; line-height: 1.6; }
-    .top-mark span { color: var(--life); }
+    .top-mark span.accent { color: var(--life); }
     .top-actions { display: flex; gap: 8px; }
     .btn-icon { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s; }
     .btn-icon.primary { background: var(--life); color: var(--bg); border-color: var(--life); }
     .btn-icon:hover { transform: scale(1.05); }
-    #theme-toggle::before { content: '🌙'; font-size: 13px; }
-    html.dark #theme-toggle::before { content: '☀'; }
 
-    h1.title { font-family: var(--font-display); font-style: italic; font-size: 48px; margin: 32px 0 4px; line-height: 1; }
-    h1.title .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 32px; margin-top: 4px; }
+    h1.title { font-family: var(--font-body); font-weight: 700; font-size: 36px; margin: 24px 0 4px; line-height: 1; letter-spacing: -0.005em; }
+    @media (min-width: 768px) { h1.title { font-size: 48px; } }
     .subtitle { font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-soft); margin-top: 12px; }
 
-    /* Search */
     .search { margin-top: 32px; display: flex; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
-    .search svg { color: var(--ink-faint); margin-right: 8px; }
-    .search input { flex: 1; border: none; background: transparent; outline: none; font-size: 14px; color: var(--ink); padding: 4px 0; }
-    .search input::placeholder { color: var(--ink-faint); font-style: italic; font-family: var(--font-display); }
+    .search svg { color: var(--ink-faint); margin-right: 8px; flex-shrink: 0; }
+    .search input { flex: 1; border: none; background: transparent; outline: none; font-size: 14px; color: var(--ink); padding: 4px 0; min-width: 0; }
+    .search input::placeholder { color: var(--ink-faint); }
 
-    /* Groups */
     .groups { display: flex; gap: 8px; overflow-x: auto; padding: 16px 0 4px; margin-top: 8px; }
     .group {
       flex-shrink: 0; padding: 8px 16px; border: 1px solid var(--line);
-      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
-      text-transform: uppercase; color: var(--ink-faint); cursor: pointer; transition: all 0.3s;
+      font-family: var(--font-body); font-size: 12px;
+      color: var(--ink-faint); cursor: pointer; transition: all 0.3s;
     }
     .group.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
-    /* Today birthday */
     .birthday-box {
       margin-top: 24px; padding: 24px; border: 1px solid var(--line);
       border-left: 4px solid var(--life);
@@ -56,27 +58,41 @@
       display: flex; align-items: center; justify-content: center;
       color: var(--bg); font-family: var(--font-body); font-weight: 700; font-size: 20px; flex-shrink: 0;
     }
-    .birthday-info { flex: 1; }
+    .birthday-info { flex: 1; min-width: 0; }
     .birthday-name { font-weight: 700; font-size: 16px; margin-top: 4px; }
     .birthday-meta { font-size: 11px; color: var(--ink-soft); margin-top: 2px; font-family: var(--font-mono); letter-spacing: 0.05em; }
-    .birthday-cta { padding: 8px 14px; background: var(--life); color: var(--bg); font-family: var(--font-display); font-style: italic; font-size: 12px; }
+    .birthday-cta { padding: 8px 14px; background: var(--life); color: var(--bg); font-family: var(--font-body); font-weight: 700; font-size: 12px; cursor: pointer; text-decoration: none; }
 
-    /* Person list */
     .section-t { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin: 32px 0 12px; }
-    .person-list { display: flex; flex-direction: column; }
+
+    /* Person list — desktop 2-col grid */
+    .person-list {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 1024px) {
+      .person-list {
+        grid-template-columns: 1fr 1fr;
+        gap: 0 32px;
+      }
+    }
     .person {
       padding: 20px 0; border-top: 1px solid var(--line);
       display: flex; align-items: center; gap: 16px; transition: padding 0.3s;
+      text-decoration: none; color: inherit;
     }
     .person:hover { padding-left: 8px; }
     .person:last-child { border-bottom: 1px solid var(--line); }
+    @media (min-width: 1024px) {
+      .person:nth-last-child(2):not(:last-child) { border-bottom: 1px solid var(--line); }
+    }
     .person-avatar {
       width: 52px; height: 52px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       color: var(--bg); font-family: var(--font-body); font-weight: 700; font-size: 22px; flex-shrink: 0;
     }
     .person-info { flex: 1; min-width: 0; }
-    .person-row { display: flex; align-items: center; gap: 8px; }
+    .person-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .person-name { font-weight: 700; font-size: 15px; }
     .person-tag { font-size: 9px; padding: 2px 8px; font-family: var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); border: 1px solid var(--line); }
     .person-meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); margin-top: 4px; letter-spacing: 0.05em; }
@@ -86,53 +102,57 @@
 <body class="grain">
   <div class="frame">
     <div class="top">
-      <div class="top-mark fade-up">PEOPLE · BONDS<br><span>8 souls</span></div>
+      <div class="top-mark fade-up">
+        <span data-i18n="person_top_mark"></span><br>
+        <span class="accent" data-i18n="person_souls"></span>
+      </div>
       <div class="top-actions">
-        <button class="btn-icon primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
-        <button id="theme-toggle" class="btn-icon" aria-label="theme"></button>
+        <button class="btn-icon primary" data-i18n-title="person_add"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button id="lang-toggle" class="btn-icon"></button>
+        <button id="theme-toggle" class="btn-icon" data-i18n-aria="theme_toggle"></button>
       </div>
     </div>
 
-    <h1 class="title fade-up fade-up-1">Bonds<span class="zh">人物</span></h1>
-    <p class="subtitle fade-up fade-up-2">— those who shape your aliveness</p>
+    <h1 class="title fade-up fade-up-1" data-i18n="person_title"></h1>
+    <p class="subtitle fade-up fade-up-2">— <span data-i18n="person_subtitle"></span></p>
 
     <div class="search fade-up fade-up-3">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input type="text" placeholder="search by name...">
+      <input type="text" data-i18n-placeholder="person_search_placeholder">
     </div>
 
     <div class="groups fade-up fade-up-3">
-      <span class="group active">All · 全部 (8)</span>
-      <span class="group">Family · 家人 (3)</span>
-      <span class="group">Friends · 朋友 (4)</span>
-      <span class="group">Work · 同事 (1)</span>
-      <span class="group">+ Add</span>
+      <span class="group active"><span data-i18n="person_all"></span> (8)</span>
+      <span class="group"><span data-i18n="person_family"></span> (3)</span>
+      <span class="group"><span data-i18n="person_friends"></span> (4)</span>
+      <span class="group"><span data-i18n="person_work"></span> (1)</span>
+      <span class="group" data-i18n="person_add"></span>
     </div>
 
     <div class="birthday-box fade-up fade-up-4">
-      <div class="birthday-avatar">妈</div>
+      <div class="birthday-avatar" data-i18n="person_today_card_name"></div>
       <div class="birthday-info">
-        <div class="birthday-tag">TODAY · 今日生日</div>
-        <div class="birthday-name">妈妈 · Mom</div>
-        <div class="birthday-meta">56 YRS · ENFJ · FAMILY</div>
+        <div class="birthday-tag" data-i18n="person_today_birthday"></div>
+        <div class="birthday-name" data-i18n="person_today_card_name"></div>
+        <div class="birthday-meta" data-i18n="person_today_card_meta"></div>
       </div>
-      <a href="detail.html" class="birthday-cta">Greet</a>
+      <a href="detail.html" class="birthday-cta" data-i18n="person_greet"></a>
     </div>
 
-    <div class="section-t">All people · 全部 (8)</div>
+    <div class="section-t" data-i18n="person_all"></div>
     <div class="person-list">
       <a href="detail.html" class="person fade-up fade-up-5">
-        <div class="person-avatar" style="background:linear-gradient(135deg,#C24D2C,#a83d20)">妈</div>
+        <div class="person-avatar" style="background:linear-gradient(135deg,#C24D2C,#a83d20)" data-i18n="person_today_card_name"></div>
         <div class="person-info">
-          <div class="person-row"><span class="person-name">妈妈</span><span class="person-tag">家人</span></div>
-          <div class="person-meta">ENFJ · 05/01 · 🎂 TODAY</div>
+          <div class="person-row"><span class="person-name" data-i18n="person_today_card_name"></span><span class="person-tag" data-i18n="person_tag_family"></span></div>
+          <div class="person-meta">ENFJ · 05/01 · <span data-i18n="person_today_emoji"></span></div>
         </div>
         <span class="person-arrow">→</span>
       </a>
       <a href="detail.html" class="person fade-up fade-up-5">
         <div class="person-avatar" style="background:linear-gradient(135deg,#5A8F6E,#3d6c4f)">小</div>
         <div class="person-info">
-          <div class="person-row"><span class="person-name">小黑</span><span class="person-tag">朋友</span></div>
+          <div class="person-row"><span class="person-name">小黑</span><span class="person-tag" data-i18n="person_tag_friends"></span></div>
           <div class="person-meta">INFP · 07/21</div>
         </div>
         <span class="person-arrow">→</span>
@@ -140,7 +160,7 @@
       <a href="detail.html" class="person fade-up fade-up-5">
         <div class="person-avatar" style="background:linear-gradient(135deg,#3D405B,#252540)">爸</div>
         <div class="person-info">
-          <div class="person-row"><span class="person-name">爸爸</span><span class="person-tag">家人</span></div>
+          <div class="person-row"><span class="person-name">爸爸</span><span class="person-tag" data-i18n="person_tag_family"></span></div>
           <div class="person-meta">ISTJ · 10/05</div>
         </div>
         <span class="person-arrow">→</span>
@@ -148,7 +168,7 @@
       <a href="detail.html" class="person fade-up fade-up-6">
         <div class="person-avatar" style="background:linear-gradient(135deg,#F2CC8F,#E0A060)">阿</div>
         <div class="person-info">
-          <div class="person-row"><span class="person-name">阿杰</span><span class="person-tag">朋友</span></div>
+          <div class="person-row"><span class="person-name">阿杰</span><span class="person-tag" data-i18n="person_tag_friends"></span></div>
           <div class="person-meta">ESTP · 02/14</div>
         </div>
         <span class="person-arrow">→</span>

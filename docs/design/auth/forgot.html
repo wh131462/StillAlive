@@ -3,77 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>找回密码 · 还活着</title>
+  <title data-i18n-title-key="auth_forgot">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <style>
-    .frame { max-width: 430px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; padding: 0 32px; }
-    .top { display: flex; justify-content: space-between; padding: 32px 0 0; align-items: center; }
-    .back { color: var(--ink-faint); transition: color 0.3s; background: none; border: none; font-size: 14px; }
+    body { min-height: 100vh; }
+    .frame {
+      width: 100%; max-width: 430px; margin: 0 auto; min-height: 100vh;
+      display: flex; flex-direction: column; padding: 0 24px;
+    }
+    @media (min-width: 768px) { .frame { max-width: 560px; padding: 0 40px; } }
+    @media (min-width: 1024px) { .frame { max-width: 640px; padding: 0 48px; } }
+
+    .top { display: flex; justify-content: space-between; padding: 24px 0 0; align-items: center; }
+    .back { color: var(--ink-faint); transition: color 0.3s; background: none; border: none; font-size: 14px; cursor: pointer; }
     .back:hover { color: var(--life); }
-    #theme-toggle { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); }
-    #theme-toggle::before { content: '🌙'; font-size: 13px; }
-    html.dark #theme-toggle::before { content: '☀'; }
-    .hero { padding: 48px 0 32px; }
-    .hero h1 { font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: 42px; margin: 0; line-height: 1.1; }
-    .hero h1 .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: 32px; margin-top: 4px; }
+    .top-actions { display: flex; gap: 8px; }
+
+    .hero { padding: 40px 0 24px; }
+    @media (min-width: 768px) { .hero { padding: 56px 0 32px; } }
+    .hero h1 { font-family: var(--font-body); font-weight: 700; font-size: 36px; margin: 0; line-height: 1.1; letter-spacing: -0.005em; }
+    @media (min-width: 768px) { .hero h1 { font-size: 44px; } }
     .hero-sub { font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-soft); margin-top: 16px; }
+    .hero-sub::before { content: '— '; }
+
     .steps { display: flex; gap: 16px; align-items: center; margin-top: 32px; margin-bottom: 32px; }
     .step { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; }
     .step-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; }
     .step-dot.active { background: var(--life); color: var(--bg); }
     .step-dot.inactive { border: 1px solid var(--line); color: var(--ink-faint); }
     .step-line { flex: 1; height: 1px; background: var(--line); }
+    .step.inactive { color: var(--ink-faint); }
+
     .tabs { display: flex; gap: 32px; border-bottom: 1px solid var(--line); }
-    .tab { padding: 12px 0; font-size: 13px; color: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.05em; background: none; border: none; cursor: pointer; position: relative; }
+    .tab { padding: 12px 0; font-size: 13px; color: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.05em; background: none; border: none; cursor: pointer; position: relative; text-transform: uppercase; }
     .tab.active { color: var(--ink); }
     .tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: var(--life); }
+
     .form { margin-top: 32px; flex: 1; }
     .field { margin-bottom: 24px; }
     .label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 8px; }
     .input { display: flex; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
     .input:focus-within { border-bottom-color: var(--life); }
     .input .prefix { font-family: var(--font-mono); color: var(--ink-faint); margin-right: 8px; font-size: 14px; }
-    .input input { flex: 1; border: none; background: transparent; outline: none; font-size: 16px; color: var(--ink); padding: 4px 0; }
-    .input input::placeholder { color: var(--ink-faint); font-style: italic; font-family: var(--font-display); }
-    .input .otp { font-size: 11px; color: var(--life); font-family: var(--font-mono); letter-spacing: 0.15em; background: none; border: none; border-left: 1px solid var(--line); padding-left: 12px; }
-    .submit { width: 100%; padding: 18px; margin-top: 24px; background: var(--ink); color: var(--bg); border: none; font-family: var(--font-display); font-style: italic; font-size: 17px; letter-spacing: 0.05em; position: relative; overflow: hidden; }
+    .input input { flex: 1; border: none; background: transparent; outline: none; font-size: 16px; color: var(--ink); padding: 4px 0; min-width: 0; }
+    .input input::placeholder { color: var(--ink-faint); }
+    .input .otp { font-size: 11px; color: var(--life); font-family: var(--font-mono); letter-spacing: 0.15em; background: none; border: none; border-left: 1px solid var(--line); padding-left: 12px; cursor: pointer; flex-shrink: 0; }
+    .submit { width: 100%; padding: 18px; margin-top: 24px; background: var(--ink); color: var(--bg); border: none; font-family: var(--font-display); font-style: italic; font-size: 17px; letter-spacing: 0.05em; position: relative; overflow: hidden; cursor: pointer; }
     .submit::before { content: ''; position: absolute; inset: 0; background: var(--life); transform: translateY(100%); transition: transform 0.4s var(--ease-breath); }
     .submit:hover::before { transform: translateY(0); }
     .submit span { position: relative; z-index: 1; }
     .note { margin-top: 32px; border-left: 2px solid var(--green); padding: 16px 20px; background: var(--green-soft); font-size: 12px; color: var(--ink-soft); line-height: 1.7; }
+
     .page-no { position: fixed; left: 16px; bottom: 16px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); writing-mode: vertical-rl; transform: rotate(180deg); }
+    @media (max-width: 767px) { .page-no { display: none; } }
   </style>
 </head>
 <body class="grain">
   <span class="page-no">01 / IDENTITY · FORGOT</span>
   <div class="frame">
-    <div class="top"><a href="login.html" class="back">← Back</a><button id="theme-toggle" aria-label="theme"></button></div>
+    <div class="top">
+      <a href="login.html" class="back" data-i18n="auth_back"></a>
+      <div class="top-actions">
+        <button id="lang-toggle"></button>
+        <button id="theme-toggle" data-i18n-aria="theme_toggle"></button>
+      </div>
+    </div>
     <div class="hero">
-      <h1 class="fade-up fade-up-1">Forgot<span class="zh">找回密码</span></h1>
-      <p class="hero-sub fade-up fade-up-2">— we all forget sometimes</p>
+      <h1 class="fade-up fade-up-1" data-i18n="auth_forgot_title"></h1>
+      <p class="hero-sub fade-up fade-up-2" data-i18n="auth_forgot_sub"></p>
     </div>
     <div class="steps fade-up fade-up-2">
-      <div class="step"><span class="step-dot active">1</span><span>验证</span></div>
+      <div class="step"><span class="step-dot active">1</span><span data-i18n="auth_step_verify"></span></div>
       <div class="step-line"></div>
-      <div class="step"><span class="step-dot inactive">2</span><span style="color:var(--ink-faint)">新密码</span></div>
+      <div class="step inactive"><span class="step-dot inactive">2</span><span data-i18n="auth_step_new_pwd"></span></div>
     </div>
     <div class="tabs fade-up fade-up-3">
-      <button class="tab active">手机号 · Phone</button>
-      <button class="tab">邮箱 · Email</button>
+      <button class="tab active" data-i18n="auth_tab_phone"></button>
+      <button class="tab" data-i18n="auth_tab_email"></button>
     </div>
     <form class="form fade-up fade-up-3" onsubmit="event.preventDefault()">
       <div class="field">
-        <div class="label">手机号 · PHONE</div>
-        <div class="input"><span class="prefix">+86</span><input type="tel" placeholder="registered number"></div>
+        <div class="label" data-i18n="auth_phone"></div>
+        <div class="input"><span class="prefix">+86</span><input type="tel" data-i18n-placeholder="auth_phone_registered"></div>
       </div>
       <div class="field">
-        <div class="label">验证码 · OTP</div>
-        <div class="input"><input type="text" maxlength="6" placeholder="six digits"><button type="button" class="otp">SEND →</button></div>
+        <div class="label" data-i18n="auth_otp"></div>
+        <div class="input"><input type="text" maxlength="6" data-i18n-placeholder="auth_otp_placeholder"><button type="button" class="otp" data-i18n="auth_send_otp"></button></div>
       </div>
-      <button type="submit" class="submit"><span>Next · 下一步</span></button>
+      <button type="submit" class="submit"><span data-i18n="auth_next"></span></button>
     </form>
-    <div class="note fade-up fade-up-4">密码重置成功后，其他设备将自动退出登录。</div>
+    <div class="note fade-up fade-up-4" data-i18n="auth_forgot_note"></div>
     <div style="height:40px"></div>
   </div>
 </body>

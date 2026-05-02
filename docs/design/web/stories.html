@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stories · Still Alive</title>
+  <title data-i18n-title-key="story_title">Still Alive</title>
   <link rel="stylesheet" href="../shared/breathe.css">
   <script src="../shared/theme.js"></script>
+  <script src="../shared/i18n.js"></script>
   <style>
     /* Desktop nav */
     .desktop-nav {
@@ -13,70 +14,149 @@
       background: var(--bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
     .desktop-nav .inner {
-      max-width: 1200px; margin: 0 auto; padding: 0 48px; height: 64px;
+      max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 64px;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .nav-brand { display: flex; align-items: center; gap: 12px; }
-    .nav-pulse { width: 32px; height: 32px; background: var(--life); display: flex; align-items: center; justify-content: center; animation: breathe 3s var(--ease-breath) infinite; }
+    @media (min-width: 768px) { .desktop-nav .inner { padding: 0 40px; } }
+    @media (min-width: 1024px) { .desktop-nav .inner { padding: 0 48px; } }
+
+    .nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .nav-pulse { width: 32px; height: 32px; background: var(--life); display: flex; align-items: center; justify-content: center; animation: breathe 3s var(--ease-breath) infinite; flex-shrink: 0; }
     .nav-pulse svg { width: 16px; height: 16px; stroke: var(--bg); }
-    .nav-title { font-family: var(--font-display); font-style: italic; font-size: 18px; }
-    .nav-links { display: flex; align-items: center; gap: 32px; }
-    .nav-link { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-faint); transition: color 0.3s; }
+    .nav-title { font-family: var(--font-display); font-style: italic; font-size: 18px; color: var(--ink); }
+    .nav-links { display: flex; align-items: center; gap: 16px; }
+    @media (min-width: 768px) { .nav-links { gap: 24px; } }
+    .nav-link {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--ink-faint); transition: color 0.3s;
+      text-decoration: none;
+    }
     .nav-link.active { color: var(--life); }
     .nav-link:hover { color: var(--life); }
-    #theme-toggle { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); margin-left: 8px; }
-    #theme-toggle::before { content: '🌙'; font-size: 12px; }
-    html.dark #theme-toggle::before { content: '☀'; }
-    .nav-login { padding: 8px 20px; background: var(--ink); color: var(--bg); font-family: var(--font-display); font-style: italic; font-size: 13px; letter-spacing: 0.05em; transition: background 0.3s; border: none; }
+    /* Hide secondary nav links on mobile */
+    @media (max-width: 639px) {
+      .nav-link.secondary { display: none; }
+    }
+
+    .nav-toolbar { display: flex; gap: 8px; align-items: center; }
+    #lang-toggle, #theme-toggle {
+      width: 32px; height: 32px;
+    }
+
+    .nav-login {
+      padding: 8px 16px; background: var(--ink); color: var(--bg);
+      font-family: var(--font-body); font-size: 13px; letter-spacing: 0.04em;
+      transition: background 0.3s; border: none; text-decoration: none; cursor: pointer;
+    }
+    @media (min-width: 768px) { .nav-login { padding: 8px 20px; } }
     .nav-login:hover { background: var(--life); }
 
     /* Hero */
-    .hero { max-width: 1200px; margin: 0 auto; padding: 80px 48px; text-align: center; }
-    .hero h1 { font-family: var(--font-display); font-style: italic; font-size: clamp(48px, 6vw, 80px); margin: 0; line-height: 1; }
-    .hero h1 .zh { display: block; font-family: var(--font-body); font-style: normal; font-weight: 700; font-size: clamp(32px, 4vw, 48px); margin-top: 8px; }
-    .hero p { font-family: var(--font-display); font-style: italic; font-size: 16px; color: var(--ink-soft); max-width: 480px; margin: 24px auto 0; line-height: 1.8; }
+    .hero { max-width: 1200px; margin: 0 auto; padding: 56px 24px; text-align: center; }
+    @media (min-width: 768px) { .hero { padding: 72px 40px; } }
+    @media (min-width: 1024px) { .hero { padding: 80px 48px; } }
+    .hero h1 { font-family: var(--font-body); font-weight: 700; font-size: clamp(36px, 6vw, 80px); margin: 0; line-height: 1; letter-spacing: -0.005em; }
+    .hero p { font-family: var(--font-display); font-style: italic; font-size: 15px; color: var(--ink-soft); max-width: 480px; margin: 24px auto 0; line-height: 1.8; }
+    @media (min-width: 768px) { .hero p { font-size: 16px; } }
 
     /* Main layout */
-    .main { max-width: 1200px; margin: 0 auto; padding: 0 48px 80px; display: flex; gap: 56px; }
-    .sidebar { width: 200px; flex-shrink: 0; position: sticky; top: 80px; align-self: flex-start; }
-    .sb-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 12px; }
-    .sb-link { display: block; padding: 10px 0; font-size: 13px; color: var(--ink-faint); transition: all 0.3s; border-bottom: 1px dashed var(--line); }
-    .sb-link.active { color: var(--life); padding-left: 8px; border-bottom-color: var(--life); }
-    .sb-link:hover { color: var(--life); padding-left: 8px; }
-    .shuffle-btn { width: 100%; padding: 12px; margin-top: 24px; border: 1px dashed var(--line); background: transparent; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-faint); display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.3s; }
-    .shuffle-btn:hover { border-color: var(--life); color: var(--life); }
+    .main {
+      max-width: 1200px; margin: 0 auto; padding: 0 24px 80px;
+      display: flex; flex-direction: column; gap: 32px;
+    }
+    @media (min-width: 768px) {
+      .main { padding: 0 40px 80px; gap: 40px; }
+    }
+    @media (min-width: 1024px) {
+      .main { padding: 0 48px 80px; flex-direction: row; gap: 56px; }
+    }
 
-    .feed { flex: 1; }
-    .story-card { padding: 32px 0; border-top: 1px solid var(--line); display: block; transition: padding 0.3s; position: relative; }
+    .sidebar { width: 100%; flex-shrink: 0; }
+    @media (min-width: 1024px) {
+      .sidebar { width: 200px; position: sticky; top: 80px; align-self: flex-start; }
+    }
+    .sb-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 12px; }
+
+    /* Mobile/tablet: horizontal pills; desktop: vertical list */
+    .sb-links {
+      display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;
+    }
+    @media (min-width: 1024px) {
+      .sb-links { display: block; padding-bottom: 0; }
+    }
+    .sb-link {
+      flex-shrink: 0; padding: 8px 14px;
+      font-family: var(--font-body); font-size: 13px; color: var(--ink-faint);
+      transition: all 0.3s; border: 1px solid var(--line); text-decoration: none;
+    }
+    .sb-link.active { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+    .sb-link:hover { color: var(--life); border-color: var(--life); }
+    @media (min-width: 1024px) {
+      .sb-link {
+        display: block; padding: 10px 0; border: none;
+        border-bottom: 1px dashed var(--line);
+      }
+      .sb-link.active { color: var(--life); background: transparent; padding-left: 8px; border-bottom-color: var(--life); }
+      .sb-link:hover { padding-left: 8px; border-color: transparent; border-bottom: 1px dashed var(--life); }
+    }
+
+    .shuffle-btn {
+      width: 100%; padding: 12px; margin-top: 16px;
+      border: 1px dashed var(--line); background: transparent;
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--ink-faint);
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: all 0.3s; cursor: pointer;
+    }
+    .shuffle-btn:hover { border-color: var(--life); color: var(--life); }
+    @media (min-width: 1024px) { .shuffle-btn { margin-top: 24px; } }
+
+    .feed { flex: 1; min-width: 0; }
+    .story-card { padding: 28px 0; border-top: 1px solid var(--line); display: block; transition: padding 0.3s; position: relative; text-decoration: none; color: inherit; }
+    @media (min-width: 768px) { .story-card { padding: 32px 0; } }
     .story-card:hover { padding-left: 12px; }
-    .story-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 16px; display: flex; gap: 12px; align-items: center; }
+    .story-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .story-meta .cat { padding: 2px 8px; border: 1px solid var(--life); color: var(--life); }
-    .story-title-txt { font-family: var(--font-body); font-weight: 700; font-size: 18px; margin-bottom: 8px; }
-    .story-body-txt { font-family: var(--font-display); font-style: italic; font-size: 16px; line-height: 1.95; color: var(--ink); }
+    .story-title-txt { font-family: var(--font-body); font-weight: 700; font-size: 17px; margin-bottom: 8px; }
+    @media (min-width: 768px) { .story-title-txt { font-size: 18px; } }
+    .story-body-txt { font-family: var(--font-display); font-style: italic; font-size: 15px; line-height: 1.9; color: var(--ink); }
+    @media (min-width: 768px) { .story-body-txt { font-size: 16px; line-height: 1.95; } }
     .story-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
     .resonance { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.1em; display: flex; align-items: center; gap: 6px; }
     .resonance svg { width: 14px; height: 14px; stroke: var(--life); }
     .read-more { font-family: var(--font-mono); font-size: 11px; color: var(--life); letter-spacing: 0.15em; text-transform: uppercase; opacity: 0; transition: opacity 0.3s; }
     .story-card:hover .read-more { opacity: 1; }
+    @media (max-width: 1023px) { .read-more { opacity: 1; } }
 
-    .warning-card { padding: 28px; border: 1px solid var(--line); border-left: 4px solid #d4a017; margin-top: 24px; }
+    .warning-card { padding: 24px; border: 1px solid var(--line); border-left: 4px solid #d4a017; margin-top: 24px; }
+    @media (min-width: 768px) { .warning-card { padding: 28px; } }
     .warning-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: #d4a017; text-transform: uppercase; margin-bottom: 8px; }
     .warning-card p { font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-soft); margin: 0; }
-    .warning-card a { font-family: var(--font-mono); font-size: 11px; color: var(--life); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 12px; display: inline-block; }
+    .warning-card a { font-family: var(--font-mono); font-size: 11px; color: var(--life); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 12px; display: inline-block; text-decoration: none; }
 
     /* Footer */
     .foot { border-top: 1px solid var(--line); margin-top: 40px; }
-    .foot .inner { max-width: 1200px; margin: 0 auto; padding: 40px 48px; display: flex; justify-content: space-between; align-items: end; }
+    .foot .inner {
+      max-width: 1200px; margin: 0 auto; padding: 32px 24px;
+      display: flex; flex-direction: column; gap: 16px;
+      justify-content: space-between; align-items: start;
+    }
+    @media (min-width: 768px) {
+      .foot .inner { padding: 40px 40px; flex-direction: row; align-items: end; }
+    }
+    @media (min-width: 1024px) { .foot .inner { padding: 40px 48px; } }
     .foot-brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-soft); }
     .foot-mini { width: 20px; height: 20px; background: var(--life); display: flex; align-items: center; justify-content: center; }
     .foot-mini svg { width: 10px; height: 10px; stroke: var(--bg); }
-    .foot-links { display: flex; gap: 24px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; }
+    .foot-links { display: flex; gap: 24px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.15em; color: var(--ink-faint); text-transform: uppercase; flex-wrap: wrap; }
+    .foot-links a { color: var(--ink-faint); text-decoration: none; }
     .foot-links a:hover { color: var(--life); }
 
-    @media (max-width: 768px) {
-      .sidebar { display: none; }
-      .main { padding: 0 24px 40px; }
-      .hero { padding: 40px 24px; }
+    .loading-more {
+      text-align: center; padding: 40px 0;
+      font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint);
+      letter-spacing: 0.15em; text-transform: uppercase;
+      animation: breathe 2s var(--ease-breath) infinite;
     }
   </style>
 </head>
@@ -85,72 +165,84 @@
     <div class="inner">
       <a href="../index.html" class="nav-brand">
         <div class="nav-pulse"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></div>
-        <span class="nav-title">Still Alive</span>
+        <span class="nav-title" data-i18n="app_name_en"></span>
       </a>
       <div class="nav-links">
-        <a href="#" class="nav-link active">STORIES</a>
-        <a href="#" class="nav-link">SUBMIT</a>
-        <a href="#" class="nav-link">ABOUT</a>
-        <button id="theme-toggle" aria-label="theme"></button>
-        <a href="../auth/login.html" class="nav-login">Log in</a>
+        <a href="#" class="nav-link active" data-i18n="nav_stories"></a>
+        <a href="#" class="nav-link secondary" data-i18n="nav_submit"></a>
+        <a href="#" class="nav-link secondary" data-i18n="nav_about"></a>
+        <div class="nav-toolbar">
+          <button id="lang-toggle"></button>
+          <button id="theme-toggle" data-i18n-aria="theme_toggle"></button>
+        </div>
+        <a href="../auth/login.html" class="nav-login" data-i18n="nav_login"></a>
       </div>
     </div>
   </nav>
 
   <div class="hero">
-    <h1 class="fade-up fade-up-1">Voices<span class="zh">来自仍在的人</span></h1>
-    <p class="fade-up fade-up-2">每一则故事都是一个"仍在"的证明。<br>这里收录"差点就没了，但我现在还活着"的瞬间。</p>
+    <h1 class="fade-up fade-up-1" data-i18n="story_title"></h1>
+    <p class="fade-up fade-up-2"><span data-i18n="web_stories_hero_a"></span><br><span data-i18n="web_stories_hero_b"></span></p>
   </div>
 
   <div class="main">
     <aside class="sidebar fade-up fade-up-3">
-      <div class="sb-title">CATEGORY · 分类</div>
-      <a href="#" class="sb-link active">All · 全部</a>
-      <a href="#" class="sb-link">Accident · 意外</a>
-      <a href="#" class="sb-link">Illness · 疾病</a>
-      <a href="#" class="sb-link">Mental · 心理</a>
-      <a href="#" class="sb-link">Nature · 自然</a>
-      <a href="#" class="sb-link">Other · 其他</a>
+      <div class="sb-title" data-i18n="web_stories_category"></div>
+      <div class="sb-links">
+        <a href="#" class="sb-link active" data-i18n="story_all"></a>
+        <a href="#" class="sb-link" data-i18n="story_accident"></a>
+        <a href="#" class="sb-link" data-i18n="story_illness"></a>
+        <a href="#" class="sb-link" data-i18n="story_mental"></a>
+        <a href="#" class="sb-link" data-i18n="story_nature"></a>
+        <a href="#" class="sb-link" data-i18n="story_other"></a>
+      </div>
       <button class="shuffle-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3h5v5M4 20l16-16M21 16v5h-5M15 15l5 5M4 4l5 5"/></svg>
-        RANDOM
+        <span data-i18n="web_stories_random"></span>
       </button>
     </aside>
 
     <div class="feed">
       <a href="../story/detail.html" class="story-card fade-up fade-up-3">
-        <div class="story-meta"><span class="cat">ACCIDENT</span><span>2024 WINTER</span></div>
-        <div class="story-body-txt">车在结冰的山路上滑出去三十米，最后只是撞上了路边的护栏。下车那一刻，我看见月亮挂在松树上，像很久没见的老朋友。我想，原来活着是这样的感觉。</div>
-        <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>1,243</span><span class="read-more">READ →</span></div>
+        <div class="story-meta"><span class="cat" data-i18n="story_accident"></span><span data-i18n="story_meta_winter"></span></div>
+        <div class="story-body-txt" data-i18n="story_card_winter_body"></div>
+        <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>1,243</span><span class="read-more" data-i18n="home_read"></span></div>
       </a>
 
       <a href="../story/detail.html" class="story-card fade-up fade-up-4">
-        <div class="story-meta"><span class="cat" style="border-color:var(--green);color:var(--green)">ILLNESS</span><span>2023 SUMMER</span></div>
-        <div class="story-title-txt">那三个月，我学会了和自己待着</div>
-        <div class="story-body-txt">确诊那天天气很好。医生说得很平静，像在念菜单。我走出诊室，发现走廊的阳光落在我鞋面上，那一刻什么都没想，就站着看了很久。后来三个月，我学会了一个人散步、一个人做饭、一个人在凌晨三点醒来的时候跟自己说"没事的"。</div>
-        <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>867</span><span class="read-more">READ →</span></div>
+        <div class="story-meta"><span class="cat" style="border-color:var(--green);color:var(--green)" data-i18n="story_illness"></span><span data-i18n="story_meta_summer"></span></div>
+        <div class="story-title-txt" data-i18n="story_card_summer_title"></div>
+        <div class="story-body-txt" data-i18n="story_card_summer_body"></div>
+        <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>867</span><span class="read-more" data-i18n="home_read"></span></div>
       </a>
 
       <div class="warning-card fade-up fade-up-5">
-        <div class="warning-tag">CONTENT WARNING · 内容提醒</div>
-        <p>这则故事涉及心理健康相关的敏感内容。</p>
-        <a href="../story/detail.html">REVEAL →</a>
+        <div class="warning-tag" data-i18n="story_content_warning"></div>
+        <p data-i18n="story_content_warning_text"></p>
+        <a href="../story/detail.html" data-i18n="story_reveal"></a>
       </div>
 
       <a href="../story/detail.html" class="story-card fade-up fade-up-5">
-        <div class="story-meta"><span class="cat" style="border-color:#5581b3;color:#5581b3">NATURE</span><span>2022 AUTUMN</span></div>
-        <div class="story-body-txt">在云南徒步的第四天，我在 4800 米的垭口遇到了暴风雪。向导说不能停下来。那半小时里我一直在默念回去要做的事——突然发现，我从来没这么想活过。</div>
-        <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>2,031</span><span class="read-more">READ →</span></div>
+        <div class="story-meta"><span class="cat" style="border-color:#5581b3;color:#5581b3" data-i18n="story_nature"></span><span data-i18n="story_meta_autumn"></span></div>
+        <div class="story-body-txt" data-i18n="story_card_autumn_body"></div>
+        <div class="story-foot"><span class="resonance"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>2,031</span><span class="read-more" data-i18n="home_read"></span></div>
       </a>
 
-      <div style="text-align:center;padding:40px 0;font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);letter-spacing:0.15em;animation:breathe 2s var(--ease-breath) infinite">LOADING MORE...</div>
+      <div class="loading-more" data-i18n="story_loading"></div>
     </div>
   </div>
 
   <footer class="foot">
     <div class="inner">
-      <div class="foot-brand"><div class="foot-mini"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></div>Still Alive · 还活着</div>
-      <div class="foot-links"><a href="#">ABOUT</a><a href="#">TERMS</a><a href="#">PRIVACY</a></div>
+      <div class="foot-brand">
+        <div class="foot-mini"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></div>
+        <span data-i18n="web_footer_brand"></span>
+      </div>
+      <div class="foot-links">
+        <a href="#" data-i18n="web_footer_about"></a>
+        <a href="#" data-i18n="web_footer_terms"></a>
+        <a href="#" data-i18n="web_footer_privacy"></a>
+      </div>
     </div>
   </footer>
 </body>
