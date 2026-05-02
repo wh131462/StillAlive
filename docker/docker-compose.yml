@@ -1,42 +1,36 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: stillalive-postgres
+    container_name: sa-postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-stillalive}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stillalive}
-      POSTGRES_DB: ${POSTGRES_DB:-stillalive}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: stillalive
+      POSTGRES_PASSWORD: stillalive_dev
+      POSTGRES_DB: stillalive
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stillalive"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: stillalive-redis
+    container_name: sa-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
-
-  api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.server
-    container_name: stillalive-api
-    restart: unless-stopped
-    ports:
-      - "${API_PORT:-3000}:3000"
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-stillalive}:${POSTGRES_PASSWORD:-stillalive}@postgres:5432/${POSTGRES_DB:-stillalive}
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
-  postgres_data:
+  pg_data:
   redis_data:

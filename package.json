@@ -4,12 +4,20 @@
   "private": true,
   "description": "还活着 - 多端打卡应用",
   "scripts": {
-    "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:server": "turbo run dev --filter=@stillalive/server",
+    "dev:web": "turbo run dev --filter=@stillalive/web",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:up": "docker compose -f docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f docker/docker-compose.yml down",
+    "db:migrate": "pnpm --filter @stillalive/server prisma:migrate",
+    "db:studio": "pnpm --filter @stillalive/server prisma:studio",
+    "db:seed": "pnpm --filter @stillalive/server db:seed",
+    "setup": "pnpm install && pnpm db:up && sleep 3 && pnpm db:migrate"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
