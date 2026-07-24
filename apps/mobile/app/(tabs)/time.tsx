@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { DayKey, Post } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
@@ -11,7 +12,7 @@ type ViewMode = 'timeline' | 'calendar';
 
 export default function TimeScreen() {
   const router = useRouter();
-  const { checkIns, media, posts, today, todayCheckIn } = useAppState();
+  const { checkIns, media, posts, preferences, today, todayCheckIn } = useAppState();
   const [mode, setMode] = useState<ViewMode>('timeline');
   const [activeMonth, setActiveMonth] = useState(today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
@@ -57,14 +58,15 @@ export default function TimeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <Text style={styles.label}>YOUR DAYS</Text>
+        <View style={styles.topLine}>
+          <Text style={styles.label}>YOUR DAYS</Text>
+          <View style={styles.modeSwitch}>
+            <ModeButton active={mode === 'timeline'} label="时间线" onPress={() => setMode('timeline')} />
+            <ModeButton active={mode === 'calendar'} label="月历" onPress={showCalendar} />
+          </View>
+        </View>
         <Text style={styles.title}>日子没有消失，{`\n`}只是走到了身后。</Text>
         <Text style={styles.description}>打卡只是轻轻一点，留下的内容会在这里慢慢形成时间。</Text>
-
-        <View style={styles.modeSwitch}>
-          <ModeButton active={mode === 'timeline'} label="时间线" onPress={() => setMode('timeline')} />
-          <ModeButton active={mode === 'calendar'} label="月历" onPress={showCalendar} />
-        </View>
 
         {mode === 'timeline' ? (
           <>
@@ -89,7 +91,7 @@ export default function TimeScreen() {
                   {group.posts.length === 0 ? (
                     <Text style={styles.checkInOnly}>这一天，只留下了一个坐标。</Text>
                   ) : group.posts.map((post) => (
-                    <TimelinePost key={post.id} mediaById={mediaById} onPress={() => router.push(`/post/${post.id}`)} post={post} />
+                    <TimelinePost authorName={preferences.nickname || '我'} key={post.id} mediaById={mediaById} onPress={() => router.push(`/post/${post.id}`)} post={post} />
                   ))}
                 </View>
               </View>
@@ -117,22 +119,49 @@ export default function TimeScreen() {
 
 function ModeButton({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} hitSlop={4} onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
       <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
     </Pressable>
   );
 }
 
-function TimelinePost({ mediaById, onPress, post }: { mediaById: Map<string, { localPath: string }>; onPress(): void; post: Post }) {
-  const imageId = firstMediaId(post.bodyMarkdown);
-  const image = imageId ? mediaById.get(imageId) : undefined;
+function TimelinePost({ authorName, mediaById, onPress, post }: { authorName: string; mediaById: Map<string, { localPath: string }>; onPress(): void; post: Post }) {
+  const mediaIds = extractMediaIds(post.bodyMarkdown);
+  const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is { localPath: string } => Boolean(item));
   const plainText = markdownToPlainText(post.bodyMarkdown);
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.entry, pressed && styles.pressed]}>
-      {image ? <Image accessibilityLabel="日记图片" resizeMode="cover" source={{ uri: image.localPath }} style={styles.entryImage} /> : null}
-      {plainText ? <Text style={styles.entryText}>{plainText}</Text> : null}
-      <Text style={styles.entryMeta}>{formatTime(post.createdAt)} · {image ? '照片与文字' : 'Markdown'}</Text>
+      <View style={styles.entryHeader}>
+        <View style={styles.entryAvatar}><Text style={styles.entryAvatarText}>{authorName.slice(0, 1)}</Text></View>
+        <View style={styles.entryIdentity}>
+          <Text style={styles.entryAuthor}>{authorName}</Text>
+          <Text style={styles.entryMeta}>{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' 修改过' : ''}</Text>
+        </View>
+      </View>
+      {plainText ? <Text numberOfLines={6} style={styles.entryText}>{plainText}</Text> : null}
+      {images.length ? <TimelineImages images={images} totalCount={mediaIds.length} /> : null}
+      <View style={styles.entryFooter}>
+        <Text style={styles.entryType}>{images.length ? `${mediaIds.length} 张照片` : '文字记录'}</Text>
+        <Text style={styles.entryOpen}>查看全文　›</Text>
+      </View>
     </Pressable>
+  );
+}
+
+function TimelineImages({ images, totalCount }: { images: Array<{ localPath: string }>; totalCount: number }) {
+  if (images.length === 1) {
+    return <Image accessibilityLabel="日记图片" resizeMode="cover" source={{ uri: images[0].localPath }} style={styles.entrySingleImage} />;
+  }
+  const visibleImages = images.slice(0, 9);
+  return (
+    <View style={styles.entryImageGrid}>
+      {visibleImages.map((image, index) => (
+        <View key={`${image.localPath}_${index}`} style={styles.entryImageCell}>
+          <Image accessibilityLabel={`日记图片 ${index + 1}`} resizeMode="cover" source={{ uri: image.localPath }} style={styles.entryGridImage} />
+          {index === visibleImages.length - 1 && totalCount > 9 ? <View style={styles.entryImageMore}><Text style={styles.entryImageMoreText}>+{totalCount - 9}</Text></View> : null}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -167,7 +196,7 @@ function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOp
     <View style={styles.calendarSection}>
       <View style={styles.calendarHeader}>
         <View>
-          <Text style={styles.calendarYear}>{year} · MONTH {month}</Text>
+          <Text style={styles.calendarYear}>{year} MONTH {month}</Text>
           <Text style={styles.calendarTitle}>{Number(month)} 月</Text>
         </View>
         <View style={styles.monthArrows}>
@@ -221,8 +250,8 @@ function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOp
       <View style={styles.selectedPanel}>
         <View style={styles.selectedHeader}>
           <View style={styles.selectedDateBlock}>
-            <Text style={styles.selectedDate}>{selectedDay.replaceAll('-', '.')} · {chineseWeekdayLabel(selectedDay)}</Text>
-            {selectedLunarDate ? <Text style={styles.selectedLunar}>农历 {selectedLunarDate.fullLabel}{selectedLunarDate.term ? ` · ${selectedLunarDate.term}` : ''}</Text> : null}
+            <Text style={styles.selectedDate}>{selectedDay.replaceAll('-', '.')} {chineseWeekdayLabel(selectedDay)}</Text>
+            {selectedLunarDate ? <Text style={styles.selectedLunar}>农历 {selectedLunarDate.fullLabel}{selectedLunarDate.term ? ` ${selectedLunarDate.term}` : ''}</Text> : null}
             <Text style={styles.selectedHint}>{checkInDays.has(selectedDay) ? '这一天留下了坐标' : selectedPosts.length ? '后来补写的日子' : '这一天还没有内容'}</Text>
           </View>
           <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable>
@@ -264,7 +293,7 @@ function shiftMonth(month: string, offset: number): string {
 
 function monthTitle(month: string): string {
   const [year, value] = month.split('-');
-  return `${year} · ${Number(value)} 月`;
+  return `${year} ${Number(value)} 月`;
 }
 
 function shortMonth(month: string): string {
@@ -317,6 +346,10 @@ function markdownToPlainText(markdown: string): string {
   return markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/^#{1,3}\s+/gm, '').replace(/^[-*>]\s+/gm, '').replace(/[*_`]/g, '').trim();
 }
 
+function extractMediaIds(markdown: string): string[] {
+  return [...new Set([...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].map((match) => match[1]))];
+}
+
 function firstMediaId(markdown: string): string | null {
   return markdown.match(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/)?.[1] ?? null;
 }
@@ -324,15 +357,16 @@ function firstMediaId(markdown: string): string | null {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  topLine: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.5 },
-  title: { marginTop: spacing.lg, color: colors.ink, fontFamily: typography.display, fontSize: 36, lineHeight: 47 },
+  title: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 36, lineHeight: 47 },
   description: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
-  modeSwitch: { width: 174, height: 42, marginTop: spacing.xl, padding: 4, flexDirection: 'row', borderRadius: 21, backgroundColor: colors.sheet },
-  modeButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 17 },
+  modeSwitch: { width: 138, height: 36, padding: 3, flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.sheet },
+  modeButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
   modeButtonActive: { backgroundColor: colors.life },
   modeText: { color: colors.inkFaint, fontSize: 10 },
   modeTextActive: { color: colors.onLife, fontWeight: '700' },
-  monthTabs: { gap: spacing.sm, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  monthTabs: { gap: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   monthTab: { minWidth: 54, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   monthTabActive: { borderColor: colors.life, backgroundColor: colors.lifeLight },
   monthTabText: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
@@ -341,18 +375,31 @@ const styles = StyleSheet.create({
   month: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
   monthLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
   empty: { color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
-  dayGroup: { minHeight: 78, flexDirection: 'row' },
-  dayColumn: { width: 68, position: 'relative', borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.line },
+  dayGroup: { marginBottom: spacing.xl },
+  dayColumn: { minHeight: 36, flexDirection: 'row', alignItems: 'baseline', position: 'relative' },
   day: { color: colors.ink, fontFamily: typography.display, fontSize: 28 },
-  weekday: { marginTop: 3, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
-  dot: { position: 'absolute', top: 8, right: -5, width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: colors.paper, backgroundColor: colors.life },
+  weekday: { marginLeft: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  dot: { width: 7, height: 7, marginLeft: spacing.sm, borderRadius: 4, backgroundColor: colors.life },
   dotCheckIn: { backgroundColor: colors.sun },
-  dayContent: { flex: 1, paddingLeft: spacing.lg, paddingBottom: spacing.lg },
-  checkInOnly: { paddingTop: 5, color: colors.inkFaint, fontFamily: typography.display, fontSize: 13 },
-  entry: { paddingBottom: spacing.lg },
-  entryImage: { width: '100%', height: 148, marginBottom: spacing.md, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.lifeLight },
-  entryText: { color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 28 },
-  entryMeta: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 9 },
+  dayContent: { gap: spacing.md },
+  checkInOnly: { padding: spacing.md, color: colors.inkFaint, fontFamily: typography.display, fontSize: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  entry: { padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  entryHeader: { flexDirection: 'row', alignItems: 'center' },
+  entryAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.life },
+  entryAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 16 },
+  entryIdentity: { flex: 1, marginLeft: spacing.sm },
+  entryAuthor: { color: colors.life, fontSize: 12, fontWeight: '700' },
+  entryMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
+  entryText: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
+  entrySingleImage: { width: '78%', aspectRatio: 1.15, marginTop: spacing.md, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  entryImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  entryImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  entryGridImage: { width: '100%', height: '100%' },
+  entryImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
+  entryImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
+  entryFooter: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  entryType: { color: colors.inkFaint, fontSize: 8 },
+  entryOpen: { color: colors.life, fontSize: 9 },
   pressed: { opacity: 0.62 },
   calendarSection: { marginTop: spacing.xl },
   calendarHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

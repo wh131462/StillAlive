@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { SymbolView } from 'expo-symbols';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
 
@@ -33,7 +35,7 @@ export default function PeopleScreen() {
           </Pressable>
         </View>
         <Text style={styles.title}>有些日子，{`\n`}因为有人而记得。</Text>
-        <Text style={styles.description}>人物从共同经历里自然长出来，不需要先建立一份完整档案。</Text>
+        <Text style={styles.description}>记下与你相遇的人，也收藏彼此共同经历的日子。</Text>
 
         {people.length === 0 ? (
           <Pressable accessibilityRole="button" onPress={() => setCreating(true)} style={styles.emptyCard}>
@@ -43,15 +45,18 @@ export default function PeopleScreen() {
           </Pressable>
         ) : (
           <View style={styles.list}>
-            {people.map((person) => {
+            {people.map((person, index) => {
               const avatar = person.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
-              return <Pressable key={person.id} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, pressed && styles.personRowPressed]}>
+              return <Pressable key={person.id} accessibilityLabel={`查看${person.name}的人物详情`} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, index === people.length - 1 && styles.personRowLast, pressed && styles.personRowPressed]}>
                 <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
                 <View style={styles.personInfo}>
-                  <Text style={styles.personName}>{person.name}</Text>
-                  <Text style={styles.personMeta}>{person.relationToMe ?? '关系会在往后的记录里慢慢清晰'}</Text>
+                  <View style={styles.personTitleRow}>
+                    <Text numberOfLines={1} style={styles.personName}>{person.name}</Text>
+                    {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
+                  </View>
+                  <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>
                 </View>
-                <Text style={styles.chevron}>›</Text>
+                <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
               </Pressable>;
             })}
           </View>
@@ -88,16 +93,18 @@ const styles = StyleSheet.create({
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
   emptyAction: { marginTop: spacing.lg, color: colors.life, fontSize: 11, fontWeight: '700' },
-  list: { marginTop: spacing.xxl },
-  personRow: { minHeight: 78, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  list: { marginTop: spacing.xl, paddingHorizontal: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  personRow: { minHeight: 92, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  personRowLast: { borderBottomWidth: 0 },
   personRowPressed: { opacity: 0.58 },
-  avatar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 24, backgroundColor: colors.life },
+  avatar: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 26, backgroundColor: colors.life },
   avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 19 },
+  avatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 20 },
   personInfo: { flex: 1, marginLeft: spacing.md },
-  personName: { color: colors.ink, fontFamily: typography.display, fontSize: 17 },
-  personMeta: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
-  chevron: { color: colors.inkFaint, fontFamily: typography.display, fontSize: 25 },
+  personTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  personName: { maxWidth: '64%', color: colors.ink, fontFamily: typography.display, fontSize: 17 },
+  personRelation: { maxWidth: '34%', marginLeft: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden', borderRadius: 9, backgroundColor: colors.lifeLight, color: colors.life, fontSize: 8 },
+  personMeta: { marginTop: 5, marginRight: spacing.md, color: colors.inkFaint, fontSize: 10, lineHeight: 16 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.28)' },
   sheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   handle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },

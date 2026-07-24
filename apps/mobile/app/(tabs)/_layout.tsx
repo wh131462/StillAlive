@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { colors, typography } from '@still-alive/tokens';
@@ -45,11 +46,13 @@ function TabIcon({ color, name }: { color: ColorValue; name: TabIconName }) {
 
   if (name === 'people') {
     return (
-      <View pointerEvents="none" style={styles.icon}>
-        <View style={[styles.personHead, styles.personHeadLeft, { borderColor: color }]} />
-        <View style={[styles.personHead, styles.personHeadRight, { borderColor: color }]} />
-        <View style={[styles.peopleBody, { borderColor: color }]} />
-      </View>
+      <SymbolView
+        name={{ android: 'group', ios: 'person.2', web: 'group' }}
+        pointerEvents="none"
+        size={22}
+        tintColor={color}
+        type="hierarchical"
+      />
     );
   }
 
@@ -69,10 +72,6 @@ const styles = StyleSheet.create({
   clock: { borderWidth: 1.7, borderRadius: 11 },
   clockHour: { position: 'absolute', top: 5, left: 9.3, width: 1.5, height: 6, borderRadius: 1 },
   clockMinute: { position: 'absolute', top: 10, left: 10, width: 5, height: 1.5, borderRadius: 1, transform: [{ rotate: '28deg' }], transformOrigin: 'left center' },
-  personHead: { position: 'absolute', top: 2, width: 7, height: 7, borderWidth: 1.5, borderRadius: 4 },
-  personHeadLeft: { left: 3 },
-  personHeadRight: { right: 3 },
-  peopleBody: { position: 'absolute', left: 1, right: 1, bottom: 1, height: 9, borderWidth: 1.5, borderBottomWidth: 0, borderTopLeftRadius: 9, borderTopRightRadius: 9 },
   profileHead: { position: 'absolute', top: 1, left: 7, width: 8, height: 8, borderWidth: 1.5, borderRadius: 4 },
   profileBody: { position: 'absolute', left: 3, right: 3, bottom: 1, height: 9, borderWidth: 1.5, borderBottomWidth: 0, borderTopLeftRadius: 9, borderTopRightRadius: 9 },
 });
