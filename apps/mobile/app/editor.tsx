@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { SymbolView } from 'expo-symbols';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import {
   Alert,
@@ -9,7 +10,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,7 +30,7 @@ export default function EditorScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { dayKey: requestedDayKey, personId, postId } = useLocalSearchParams<{ dayKey?: string; personId?: string; postId?: string }>();
-  const { createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, saveDraft, saveMedia, savePost, today, todayCheckIn, updatePost } = useAppState();
+  const { createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, replaceMedia, saveDraft, saveMedia, savePost, today, todayCheckIn, updatePost } = useAppState();
   const initializedRef = useRef(false);
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
@@ -228,6 +228,25 @@ export default function EditorScreen() {
     }
   };
 
+  const handleReplaceImage = async (mediaId: string) => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('无法访问照片', '请在系统设置中允许“仍在”访问照片。');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
+    if (result.canceled) return;
+    try {
+      setDraftStatus('正在替换图片…');
+      const replacement = await persistPickedImage(result.assets[0]);
+      await replaceMedia(mediaId, replacement);
+      setDraftStatus('图片已替换');
+    } catch (cause: unknown) {
+      Alert.alert('图片替换失败', cause instanceof Error ? cause.message : '请稍后重试。');
+      setDraftStatus('本地草稿');
+    }
+  };
+
   const insertLink = () => {
     const url = linkUrl.trim();
     if (!/^https?:\/\//i.test(url)) {
@@ -243,7 +262,7 @@ export default function EditorScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}>
-            <Text style={styles.backText}>‹</Text>
+            <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>{postId ? '编辑长文' : isPastEntry ? '补写长文' : '写长文'}</Text>
@@ -270,12 +289,12 @@ export default function EditorScreen() {
             onChange={setBody}
             onFormatsChange={setActiveFormats}
             onMention={() => openPersonPicker('mention')}
+            onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
             placeholder={`${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
           />
         ) : <View style={styles.domEditor} />}
 
         <View style={styles.meta}>
-          <Text style={styles.metaText}>所见即所得 · 自动保存草稿</Text>
           <Text style={styles.metaText}>{markdownTextLength(body)} 字</Text>
         </View>
 
@@ -406,7 +425,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.sheet },
   header: { minHeight: 62, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   headerButton: { width: 54, minHeight: 48, justifyContent: 'center' },
-  backText: { color: colors.ink, fontFamily: typography.display, fontSize: 38, lineHeight: 42 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   statusText: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
@@ -417,8 +435,8 @@ const styles = StyleSheet.create({
   date: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
   peopleButton: { minHeight: 36, justifyContent: 'center' },
   peopleButtonText: { color: colors.inkFaint, fontSize: 9 },
-  domEditor: { flex: 1, backgroundColor: 'transparent' },
-  meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  domEditor: { flex: 1, width: '100%', backgroundColor: 'transparent' },
+  meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: 8 },
   toolbarStage: { paddingHorizontal: spacing.md, paddingTop: 5, paddingBottom: spacing.sm, gap: 8, backgroundColor: colors.sheet },
   toolbar: { height: 58, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: 29, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
