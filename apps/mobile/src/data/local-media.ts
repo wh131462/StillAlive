@@ -23,6 +23,64 @@ export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media
   };
 }
 
+export async function persistAlbumImage(personId: string | null, albumId: string, asset: ImagePickerAsset): Promise<Media> {
+  const id = createLocalId('media');
+  const targetDirectory = personId
+    ? new Directory(Paths.document, 'people', personId, 'albums', albumId)
+    : new Directory(Paths.document, 'self', 'albums', albumId);
+  targetDirectory.create({ idempotent: true, intermediates: true });
+  const temporaryDirectory = new Directory(Paths.cache, 'album-imports');
+  temporaryDirectory.create({ idempotent: true, intermediates: true });
+  const extension = fileExtension(asset);
+  const temporary = new File(temporaryDirectory, `${id}${extension}`);
+  const destination = new File(targetDirectory, `${id}${extension}`);
+  try {
+    await new File(asset.uri).copy(temporary);
+    if (!temporary.exists || temporary.size <= 0) throw new Error('照片文件为空');
+    await temporary.move(destination);
+    return {
+      id,
+      localPath: destination.uri,
+      mimeType: asset.mimeType ?? mimeTypeForExtension(extension),
+      width: asset.width || null,
+      height: asset.height || null,
+      checksum: destination.md5 ?? '',
+      createdAt: new Date().toISOString(),
+    };
+  } catch (cause) {
+    if (temporary.exists) temporary.delete();
+    if (destination.exists) destination.delete();
+    throw cause;
+  }
+}
+
+export function deletePersonAlbumDirectory(personId: string | null, albumId?: string): void {
+  const directory = personId
+    ? albumId ? new Directory(Paths.document, 'people', personId, 'albums', albumId) : new Directory(Paths.document, 'people', personId)
+    : albumId ? new Directory(Paths.document, 'self', 'albums', albumId) : new Directory(Paths.document, 'self');
+  if (directory.exists) directory.delete();
+}
+
+export function cleanupOrphanedAlbumFiles(media: Media[]): void {
+  const referencedPaths = new Set(media.map((item) => item.localPath));
+  cleanupAlbumDirectories(new Directory(Paths.document, 'self', 'albums'), referencedPaths);
+  const peopleDirectory = new Directory(Paths.document, 'people');
+  if (!peopleDirectory.exists) return;
+  for (const personEntry of peopleDirectory.list()) {
+    if (!(personEntry instanceof Directory)) continue;
+    cleanupAlbumDirectories(new Directory(personEntry, 'albums'), referencedPaths);
+  }
+}
+
+function cleanupAlbumDirectories(albumsDirectory: Directory, referencedPaths: Set<string>): void {
+  if (!albumsDirectory.exists) return;
+  for (const albumEntry of albumsDirectory.list()) {
+    if (!(albumEntry instanceof Directory)) continue;
+    for (const file of albumEntry.list()) if (file instanceof File && !referencedPaths.has(file.uri)) file.delete();
+    if (albumEntry.list().length === 0) albumEntry.delete();
+  }
+}
+
 function fileExtension(asset: ImagePickerAsset): string {
   const match = asset.fileName?.match(/\.[a-zA-Z0-9]+$/);
   if (match) return match[0].toLowerCase();

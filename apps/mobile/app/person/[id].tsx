@@ -1,26 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { SymbolView } from 'expo-symbols';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Post } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
+import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from '../../src/domain/person-profile';
 
 export default function PersonScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { deletePerson, getPostsByPerson, media, people, posts: allPosts, ready, setPersonMemoryEnabled, todayCheckIn } = useAppState();
+  const { albums, deletePerson, getPostsByPerson, media, people, personTags, posts: allPosts, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
+  const personAssignments = personTags.filter((item) => item.personId === person?.id);
+  const enabledSystems = new Set(tagSystemSettings.filter((item) => item.enabled).map((item) => item.system));
+  const labels = person ? [
+    enabledSystems.has('mbti') ? personAssignments.find((item) => item.kind === 'mbti')?.value : null,
+    enabledSystems.has('constellation') && person.birthday ? constellationForBirthday(person.birthday) : null,
+    enabledSystems.has('zodiac') && person.birthday ? `${zodiacForBirthday(person.birthday)}年` : null,
+    ...(enabledSystems.has('custom') ? personAssignments.filter((item) => item.kind === 'custom').map((item) => tagDefinitions.find((tag) => tag.id === item.value)?.name ?? null) : []),
+  ].filter((value): value is string => Boolean(value)) : [];
 
   useEffect(() => {
     if (!ready || !id) return;
     void getPostsByPerson(id).then(setPosts);
   }, [allPosts, getPostsByPerson, id, ready]);
 
+  useEffect(() => {
+    if (ready && !person) router.replace('/people');
+  }, [person, ready, router]);
+
   const confirmDelete = () => {
     if (!person) return;
-    Alert.alert(`删除 ${person.name}？`, '人物会被删除，历史日记会保留，只解除与这个人物的关联。', [
+    const albumCount = albums.filter((album) => album.personId === person.id).length;
+    Alert.alert(`删除 ${person.name}？`, `人物会被删除，历史日记会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中照片。` : ''}`, [
       { text: '取消', style: 'cancel' },
       { text: '删除人物', style: 'destructive', onPress: () => void deletePerson(person.id).then(
         () => router.replace('/people'),
@@ -33,10 +49,16 @@ export default function PersonScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}><Text style={styles.backText}>← 返回</Text></Pressable>
+          <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
+            <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" />
+          </Pressable>
           {person ? <View style={styles.headerActions}>
-            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/edit', params: { id: person.id } })} style={styles.headerTextButton}><Text style={styles.editText}>编辑</Text></Pressable>
-            {todayCheckIn ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/editor', params: { personId: person.id } })} style={styles.writeButton}><Text style={styles.writeText}>写一条</Text></Pressable> : null}
+            <Pressable accessibilityLabel="编辑人物" accessibilityRole="button" onPress={() => router.push({ pathname: '/person/edit', params: { id: person.id } })} style={styles.headerButton}>
+              <SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" />
+            </Pressable>
+            {todayCheckIn ? <Pressable accessibilityLabel={`写一条与${person.name}有关的日记`} accessibilityRole="button" onPress={() => router.push({ pathname: '/editor', params: { personId: person.id } })} style={styles.headerButton}>
+              <SymbolView name={{ android: 'edit_note', ios: 'square.and.pencil', web: 'edit_note' }} size={21} tintColor={colors.life} type="hierarchical" />
+            </Pressable> : null}
           </View> : null}
         </View>
 
@@ -46,11 +68,14 @@ export default function PersonScreen() {
             <Text style={styles.name}>{person.name}</Text>
             <Text style={styles.relation}>{person.relationToMe ?? '暂时不定义关系'}</Text>
             {person.impression ? <Text style={styles.impression}>{person.impression}</Text> : null}
+            {person.birthday ? <View style={styles.profileMeta}><Text style={styles.profileMetaTitle}>{formatBirthday(person.birthday)}</Text><Text style={styles.profileMetaHint}>下一次 {toLocalDayKey(nextBirthday(person.birthday))}</Text></View> : <Text style={styles.emptyMeta}>还没有记录生日</Text>}
+            {labels.length ? <View style={styles.tags}>{labels.map((label) => <View key={label} style={styles.tag}><Text style={styles.tagText}>{label}</Text></View>)}</View> : <Text style={styles.emptyMeta}>还没有人物标签</Text>}
+            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/albums', params: { personId: person.id } })} style={styles.albumEntry}><View><Text style={styles.albumTitle}>人物相册</Text><Text style={styles.albumHint}>按文件夹整理只属于 {person.name} 的照片</Text></View><Text style={styles.albumCount}>{albums.filter((album) => album.personId === person.id).length} 个 ›</Text></Pressable>
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: person.memoryEnabled }} onPress={() => void setPersonMemoryEnabled(person.id, !person.memoryEnabled)} style={styles.memorySetting}>
               <View style={[styles.memoryIndicator, person.memoryEnabled && styles.memoryIndicatorOn]} />
               <View style={styles.memorySettingText}>
                 <Text style={styles.memorySettingTitle}>偶尔在今日页想起 {person.name}</Text>
-                <Text style={styles.memorySettingHint}>{person.memoryEnabled ? '已开启 · 可以随时关闭' : '已关闭 · 记录仍会完整保留'}</Text>
+                <Text style={styles.memorySettingHint}>{person.memoryEnabled ? '已开启 可以随时关闭' : '已关闭 记录仍会完整保留'}</Text>
               </View>
             </Pressable>
 
@@ -94,18 +119,25 @@ const styles = StyleSheet.create({
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   header: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
-  headerTextButton: { minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  editText: { color: colors.life, fontSize: 11 },
-  backButton: { minHeight: 44, justifyContent: 'center' },
-  backText: { color: colors.inkSoft, fontSize: 11 },
-  writeButton: { minHeight: 40, paddingHorizontal: spacing.md, justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
-  writeText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
+  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 76, height: 76, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 38, backgroundColor: colors.life },
   avatarImage: { width: '100%', height: '100%' },
   avatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 31 },
   name: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 38 },
   relation: { marginTop: spacing.xs, color: colors.life, fontSize: 11 },
   impression: { marginTop: spacing.md, color: colors.inkSoft, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
+  profileMeta: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet },
+  profileMetaTitle: { color: colors.ink, fontSize: 12 },
+  profileMetaHint: { marginTop: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
+  emptyMeta: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 9 },
+  tags: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tag: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 15, backgroundColor: colors.lifeLight },
+  tagText: { color: colors.life, fontSize: 9 },
+  albumEntry: { minHeight: 76, marginTop: spacing.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
+  albumTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
+  albumHint: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
+  albumCount: { color: colors.life, fontSize: 10 },
   memorySetting: { minHeight: 58, marginTop: spacing.lg, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.sheet },
   memoryIndicator: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: colors.inkFaint },
   memoryIndicatorOn: { borderColor: colors.life, backgroundColor: colors.life },

@@ -9,6 +9,7 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
+      "expo-notifications",
       [
         "expo-image-picker",
         {

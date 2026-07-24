@@ -2,21 +2,32 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { PropsWithChildren } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
-import { AppState as NativeAppState } from 'react-native';
-import type { CheckIn, DayKey, Draft, Media, Person, Post } from '@still-alive/types';
+import { AppState as NativeAppState, Linking } from 'react-native';
+import type { AlbumMedia, Birthday, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { SQLiteStillAliveRepository } from '../data/sqlite-repository';
 import type { BackupSnapshot } from '../data/sqlite-repository';
 import type { AppPreferences, HomeMemory } from '../data/sqlite-repository';
+import { cleanupOrphanedAlbumFiles, deletePersonAlbumDirectory } from '../data/local-media';
+import { MBTI_TYPES, validateBirthday } from '../domain/person-profile';
+import { cancelBirthdayNotifications, reconcileBirthdayNotifications } from '../domain/birthday-notifications';
+import { expoBirthdayNotificationAdapter, initializeBirthdayNotificationChannel } from '../data/expo-birthday-notifications';
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   onboardingCompleted: false,
   nickname: '',
   birthDate: '',
+  profileAvatarMediaId: null,
+  profileMbti: '',
+  profileCustomTagIds: [],
   globalMemoryEnabled: true,
   lastExportAt: null,
   lastExportPostCount: 0,
   backupReminderShownAt: null,
+  birthdayNotificationsEnabled: false,
+  birthdayReminderHour: 9,
+  birthdayReminderMinute: 0,
+  birthdayNotificationError: null,
 };
 
 interface AppStateValue {
@@ -26,8 +37,15 @@ interface AppStateValue {
   posts: Post[];
   people: Person[];
   media: Media[];
+  tagDefinitions: TagDefinition[];
+  tagGroups: TagGroup[];
+  tagSystemSettings: TagSystemSetting[];
+  personTags: PersonTagAssignment[];
+  albums: PersonAlbum[];
+  albumMedia: AlbumMedia[];
   homeMemory: HomeMemory | null;
   preferences: AppPreferences;
+  notificationPermission: 'granted' | 'denied' | 'undetermined';
   shouldShowBackupReminder: boolean;
   ready: boolean;
   error: string | null;
@@ -38,16 +56,34 @@ interface AppStateValue {
   getPersonIdsByPost(postId: string): Promise<string[]>;
   getPostsByPerson(personId: string): Promise<Post[]>;
   saveMedia(item: Media): Promise<void>;
+  replaceMedia(mediaId: string, replacement: Media): Promise<void>;
   discardMedia(media: Media): Promise<void>;
   createPerson(name: string): Promise<Person>;
-  updatePerson(personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'relationToMe' | 'impression'>): Promise<void>;
+  updatePerson(personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
   deletePerson(personId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
+  createTag(name: string, groupId?: string | null): Promise<TagDefinition>;
+  renameTag(tagId: string, name: string): Promise<void>;
+  deleteTag(tagId: string): Promise<void>;
+  createTagGroup(name: string): Promise<TagGroup>;
+  renameTagGroup(groupId: string, name: string): Promise<void>;
+  deleteTagGroup(groupId: string): Promise<void>;
+  countPeopleByTag(tagId: string): Promise<number>;
+  updateTagSystems(settings: TagSystemSetting[]): Promise<void>;
+  createAlbum(personId: string | null, name: string): Promise<PersonAlbum>;
+  updateAlbum(albumId: string, changes: Partial<Pick<PersonAlbum, 'name' | 'coverMediaId' | 'sortOrder'>>): Promise<void>;
+  deleteAlbum(albumId: string): Promise<void>;
+  addPhotoToAlbum(albumId: string, item: Media): Promise<void>;
+  reorderAlbumPhotos(albumId: string, orderedMediaIds: string[]): Promise<void>;
+  removePhotoFromAlbum(albumId: string, mediaId: string): Promise<void>;
   saveDraft(bodyMarkdown: string, dayKey?: DayKey): Promise<void>;
   loadDraft(dayKey?: DayKey): Promise<string>;
   createBackupSnapshot(): Promise<BackupSnapshot>;
   restoreBackupSnapshot(snapshot: BackupSnapshot): Promise<void>;
   updatePreferences(changes: Partial<AppPreferences>): Promise<void>;
+  setBirthdayNotificationsEnabled(enabled: boolean): Promise<void>;
+  retryBirthdayNotifications(): Promise<void>;
+  openNotificationSettings(): Promise<void>;
   recordBackupExport(): Promise<void>;
   dismissBackupReminder(): Promise<void>;
   deleteAllLocalData(): Promise<void>;
@@ -64,23 +100,52 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
+  const [tagDefinitions, setTagDefinitions] = useState<TagDefinition[]>([]);
+  const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
+  const [tagSystemSettings, setTagSystemSettings] = useState<TagSystemSetting[]>([]);
+  const [personTags, setPersonTagsState] = useState<PersonTagAssignment[]>([]);
+  const [albums, setAlbums] = useState<PersonAlbum[]>([]);
+  const [albumMedia, setAlbumMedia] = useState<AlbumMedia[]>([]);
   const [homeMemory, setHomeMemory] = useState<HomeMemory | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(DEFAULT_PREFERENCES);
+  const [notificationPermission, setNotificationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const syncBirthdayNotifications = useCallback(async (storedPeople: Person[], storedPreferences: AppPreferences, requestPermission = false) => {
+    try {
+      await reconcileBirthdayNotifications(repository, expoBirthdayNotificationAdapter, storedPeople, storedPreferences.birthdayNotificationsEnabled, storedPreferences.birthdayReminderHour, storedPreferences.birthdayReminderMinute, requestPermission);
+      const permission = await expoBirthdayNotificationAdapter.getPermission();
+      setNotificationPermission(permission);
+      if (storedPreferences.birthdayNotificationError) {
+        await repository.updatePreferences({ birthdayNotificationError: null });
+        setPreferences((current) => ({ ...current, birthdayNotificationError: null }));
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : '生日通知调度失败';
+      setNotificationPermission(await expoBirthdayNotificationAdapter.getPermission());
+      await repository.updatePreferences({ birthdayNotificationError: message });
+      setPreferences((current) => ({ ...current, birthdayNotificationError: message }));
+      throw cause;
+    }
+  }, [repository]);
+
   useEffect(() => {
+    void initializeBirthdayNotificationChannel().catch(() => undefined);
     const subscription = NativeAppState.addEventListener('change', (state) => {
-      if (state === 'active') setToday(toDayKey(new Date()));
+      if (state === 'active') {
+        setToday(toDayKey(new Date()));
+        void Promise.all([repository.listPeople(), repository.getPreferences()]).then(([storedPeople, storedPreferences]) => syncBirthdayNotifications(storedPeople, storedPreferences)).catch(() => undefined);
+      }
     });
     return () => subscription.remove();
-  }, []);
+  }, [repository, syncBirthdayNotifications]);
 
   useEffect(() => {
     let active = true;
     setReady(false);
-    void Promise.all([repository.getCheckIn(today), repository.listCheckIns(), repository.listPosts(), repository.listPeople(), repository.listMedia(), repository.getHomeMemory(today), repository.getPreferences()])
-      .then(([checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences]) => {
+    void Promise.all([repository.getCheckIn(today), repository.listCheckIns(), repository.listPosts(), repository.listPeople(), repository.listMedia(), repository.getHomeMemory(today), repository.getPreferences(), repository.listTagDefinitions(), repository.listTagGroups(), repository.listTagSystemSettings(), repository.listPersonTagAssignments(), repository.listAlbums(), repository.listAlbumMedia()])
+      .then(([checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia]) => {
         if (!active) return;
         setError(null);
         setTodayCheckIn(checkIn);
@@ -88,12 +153,20 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setPosts(storedPosts);
         setPeople(storedPeople);
         setMedia(storedMedia);
+        setTagDefinitions(storedTags);
+        setTagGroups(storedTagGroups);
+        setTagSystemSettings(storedTagSystems);
+        setPersonTagsState(storedPersonTags);
+        setAlbums(storedAlbums);
+        setAlbumMedia(storedAlbumMedia);
+        try { cleanupOrphanedAlbumFiles(storedMedia); } catch { /* 不阻塞主数据加载 */ }
         setHomeMemory(memory);
         const hasExistingContent = storedCheckIns.length > 0 || storedPosts.length > 0;
         const effectivePreferences = hasExistingContent && !storedPreferences.onboardingCompleted
           ? { ...storedPreferences, onboardingCompleted: true }
           : storedPreferences;
         setPreferences(effectivePreferences);
+        void syncBirthdayNotifications(storedPeople, effectivePreferences).catch(() => undefined);
         if (effectivePreferences.onboardingCompleted !== storedPreferences.onboardingCompleted) void repository.updatePreferences({ onboardingCompleted: true });
         if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
         setReady(true);
@@ -104,7 +177,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setReady(true);
       });
     return () => { active = false; };
-  }, [repository, today]);
+  }, [repository, syncBirthdayNotifications, today]);
 
   const checkInToday = useCallback(async () => {
     const checkIn = await repository.checkIn(today);
@@ -180,6 +253,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       avatarMediaId: null,
       relationToMe: null,
       impression: null,
+      birthday: null,
       memoryEnabled: true,
       createdAt: now,
       updatedAt: now,
@@ -195,25 +269,175 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (!enabled) setHomeMemory((current) => current?.kind === 'person' && current.person.id === personId ? null : current);
   }, [repository]);
 
-  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'relationToMe' | 'impression'>) => {
+  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
     if (!changes.name.trim()) throw new Error('人物名字不能为空');
     if ((changes.impression?.length ?? 0) > 100) throw new Error('一句话印象最多 100 字');
     const existing = people.find((person) => person.id === personId);
     if (!existing) throw new Error('要编辑的人物不存在');
+    if (changes.birthday) validateBirthday(changes.birthday);
+    if (mbti && !MBTI_TYPES.includes(mbti as typeof MBTI_TYPES[number])) throw new Error('MBTI 类型无效');
     const previousAvatarId = existing.avatarMediaId;
     await repository.updatePerson({ ...existing, ...changes, name: changes.name.trim(), updatedAt: new Date().toISOString() });
-    setPeople(await repository.listPeople());
+    if (mbti !== undefined || customTagIds !== undefined) await repository.setPersonTags(personId, mbti ?? null, customTagIds ?? []);
+    const storedPeople = await repository.listPeople();
+    setPeople(storedPeople);
+    setPersonTagsState(await repository.listPersonTagAssignments());
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
     if (previousAvatarId && previousAvatarId !== changes.avatarMediaId) await cleanupUnreferencedMedia([previousAvatarId]);
-  }, [cleanupUnreferencedMedia, people, repository]);
+  }, [cleanupUnreferencedMedia, people, repository, syncBirthdayNotifications]);
 
   const deletePerson = useCallback(async (personId: string) => {
     const existing = people.find((person) => person.id === personId);
     if (!existing) return;
+    const albumPhotoIds = albumMedia.filter((relation) => albums.some((album) => album.id === relation.albumId && album.personId === personId)).map((relation) => relation.mediaId);
+    const albumPhotos = media.filter((item) => albumPhotoIds.includes(item.id));
+    await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter, personId);
     await repository.deletePerson(personId);
-    setPeople(await repository.listPeople());
+    const storedPeople = await repository.listPeople();
+    setPeople(storedPeople);
     if (existing.avatarMediaId) await cleanupUnreferencedMedia([existing.avatarMediaId]);
+    for (const item of albumPhotos) {
+      await repository.deleteMedia(item.id);
+      try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 数据记录已删除 */ }
+    }
+    try { deletePersonAlbumDirectory(personId); } catch { /* 数据记录已删除 */ }
+    setAlbums(await repository.listAlbums());
+    setAlbumMedia(await repository.listAlbumMedia());
+    setPersonTagsState(await repository.listPersonTagAssignments());
+    setMedia(await repository.listMedia());
     setHomeMemory((current) => current?.kind === 'person' && current.person.id === personId ? null : current);
-  }, [cleanupUnreferencedMedia, people, repository]);
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
+  }, [albumMedia, albums, cleanupUnreferencedMedia, media, people, repository, syncBirthdayNotifications]);
+
+  const createTag = useCallback(async (name: string, groupId: string | null = null) => {
+    const normalizedName = normalizeTagName(name);
+    if (groupId && !tagGroups.some((group) => group.id === groupId)) throw new Error('标签组不存在');
+    const now = new Date().toISOString();
+    const tag: TagDefinition = { id: `tag_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`, name: name.trim(), normalizedName: groupId ? `${groupId}:${normalizedName}` : normalizedName, groupId, createdAt: now, updatedAt: now };
+    await repository.createTagDefinition(tag);
+    setTagDefinitions(await repository.listTagDefinitions());
+    return tag;
+  }, [repository, tagGroups]);
+
+  const renameTag = useCallback(async (tagId: string, name: string) => {
+    const tag = tagDefinitions.find((item) => item.id === tagId);
+    if (!tag) throw new Error('标签不存在');
+    const normalizedName = normalizeTagName(name);
+    await repository.updateTagDefinition({ ...tag, name: name.trim(), normalizedName: tag.groupId ? `${tag.groupId}:${normalizedName}` : normalizedName, updatedAt: new Date().toISOString() });
+    setTagDefinitions(await repository.listTagDefinitions());
+  }, [repository, tagDefinitions]);
+
+  const deleteTag = useCallback(async (tagId: string) => {
+    await repository.deleteTagDefinition(tagId);
+    const storedPreferences = await repository.getPreferences();
+    if (storedPreferences.profileCustomTagIds.includes(tagId)) await repository.updatePreferences({ profileCustomTagIds: storedPreferences.profileCustomTagIds.filter((id) => id !== tagId) });
+    setPreferences(await repository.getPreferences());
+    setTagDefinitions(await repository.listTagDefinitions());
+    setPersonTagsState(await repository.listPersonTagAssignments());
+  }, [repository]);
+
+  const createTagGroup = useCallback(async (name: string) => {
+    const normalizedName = normalizeTagName(name);
+    if (tagGroups.some((group) => group.name.toLocaleLowerCase() === normalizedName)) throw new Error('标签组名称已存在');
+    const now = new Date().toISOString();
+    const group: TagGroup = { id: `tag_group_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`, name: name.trim(), kind: 'group', createdAt: now, updatedAt: now };
+    await repository.createTagGroup(group);
+    setTagGroups(await repository.listTagGroups());
+    return group;
+  }, [repository, tagGroups]);
+
+  const renameTagGroup = useCallback(async (groupId: string, name: string) => {
+    const group = tagGroups.find((item) => item.id === groupId);
+    if (!group) throw new Error('标签组不存在');
+    normalizeTagName(name);
+    await repository.updateTagGroup({ ...group, name: name.trim(), updatedAt: new Date().toISOString() });
+    setTagGroups(await repository.listTagGroups());
+  }, [repository, tagGroups]);
+
+  const deleteTagGroup = useCallback(async (groupId: string) => {
+    const optionIds = tagDefinitions.filter((tag) => tag.groupId === groupId).map((tag) => tag.id);
+    await repository.deleteTagGroup(groupId);
+    const storedPreferences = await repository.getPreferences();
+    if (storedPreferences.profileCustomTagIds.some((id) => optionIds.includes(id))) await repository.updatePreferences({ profileCustomTagIds: storedPreferences.profileCustomTagIds.filter((id) => !optionIds.includes(id)) });
+    setPreferences(await repository.getPreferences());
+    setTagGroups(await repository.listTagGroups());
+    setTagDefinitions(await repository.listTagDefinitions());
+    setPersonTagsState(await repository.listPersonTagAssignments());
+  }, [repository, tagDefinitions]);
+
+  const countPeopleByTag = useCallback((tagId: string) => repository.countPeopleByTag(tagId), [repository]);
+
+  const updateTagSystems = useCallback(async (settings: TagSystemSetting[]) => {
+    await repository.updateTagSystemSettings(settings);
+    setTagSystemSettings(await repository.listTagSystemSettings());
+  }, [repository]);
+
+  const createAlbum = useCallback(async (personId: string | null, name: string) => {
+    const normalized = name.trim();
+    if (!normalized || normalized.length > 40) throw new Error('相册名称需为 1—40 字');
+    const now = new Date().toISOString();
+    const album: PersonAlbum = { id: `album_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`, personId, name: normalized, coverMediaId: null, sortOrder: albums.filter((item) => item.personId === personId).length, createdAt: now, updatedAt: now };
+    await repository.createAlbum(album);
+    try {
+      const directory = personId
+        ? new Directory(Paths.document, 'people', personId, 'albums', album.id)
+        : new Directory(Paths.document, 'self', 'albums', album.id);
+      directory.create({ idempotent: true, intermediates: true });
+    } catch (cause) {
+      await repository.deleteAlbum(album.id);
+      throw cause;
+    }
+    setAlbums(await repository.listAlbums());
+    return album;
+  }, [albums, repository]);
+
+  const updateAlbum = useCallback(async (albumId: string, changes: Partial<Pick<PersonAlbum, 'name' | 'coverMediaId' | 'sortOrder'>>) => {
+    const album = albums.find((item) => item.id === albumId);
+    if (!album) throw new Error('相册不存在');
+    const name = changes.name?.trim() ?? album.name;
+    if (!name || name.length > 40) throw new Error('相册名称需为 1—40 字');
+    await repository.updateAlbum({ ...album, ...changes, name, updatedAt: new Date().toISOString() });
+    setAlbums(await repository.listAlbums());
+  }, [albums, repository]);
+
+  const deleteAlbum = useCallback(async (albumId: string) => {
+    const album = albums.find((item) => item.id === albumId);
+    if (!album) return;
+    const ids = albumMedia.filter((item) => item.albumId === albumId).map((item) => item.mediaId);
+    const files = media.filter((item) => ids.includes(item.id));
+    await repository.deleteAlbum(albumId);
+    for (const item of files) try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 数据记录已删除 */ }
+    try { deletePersonAlbumDirectory(album.personId, album.id); } catch { /* 数据记录已删除 */ }
+    setAlbums(await repository.listAlbums());
+    setAlbumMedia(await repository.listAlbumMedia());
+    setMedia(await repository.listMedia());
+  }, [albumMedia, albums, media, repository]);
+
+  const addPhotoToAlbum = useCallback(async (albumId: string, item: Media) => {
+    const sortOrder = albumMedia.filter((relation) => relation.albumId === albumId).length;
+    await repository.addAlbumMedia({ albumId, mediaId: item.id, sortOrder, addedAt: new Date().toISOString() }, item);
+    setMedia(await repository.listMedia());
+    setAlbumMedia(await repository.listAlbumMedia());
+  }, [albumMedia, repository]);
+
+  const reorderAlbumPhotos = useCallback(async (albumId: string, orderedMediaIds: string[]) => {
+    const current = albumMedia.filter((item) => item.albumId === albumId);
+    if (new Set(orderedMediaIds).size !== current.length || current.some((item) => !orderedMediaIds.includes(item.mediaId))) throw new Error('照片排序数据无效');
+    await repository.updateAlbumMedia(albumId, orderedMediaIds.map((mediaId, sortOrder) => ({ albumId, mediaId, sortOrder, addedAt: current.find((item) => item.mediaId === mediaId)?.addedAt ?? new Date().toISOString() })));
+    setAlbumMedia(await repository.listAlbumMedia());
+  }, [albumMedia, repository]);
+
+  const removePhotoFromAlbum = useCallback(async (albumId: string, mediaId: string) => {
+    const item = media.find((candidate) => candidate.id === mediaId);
+    await repository.removeAlbumMedia(albumId, mediaId);
+    if (item) try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 数据记录已删除 */ }
+    const storedAlbumMedia = await repository.listAlbumMedia();
+    const album = albums.find((candidate) => candidate.id === albumId);
+    if (album?.coverMediaId === mediaId) await repository.updateAlbum({ ...album, coverMediaId: storedAlbumMedia.find((relation) => relation.albumId === albumId)?.mediaId ?? null, updatedAt: new Date().toISOString() });
+    setAlbums(await repository.listAlbums());
+    setAlbumMedia(storedAlbumMedia);
+    setMedia(await repository.listMedia());
+  }, [albums, media, repository]);
 
   const getPostsByPerson = useCallback((personId: string) => repository.listPostsByPerson(personId), [repository]);
 
@@ -221,6 +445,25 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await repository.createMedia(item);
     setMedia((current) => [item, ...current]);
   }, [repository]);
+
+  const replaceMedia = useCallback(async (mediaId: string, replacement: Media) => {
+    const existing = media.find((item) => item.id === mediaId);
+    if (!existing) {
+      try { const file = new File(replacement.localPath); if (file.exists) file.delete(); } catch { /* 新文件尚未进入数据层 */ }
+      throw new Error('要替换的图片不存在');
+    }
+    const next = { ...replacement, id: mediaId };
+    try {
+      await repository.updateMedia(next);
+    } catch (cause) {
+      try { const file = new File(replacement.localPath); if (file.exists) file.delete(); } catch { /* 不覆盖原始错误 */ }
+      throw cause;
+    }
+    setMedia((current) => current.map((item) => item.id === mediaId ? next : item));
+    if (existing.localPath !== next.localPath) {
+      try { const file = new File(existing.localPath); if (file.exists) file.delete(); } catch { /* 数据已指向新文件 */ }
+    }
+  }, [media, repository]);
 
   const discardMedia = useCallback((item: Media) => cleanupUnreferencedMedia([item.id], [item]), [cleanupUnreferencedMedia]);
 
@@ -245,12 +488,27 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await repository.updatePreferences(changes);
     const stored = await repository.getPreferences();
     setPreferences(stored);
+    if ('birthdayNotificationsEnabled' in changes || 'birthdayReminderHour' in changes || 'birthdayReminderMinute' in changes) await syncBirthdayNotifications(people, stored, changes.birthdayNotificationsEnabled === true);
     if ('globalMemoryEnabled' in changes) {
       const memory = await repository.getHomeMemory(today);
       setHomeMemory(memory);
       if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
     }
-  }, [repository, today]);
+  }, [people, repository, syncBirthdayNotifications, today]);
+
+  const setBirthdayNotificationsEnabled = useCallback(async (enabled: boolean) => {
+    await repository.updatePreferences({ birthdayNotificationsEnabled: enabled });
+    const stored = await repository.getPreferences();
+    setPreferences(stored);
+    await syncBirthdayNotifications(people, stored, enabled);
+  }, [people, repository, syncBirthdayNotifications]);
+
+  const retryBirthdayNotifications = useCallback(async () => {
+    const stored = await repository.getPreferences();
+    await syncBirthdayNotifications(await repository.listPeople(), stored, false);
+  }, [repository, syncBirthdayNotifications]);
+
+  const openNotificationSettings = useCallback(() => Linking.openSettings(), []);
 
   const recordBackupExport = useCallback(async () => {
     await updatePreferences({ lastExportAt: new Date().toISOString(), lastExportPostCount: posts.length, backupReminderShownAt: null });
@@ -262,8 +520,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const restoreBackupSnapshot = useCallback(async (snapshot: BackupSnapshot) => {
     const oldMedia = media;
-    await repository.replaceFromBackup(snapshot);
-    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences] = await Promise.all([
+    const oldPeople = people;
+    const oldPreferences = preferences;
+    await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
+    try {
+      await repository.replaceFromBackup(snapshot);
+    } catch (cause) {
+      void syncBirthdayNotifications(oldPeople, oldPreferences).catch(() => undefined);
+      throw cause;
+    }
+    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia] = await Promise.all([
       repository.getCheckIn(today),
       repository.listCheckIns(),
       repository.listPosts(),
@@ -271,6 +537,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       repository.listMedia(),
       repository.getHomeMemory(today),
       repository.getPreferences(),
+      repository.listTagDefinitions(),
+      repository.listTagGroups(),
+      repository.listTagSystemSettings(),
+      repository.listPersonTagAssignments(),
+      repository.listAlbums(),
+      repository.listAlbumMedia(),
     ]);
     setTodayCheckIn(checkIn);
     setCheckIns(storedCheckIns);
@@ -279,7 +551,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setMedia(storedMedia);
     setHomeMemory(memory);
     setPreferences(storedPreferences);
+    setTagDefinitions(storedTags);
+    setTagGroups(storedTagGroups);
+    setTagSystemSettings(storedTagSystems);
+    setPersonTagsState(storedPersonTags);
+    setAlbums(storedAlbums);
+    setAlbumMedia(storedAlbumMedia);
     if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
+    void syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
 
     const restoredPaths = new Set(storedMedia.map((item) => item.localPath));
     for (const item of oldMedia) {
@@ -291,16 +570,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         // 数据已经成功恢复；旧的孤立文件可在后续维护时再次清理。
       }
     }
-  }, [media, repository, today]);
+  }, [media, people, preferences, repository, syncBirthdayNotifications, today]);
 
   const deleteAllLocalData = useCallback(async () => {
     const storedMedia = media;
+    await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await repository.deleteAllData();
     setTodayCheckIn(null);
     setCheckIns([]);
     setPosts([]);
     setPeople([]);
     setMedia([]);
+    setTagDefinitions([]);
+    setTagGroups([]);
+    setTagSystemSettings([]);
+    setPersonTagsState([]);
+    setAlbums([]);
+    setAlbumMedia([]);
     setHomeMemory(null);
     setPreferences(DEFAULT_PREFERENCES);
     for (const item of storedMedia) {
@@ -316,7 +602,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         if (item instanceof File && item.name.startsWith('still-alive-') && item.name.endsWith('.zip')) item.delete();
       }
       for (const item of Paths.document.list()) {
-        if (item instanceof Directory && (item.name === 'media' || item.name.startsWith('media-restored-'))) item.delete();
+        if (item instanceof Directory && (item.name === 'media' || item.name === 'people' || item.name === 'self' || item.name.startsWith('media-restored-'))) item.delete();
       }
     } catch {
       // 已删除数据库引用；系统暂时占用的缓存目录可由系统后续回收。
@@ -338,8 +624,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     posts,
     people,
     media,
+    tagDefinitions,
+    tagGroups,
+    tagSystemSettings,
+    personTags,
+    albums,
+    albumMedia,
     homeMemory,
     preferences,
+    notificationPermission,
     shouldShowBackupReminder,
     ready,
     error,
@@ -350,20 +643,38 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     getPersonIdsByPost,
     getPostsByPerson,
     saveMedia,
+    replaceMedia,
     discardMedia,
     createPerson,
     updatePerson,
     deletePerson,
     setPersonMemoryEnabled,
+    createTag,
+    renameTag,
+    deleteTag,
+    createTagGroup,
+    renameTagGroup,
+    deleteTagGroup,
+    countPeopleByTag,
+    updateTagSystems,
+    createAlbum,
+    updateAlbum,
+    deleteAlbum,
+    addPhotoToAlbum,
+    reorderAlbumPhotos,
+    removePhotoFromAlbum,
     saveDraft,
     loadDraft,
     createBackupSnapshot,
     restoreBackupSnapshot,
     updatePreferences,
+    setBirthdayNotificationsEnabled,
+    retryBirthdayNotifications,
+    openNotificationSettings,
     recordBackupExport,
     dismissBackupReminder,
     deleteAllLocalData,
-  }), [checkInToday, checkIns, createBackupSnapshot, createPerson, deleteAllLocalData, deletePerson, deletePost, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, people, posts, preferences, ready, recordBackupExport, restoreBackupSnapshot, saveDraft, saveMedia, savePost, setPersonMemoryEnabled, shouldShowBackupReminder, today, todayCheckIn, updatePerson, updatePost, updatePreferences]);
+  }), [addPhotoToAlbum, albumMedia, albums, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }
@@ -382,4 +693,10 @@ function validatePost(bodyMarkdown: string, personIds: string[]): void {
   if (!bodyMarkdown.trim()) throw new Error('正文和图片至少需要保留一项');
   if (extractMediaIds(bodyMarkdown).length > 9) throw new Error('一篇日记最多包含 9 张图片');
   if (new Set(personIds).size > 10) throw new Error('一篇日记最多关联 10 个人物');
+}
+
+function normalizeTagName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 24) throw new Error('标签文字需为 1—24 字');
+  return trimmed.toLocaleLowerCase();
 }

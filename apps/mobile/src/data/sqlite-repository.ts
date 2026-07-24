@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from '@still-alive/storage';
-import type { CheckIn, DayKey, Draft, Media, Person, Post } from '@still-alive/types';
+import type { AlbumMedia, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 
 interface CheckInRow {
   id: string;
@@ -29,6 +29,11 @@ interface PersonRow {
   avatar_media_id: string | null;
   relation_to_me: string | null;
   impression: string | null;
+  birthday_calendar: 'solar' | 'lunar' | null;
+  birthday_year: number | null;
+  birthday_month: number | null;
+  birthday_day: number | null;
+  birthday_is_leap_month: number;
   memory_enabled: number;
   created_at: string;
   updated_at: string;
@@ -52,16 +57,29 @@ export interface BackupSnapshot {
   media: Media[];
   postPersons: Array<{ postId: string; personId: string }>;
   settings: Record<string, string>;
+  tagDefinitions?: TagDefinition[];
+  tagSystemSettings?: TagSystemSetting[];
+  personTags?: PersonTagAssignment[];
+  tagGroups?: TagGroup[];
+  albums?: PersonAlbum[];
+  albumMedia?: AlbumMedia[];
 }
 
 export interface AppPreferences {
   onboardingCompleted: boolean;
   nickname: string;
   birthDate: string;
+  profileAvatarMediaId: string | null;
+  profileMbti: string;
+  profileCustomTagIds: string[];
   globalMemoryEnabled: boolean;
   lastExportAt: string | null;
   lastExportPostCount: number;
   backupReminderShownAt: string | null;
+  birthdayNotificationsEnabled: boolean;
+  birthdayReminderHour: number;
+  birthdayReminderMinute: number;
+  birthdayNotificationError: string | null;
 }
 
 export type HomeMemory =
@@ -145,6 +163,117 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       value TEXT NOT NULL
     );
     PRAGMA user_version = 4;
+  `);
+
+  if (currentVersion < 5) await db.execAsync(`
+    ALTER TABLE persons ADD COLUMN birthday_calendar TEXT;
+    ALTER TABLE persons ADD COLUMN birthday_year INTEGER;
+    ALTER TABLE persons ADD COLUMN birthday_month INTEGER;
+    ALTER TABLE persons ADD COLUMN birthday_day INTEGER;
+    ALTER TABLE persons ADD COLUMN birthday_is_leap_month INTEGER NOT NULL DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS tag_system_settings (
+      system TEXT PRIMARY KEY NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL
+    );
+    INSERT OR IGNORE INTO tag_system_settings (system, enabled, sort_order) VALUES
+      ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3);
+
+    CREATE TABLE IF NOT EXISTS tag_definitions (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      normalized_name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tag_groups (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS person_tag_assignments (
+      person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      value TEXT NOT NULL,
+      PRIMARY KEY (person_id, kind, value)
+    );
+    CREATE INDEX IF NOT EXISTS person_tags_person_idx ON person_tag_assignments(person_id, kind);
+
+    CREATE TABLE IF NOT EXISTS person_albums (
+      id TEXT PRIMARY KEY NOT NULL,
+      person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      cover_media_id TEXT REFERENCES media(id) ON DELETE SET NULL,
+      sort_order INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS person_albums_person_idx ON person_albums(person_id, sort_order);
+    CREATE TABLE IF NOT EXISTS album_media (
+      album_id TEXT NOT NULL REFERENCES person_albums(id) ON DELETE CASCADE,
+      media_id TEXT NOT NULL UNIQUE REFERENCES media(id) ON DELETE CASCADE,
+      sort_order INTEGER NOT NULL,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (album_id, media_id)
+    );
+    CREATE INDEX IF NOT EXISTS album_media_album_idx ON album_media(album_id, sort_order);
+
+    CREATE TABLE IF NOT EXISTS birthday_notification_schedules (
+      id TEXT PRIMARY KEY NOT NULL,
+      person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      birthday_day_key TEXT NOT NULL,
+      scheduled_at TEXT NOT NULL,
+      platform_identifier TEXT NOT NULL UNIQUE
+    );
+    PRAGMA user_version = 5;
+  `);
+
+  if (currentVersion < 6) await db.execAsync(`
+    ALTER TABLE tag_definitions ADD COLUMN group_id TEXT;
+    CREATE TABLE IF NOT EXISTS tag_groups (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 6;
+  `);
+
+  if (currentVersion < 7) await db.execAsync(`
+    PRAGMA foreign_keys = OFF;
+    BEGIN IMMEDIATE;
+    DROP INDEX person_albums_person_idx;
+    DROP INDEX album_media_album_idx;
+    ALTER TABLE album_media RENAME TO album_media_v6;
+    ALTER TABLE person_albums RENAME TO person_albums_v6;
+    CREATE TABLE person_albums (
+      id TEXT PRIMARY KEY NOT NULL,
+      person_id TEXT REFERENCES persons(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      cover_media_id TEXT REFERENCES media(id) ON DELETE SET NULL,
+      sort_order INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX person_albums_person_idx ON person_albums(person_id, sort_order);
+    CREATE TABLE album_media (
+      album_id TEXT NOT NULL REFERENCES person_albums(id) ON DELETE CASCADE,
+      media_id TEXT NOT NULL UNIQUE REFERENCES media(id) ON DELETE CASCADE,
+      sort_order INTEGER NOT NULL,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (album_id, media_id)
+    );
+    CREATE INDEX album_media_album_idx ON album_media(album_id, sort_order);
+    INSERT INTO person_albums SELECT * FROM person_albums_v6;
+    INSERT INTO album_media SELECT * FROM album_media_v6;
+    DROP TABLE album_media_v6;
+    DROP TABLE person_albums_v6;
+    PRAGMA user_version = 7;
+    COMMIT;
+    PRAGMA foreign_keys = ON;
   `);
 }
 
@@ -303,6 +432,19 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     );
   }
 
+  async updateMedia(media: Media): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE media SET local_path = ?, mime_type = ?, width = ?, height = ?, checksum = ?, created_at = ? WHERE id = ?',
+      media.localPath,
+      media.mimeType,
+      media.width,
+      media.height,
+      media.checksum,
+      media.createdAt,
+      media.id,
+    );
+  }
+
   async deleteMedia(mediaId: string): Promise<void> {
     await this.db.runAsync('DELETE FROM media WHERE id = ?', mediaId);
   }
@@ -316,9 +458,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         SELECT 1 FROM drafts WHERE body_markdown LIKE ?
         UNION ALL
         SELECT 1 FROM persons WHERE avatar_media_id = ?
+        UNION ALL
+        SELECT 1 FROM album_media WHERE media_id = ?
+        UNION ALL
+        SELECT 1 FROM settings WHERE key = 'profileAvatarMediaId' AND value = ?
       ) AS referenced`,
       reference,
       reference,
+      mediaId,
+      mediaId,
       mediaId,
     );
     return row?.referenced === 1;
@@ -326,7 +474,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPeople(): Promise<Person[]> {
     const rows = await this.db.getAllAsync<PersonRow>(
-      `SELECT id, name, avatar_media_id, relation_to_me, impression, memory_enabled, created_at, updated_at
+      `SELECT id, name, avatar_media_id, relation_to_me, impression,
+              birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month,
+              memory_enabled, created_at, updated_at
        FROM persons ORDER BY updated_at DESC`,
     );
     return rows.map(mapPerson);
@@ -334,13 +484,18 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async createPerson(person: Person): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO persons (id, name, avatar_media_id, relation_to_me, impression, memory_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO persons (id, name, avatar_media_id, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, memory_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       person.id,
       person.name,
       person.avatarMediaId,
       person.relationToMe,
       person.impression,
+      person.birthday?.calendar ?? null,
+      person.birthday?.year ?? null,
+      person.birthday?.month ?? null,
+      person.birthday?.day ?? null,
+      person.birthday?.isLeapMonth ? 1 : 0,
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
@@ -350,12 +505,19 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async updatePerson(person: Person): Promise<void> {
     await this.db.runAsync(
       `UPDATE persons
-       SET name = ?, avatar_media_id = ?, relation_to_me = ?, impression = ?, memory_enabled = ?, updated_at = ?
+       SET name = ?, avatar_media_id = ?, relation_to_me = ?, impression = ?,
+           birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?,
+           memory_enabled = ?, updated_at = ?
        WHERE id = ?`,
       person.name,
       person.avatarMediaId,
       person.relationToMe,
       person.impression,
+      person.birthday?.calendar ?? null,
+      person.birthday?.year ?? null,
+      person.birthday?.month ?? null,
+      person.birthday?.day ?? null,
+      person.birthday?.isLeapMonth ? 1 : 0,
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
@@ -373,6 +535,135 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       new Date().toISOString(),
       personId,
     );
+  }
+
+  async listTagDefinitions(): Promise<TagDefinition[]> {
+    const rows = await this.db.getAllAsync<{ id: string; name: string; normalized_name: string; group_id: string | null; created_at: string; updated_at: string }>('SELECT id, name, normalized_name, group_id, created_at, updated_at FROM tag_definitions ORDER BY name COLLATE NOCASE');
+    return rows.map((row) => ({ id: row.id, name: row.name, normalizedName: row.normalized_name, groupId: row.group_id, createdAt: row.created_at, updatedAt: row.updated_at }));
+  }
+
+  async createTagDefinition(tag: TagDefinition): Promise<void> {
+    await this.db.runAsync('INSERT INTO tag_definitions (id, name, normalized_name, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', tag.id, tag.name, tag.normalizedName, tag.groupId, tag.createdAt, tag.updatedAt);
+  }
+
+  async updateTagDefinition(tag: TagDefinition): Promise<void> {
+    await this.db.runAsync('UPDATE tag_definitions SET name = ?, normalized_name = ?, group_id = ?, updated_at = ? WHERE id = ?', tag.name, tag.normalizedName, tag.groupId, tag.updatedAt, tag.id);
+  }
+
+  async listTagGroups(): Promise<TagGroup[]> {
+    const rows = await this.db.getAllAsync<{ id: string; name: string; created_at: string; updated_at: string }>('SELECT id, name, created_at, updated_at FROM tag_groups ORDER BY name COLLATE NOCASE');
+    return rows.map((row) => ({ id: row.id, name: row.name, kind: 'group', createdAt: row.created_at, updatedAt: row.updated_at }));
+  }
+
+  async createTagGroup(group: TagGroup): Promise<void> {
+    await this.db.runAsync('INSERT INTO tag_groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)', group.id, group.name, group.createdAt, group.updatedAt);
+  }
+
+  async updateTagGroup(group: TagGroup): Promise<void> {
+    await this.db.runAsync('UPDATE tag_groups SET name = ?, updated_at = ? WHERE id = ?', group.name, group.updatedAt, group.id);
+  }
+
+  async deleteTagGroup(groupId: string): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync("DELETE FROM person_tag_assignments WHERE kind = 'custom' AND value IN (SELECT id FROM tag_definitions WHERE group_id = ?)", groupId);
+      await transaction.runAsync('DELETE FROM tag_definitions WHERE group_id = ?', groupId);
+      await transaction.runAsync('DELETE FROM tag_groups WHERE id = ?', groupId);
+    });
+  }
+
+  async deleteTagDefinition(tagId: string): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync("DELETE FROM person_tag_assignments WHERE kind = 'custom' AND value = ?", tagId);
+      await transaction.runAsync('DELETE FROM tag_definitions WHERE id = ?', tagId);
+    });
+  }
+
+  async countPeopleByTag(tagId: string): Promise<number> {
+    const row = await this.db.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM person_tag_assignments WHERE kind = 'custom' AND value = ?", tagId);
+    return row?.count ?? 0;
+  }
+
+  async listTagSystemSettings(): Promise<TagSystemSetting[]> {
+    const rows = await this.db.getAllAsync<{ system: TagSystemSetting['system']; enabled: number; sort_order: number }>('SELECT system, enabled, sort_order FROM tag_system_settings ORDER BY sort_order');
+    return rows.map((row) => ({ system: row.system, enabled: row.enabled === 1, sortOrder: row.sort_order }));
+  }
+
+  async updateTagSystemSettings(settings: TagSystemSetting[]): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      for (const setting of settings) await transaction.runAsync('UPDATE tag_system_settings SET enabled = ?, sort_order = ? WHERE system = ?', setting.enabled ? 1 : 0, setting.sortOrder, setting.system);
+    });
+  }
+
+  async listPersonTagAssignments(): Promise<PersonTagAssignment[]> {
+    const rows = await this.db.getAllAsync<{ person_id: string; kind: 'mbti' | 'custom'; value: string }>('SELECT person_id, kind, value FROM person_tag_assignments ORDER BY person_id, kind, value');
+    return rows.map((row) => ({ personId: row.person_id, kind: row.kind, value: row.value }));
+  }
+
+  async setPersonTags(personId: string, mbti: string | null, customTagIds: string[]): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync('DELETE FROM person_tag_assignments WHERE person_id = ?', personId);
+      if (mbti) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'mbti', ?)", personId, mbti);
+      for (const tagId of new Set(customTagIds)) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'custom', ?)", personId, tagId);
+    });
+  }
+
+  async listAlbums(): Promise<PersonAlbum[]> {
+    const rows = await this.db.getAllAsync<{ id: string; person_id: string | null; name: string; cover_media_id: string | null; sort_order: number; created_at: string; updated_at: string }>('SELECT id, person_id, name, cover_media_id, sort_order, created_at, updated_at FROM person_albums ORDER BY person_id, sort_order, created_at');
+    return rows.map((row) => ({ id: row.id, personId: row.person_id, name: row.name, coverMediaId: row.cover_media_id, sortOrder: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at }));
+  }
+
+  async createAlbum(album: PersonAlbum): Promise<void> {
+    await this.db.runAsync('INSERT INTO person_albums (id, person_id, name, cover_media_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', album.id, album.personId, album.name, album.coverMediaId, album.sortOrder, album.createdAt, album.updatedAt);
+  }
+
+  async updateAlbum(album: PersonAlbum): Promise<void> {
+    await this.db.runAsync('UPDATE person_albums SET name = ?, cover_media_id = ?, sort_order = ?, updated_at = ? WHERE id = ?', album.name, album.coverMediaId, album.sortOrder, album.updatedAt, album.id);
+  }
+
+  async deleteAlbum(albumId: string): Promise<void> {
+    const rows = await this.db.getAllAsync<{ media_id: string }>('SELECT media_id FROM album_media WHERE album_id = ?', albumId);
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync('DELETE FROM person_albums WHERE id = ?', albumId);
+      for (const row of rows) await transaction.runAsync('DELETE FROM media WHERE id = ?', row.media_id);
+    });
+  }
+
+  async listAlbumMedia(): Promise<AlbumMedia[]> {
+    const rows = await this.db.getAllAsync<{ album_id: string; media_id: string; sort_order: number; added_at: string }>('SELECT album_id, media_id, sort_order, added_at FROM album_media ORDER BY album_id, sort_order');
+    return rows.map((row) => ({ albumId: row.album_id, mediaId: row.media_id, sortOrder: row.sort_order, addedAt: row.added_at }));
+  }
+
+  async addAlbumMedia(item: AlbumMedia, media: Media): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync('INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', media.id, media.localPath, media.mimeType, media.width, media.height, media.checksum, media.createdAt);
+      await transaction.runAsync('INSERT INTO album_media (album_id, media_id, sort_order, added_at) VALUES (?, ?, ?, ?)', item.albumId, item.mediaId, item.sortOrder, item.addedAt);
+    });
+  }
+
+  async updateAlbumMedia(albumId: string, items: AlbumMedia[]): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      for (const item of items) await transaction.runAsync('UPDATE album_media SET sort_order = ? WHERE album_id = ? AND media_id = ?', item.sortOrder, albumId, item.mediaId);
+    });
+  }
+
+  async removeAlbumMedia(albumId: string, mediaId: string): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync('DELETE FROM album_media WHERE album_id = ? AND media_id = ?', albumId, mediaId);
+      await transaction.runAsync('UPDATE person_albums SET cover_media_id = NULL WHERE id = ? AND cover_media_id = ?', albumId, mediaId);
+      await transaction.runAsync('DELETE FROM media WHERE id = ?', mediaId);
+    });
+  }
+
+  async listBirthdayNotificationSchedules(): Promise<BirthdayNotificationSchedule[]> {
+    const rows = await this.db.getAllAsync<{ id: string; person_id: string; event_type: 'advance' | 'today'; birthday_day_key: string; scheduled_at: string; platform_identifier: string }>('SELECT id, person_id, event_type, birthday_day_key, scheduled_at, platform_identifier FROM birthday_notification_schedules ORDER BY scheduled_at');
+    return rows.map((row) => ({ id: row.id, personId: row.person_id, eventType: row.event_type, birthdayDayKey: row.birthday_day_key as DayKey, scheduledAt: row.scheduled_at, platformIdentifier: row.platform_identifier }));
+  }
+
+  async replaceBirthdayNotificationSchedules(items: BirthdayNotificationSchedule[]): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync('DELETE FROM birthday_notification_schedules');
+      for (const item of items) await transaction.runAsync('INSERT INTO birthday_notification_schedules (id, person_id, event_type, birthday_day_key, scheduled_at, platform_identifier) VALUES (?, ?, ?, ?, ?, ?)', item.id, item.personId, item.eventType, item.birthdayDayKey, item.scheduledAt, item.platformIdentifier);
+    });
   }
 
   async getHomeMemory(today: DayKey): Promise<HomeMemory | null> {
@@ -428,17 +719,24 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       onboardingCompleted: values.onboardingCompleted === 'true',
       nickname: values.nickname ?? '',
       birthDate: values.birthDate ?? '',
+      profileAvatarMediaId: values.profileAvatarMediaId || null,
+      profileMbti: values.profileMbti ?? '',
+      profileCustomTagIds: parseStringList(values.profileCustomTagIds),
       globalMemoryEnabled: values.globalMemoryEnabled !== 'false',
       lastExportAt: values.lastExportAt || null,
       lastExportPostCount: Number(values.lastExportPostCount ?? 0),
       backupReminderShownAt: values.backupReminderShownAt || null,
+      birthdayNotificationsEnabled: values.birthdayNotificationsEnabled === 'true',
+      birthdayReminderHour: Number(values.birthdayReminderHour ?? 9),
+      birthdayReminderMinute: Number(values.birthdayReminderMinute ?? 0),
+      birthdayNotificationError: values.birthdayNotificationError || null,
     };
   }
 
   async updatePreferences(changes: Partial<AppPreferences>): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
       for (const [key, rawValue] of Object.entries(changes)) {
-        const value = rawValue === null ? '' : String(rawValue);
+        const value = rawValue === null ? '' : Array.isArray(rawValue) ? JSON.stringify(rawValue) : String(rawValue);
         await transaction.runAsync(
           `INSERT INTO settings (key, value) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -451,12 +749,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
-      await transaction.execAsync('DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync("DELETE FROM birthday_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
     });
   }
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
-    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows] = await Promise.all([
+    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, albums, albumMedia] = await Promise.all([
       this.db.getAllAsync<CheckInRow>('SELECT id, day_key, created_at FROM checkins ORDER BY day_key'),
       this.listPosts(),
       this.db.getAllAsync<DraftRow>('SELECT id, day_key, body_markdown, updated_at FROM drafts ORDER BY day_key'),
@@ -464,6 +762,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       this.listMedia(),
       this.db.getAllAsync<{ post_id: string; person_id: string }>('SELECT post_id, person_id FROM post_persons ORDER BY post_id, person_id'),
       this.db.getAllAsync<{ key: string; value: string }>('SELECT key, value FROM settings ORDER BY key'),
+      this.listTagDefinitions(),
+      this.listTagGroups(),
+      this.listTagSystemSettings(),
+      this.listPersonTagAssignments(),
+      this.listAlbums(),
+      this.listAlbumMedia(),
     ]);
     return {
       checkIns: checkInRows.map(mapCheckIn),
@@ -473,19 +777,25 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       media,
       postPersons: postPersonRows.map((row) => ({ postId: row.post_id, personId: row.person_id })),
       settings: Object.fromEntries(settingRows.map((row) => [row.key, row.value])),
+      tagDefinitions,
+      tagGroups,
+      tagSystemSettings,
+      personTags,
+      albums,
+      albumMedia,
     };
   }
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
-      await transaction.execAsync('DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, created_at) VALUES (?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.createdAt);
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(
-          'INSERT INTO persons (id, name, avatar_media_id, relation_to_me, impression, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          person.id, person.name, person.avatarMediaId, person.relationToMe, person.impression, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
+          'INSERT INTO persons (id, name, avatar_media_id, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          person.id, person.name, person.avatarMediaId, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
         );
       }
       for (const item of snapshot.media) {
@@ -506,6 +816,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const relation of snapshot.postPersons) {
         await transaction.runAsync('INSERT INTO post_persons (post_id, person_id) VALUES (?, ?)', relation.postId, relation.personId);
       }
+      for (const group of snapshot.tagGroups ?? []) await transaction.runAsync('INSERT INTO tag_groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)', group.id, group.name, group.createdAt, group.updatedAt);
+      for (const tag of snapshot.tagDefinitions ?? []) await transaction.runAsync('INSERT INTO tag_definitions (id, name, normalized_name, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', tag.id, tag.name, tag.normalizedName, tag.groupId ?? null, tag.createdAt, tag.updatedAt);
+      for (const setting of snapshot.tagSystemSettings ?? defaultTagSystemSettings()) await transaction.runAsync('INSERT OR REPLACE INTO tag_system_settings (system, enabled, sort_order) VALUES (?, ?, ?)', setting.system, setting.enabled ? 1 : 0, setting.sortOrder);
+      for (const relation of snapshot.personTags ?? []) await transaction.runAsync('INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, ?, ?)', relation.personId, relation.kind, relation.value);
+      for (const album of snapshot.albums ?? []) await transaction.runAsync('INSERT INTO person_albums (id, person_id, name, cover_media_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', album.id, album.personId, album.name, album.coverMediaId, album.sortOrder, album.createdAt, album.updatedAt);
+      for (const relation of snapshot.albumMedia ?? []) await transaction.runAsync('INSERT INTO album_media (album_id, media_id, sort_order, added_at) VALUES (?, ?, ?, ?)', relation.albumId, relation.mediaId, relation.sortOrder, relation.addedAt);
       for (const [key, value] of Object.entries(snapshot.settings)) {
         await transaction.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', key, value);
       }
@@ -536,6 +852,16 @@ function mapDraft(row: DraftRow): Draft {
   };
 }
 
+function parseStringList(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 function mapPerson(row: PersonRow): Person {
   return {
     id: row.id,
@@ -543,6 +869,13 @@ function mapPerson(row: PersonRow): Person {
     avatarMediaId: row.avatar_media_id,
     relationToMe: row.relation_to_me,
     impression: row.impression,
+    birthday: row.birthday_calendar && row.birthday_year && row.birthday_month && row.birthday_day ? {
+      calendar: row.birthday_calendar,
+      year: row.birthday_year,
+      month: row.birthday_month,
+      day: row.birthday_day,
+      isLeapMonth: row.birthday_is_leap_month === 1,
+    } : null,
     memoryEnabled: row.memory_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -563,4 +896,13 @@ function mapMedia(row: MediaRow): Media {
 
 function createLocalId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function defaultTagSystemSettings(): TagSystemSetting[] {
+  return [
+    { system: 'mbti', enabled: true, sortOrder: 0 },
+    { system: 'constellation', enabled: true, sortOrder: 1 },
+    { system: 'zodiac', enabled: true, sortOrder: 2 },
+    { system: 'custom', enabled: true, sortOrder: 3 },
+  ];
 }
