@@ -88,9 +88,9 @@
 `docs/design/web.html` 内的 Web 原型 SHALL 至少包含以下子屏，每屏均可通过左侧导航或屏切换器到达，每屏均显示真实内容。
 
 子屏列表（最低集）：
-- Public · Home（首页 / 巨字 slogan / 近期故事）
-- Public · Stories List（故事列表 / 时间轴）
-- Public · Story Detail（长文阅读器 / 左目录 / 正文 Fraunces）
+- Public Home（首页 / 巨字 slogan / 近期故事）
+- Public Stories List（故事列表 / 时间轴）
+- Public Story Detail（长文阅读器 / 左目录 / 正文 Fraunces）
 - Auth（登录注册合一）
 - Dashboard（仪表盘 / 生存天数 / 年度热力图）
 - Editor（长文编辑 / 大写作区）

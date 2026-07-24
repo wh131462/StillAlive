@@ -96,14 +96,14 @@
 `docs/design/web.html` 内的 Web 原型 SHALL 至少包含以下子屏。
 
 子屏列表（最低集 — humane-redesign 后）：
-- Web · Dashboard（桌面仪表盘 / 含今日打卡卡片）
-- Web · Timeline
-- Web · Editor（写作 sheet 桌面版）
-- **Web · Person Graph（桌面版关系图，画布占满主区）**
-- **Web · Person Detail v2（桌面版人物详情）**
-- Web · Intersection
-- Web · Auth（私人登录）
-- Web · Settings（含备份语言重构）
+- Web Dashboard（桌面仪表盘 / 含今日打卡卡片）
+- Web Timeline
+- Web Editor（写作 sheet 桌面版）
+- **Web Person Graph（桌面版关系图，画布占满主区）**
+- **Web Person Detail v2（桌面版人物详情）**
+- Web Intersection
+- Web Auth（私人登录）
+- Web Settings（含备份语言重构）
 
 #### Scenario: Web 子屏数 ≥ 7
 

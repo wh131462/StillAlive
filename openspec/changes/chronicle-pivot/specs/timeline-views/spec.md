@@ -12,7 +12,7 @@
 #### Scenario: 日期分隔
 
 - **WHEN** 时间线滚动跨越日期
-- **THEN** 以「YYYY · MM · DD · 周 X」+ 当日生存天数编号（Day 127）作为分隔条
+- **THEN** 以「YYYY MM DD 周 X」+ 当日生存天数编号（Day 127）作为分隔条
 - **AND** 分隔条粘性（sticky）停留在视口顶端直到下一分隔条推上去
 
 #### Scenario: 过期提醒穿插
@@ -51,7 +51,7 @@
 #### Scenario: 无聚合时的空态
 
 - **WHEN** 该 Person 尚未被任何 Post @ 过
-- **THEN** 聚合区显示空态「还没有和 ta 相关的记录 · 写一条试试 &rarr;」，点击进入新帖编辑器并预填 `@<name>`
+- **THEN** 聚合区显示空态「还没有和 ta 相关的记录 写一条试试 &rarr;」，点击进入新帖编辑器并预填 `@<name>`
 
 ### Requirement: 交集视图（Intersection View）
 

@@ -118,11 +118,11 @@
 
 ## Migration Plan
 
-1. **Phase 1 · 设计系统扩展（shared/style.css）**：先在 `shared/style.css` 末尾新增本次涉及的全部组件类，独立 commit。完成后用 `index.html` 验证回归（应当无变化）。
-2. **Phase 2 · App 原型（app.html）**：逐屏实现，先按低保真完成屏栈与切换器，再调用 `frontend-design` 优化关键屏视觉。
-3. **Phase 3 · Web 原型（web.html）**：复用 Phase 2 模式，先骨架后视觉。
-4. **Phase 4 · 共用 JS 抽取（shared/app-prototype.js + shared/web-prototype.js）**：把 Phase 2/3 中的内联 JS 抽到独立文件，HTML 仅 `<script src="shared/app-prototype.js" defer>`。
-5. **Phase 5 · 验收**：浏览器实测三屏（index / app / web）；检查所有 chip / tab / 模态可达；`index.html` 无回归；DevTools 控制台无错误。
+1. **Phase 1 设计系统扩展（shared/style.css）**：先在 `shared/style.css` 末尾新增本次涉及的全部组件类，独立 commit。完成后用 `index.html` 验证回归（应当无变化）。
+2. **Phase 2 App 原型（app.html）**：逐屏实现，先按低保真完成屏栈与切换器，再调用 `frontend-design` 优化关键屏视觉。
+3. **Phase 3 Web 原型（web.html）**：复用 Phase 2 模式，先骨架后视觉。
+4. **Phase 4 共用 JS 抽取（shared/app-prototype.js + shared/web-prototype.js）**：把 Phase 2/3 中的内联 JS 抽到独立文件，HTML 仅 `<script src="shared/app-prototype.js" defer>`。
+5. **Phase 5 验收**：浏览器实测三屏（index / app / web）；检查所有 chip / tab / 模态可达；`index.html` 无回归；DevTools 控制台无错误。
 6. **回滚**：本次所有改动通过 git 分批提交；如出现严重回归，单 commit revert 即可。
 
 ## Open Questions

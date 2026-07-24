@@ -19,7 +19,7 @@
 
 - **WHEN** 检查 `people-list` 屏
 - **THEN** 不出现匹配码字段、「关心动态」副标、care-strip / care-item 元素
-- **AND** 副标题从「8 位 · 你重要的人」改为「你记录过的人」等中性表达
+- **AND** 副标题从「8 位 你重要的人」改为「你记录过的人」等中性表达
 
 ### Requirement: 屏列表更新（Web 端）
 
@@ -67,7 +67,7 @@
 - Register（注册）
 - Today（主页 / 巨字生存天数 / 今日提醒 / 快速写入 / 最近帖）
 - Timeline（个人总时间线，反向时序 + 日期分隔 + 过期提醒穿插）
-- Checkin Calendar（月日历 + 打卡状态可视 · 打卡语义弱化为「那天我还在」的轻徽章）
+- Checkin Calendar（月日历 + 打卡状态可视 打卡语义弱化为「那天我还在」的轻徽章）
 - Post Composer（帖子撰写器 / 文本 + 图 + @ + 关联提醒）
 - People List（人物列表，去匹配码 / 关心条 / 社交字段）
 - Person Bio（人物页 / 卡片 + 长文小传 + 自动聚合时间线）
@@ -92,13 +92,13 @@
 `docs/design/web.html` 内的 Web 原型 SHALL 至少包含以下子屏，每屏均可通过左侧导航或屏切换器到达，每屏均显示真实内容。
 
 子屏列表（最低集 — 本次 chronicle-pivot 后）：
-- Web · Dashboard（仪表盘 / 已活 N 天 / 年度热力图 / 最近人物 / 最近编辑）
-- Web · Timeline（桌面版个人总时间线）
-- Web · Editor（长文 / Post 撰写器桌面版）
-- Web · Bio Editor（人物页桌面版，左卡片 + 右长文编辑）
-- Web · Intersection（桌面版交集视图）
-- Web · Auth（私人登录入口）
-- Web · Settings（账号 / 备份 / 提醒邮件）
+- Web Dashboard（仪表盘 / 已活 N 天 / 年度热力图 / 最近人物 / 最近编辑）
+- Web Timeline（桌面版个人总时间线）
+- Web Editor（长文 / Post 撰写器桌面版）
+- Web Bio Editor（人物页桌面版，左卡片 + 右长文编辑）
+- Web Intersection（桌面版交集视图）
+- Web Auth（私人登录入口）
+- Web Settings（账号 / 备份 / 提醒邮件）
 
 #### Scenario: Web 子屏数 ≥ 7
 

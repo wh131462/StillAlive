@@ -149,13 +149,13 @@
 ## Migration Plan
 
 1. **spec + design + tasks 先行**（本次 proposal）。
-2. **Phase A · shared 资源**：`shared/style.css` 追加新组件类；`shared/app-prototype.js` / `web-prototype.js` 新增 `renderIntersection`。验证 `index.html` 无回归。
-3. **Phase B · 删减旧屏**：app.html 删 care-manage + bind-modal；web.html 删 web-stories + web-story-detail；重命名 death-confirm → reminder-email（屏 id + 文案）。prototype JS 屏切换器配置同步更新。
-4. **Phase C · 裁剪字段**：people-list 去匹配码 + 关心条；profile 去"我的匹配码" + "关心管理"入口；web-dashboard 去"关心我的人"格子。
-5. **Phase D · 新增屏**：App 端新增 timeline / person-bio / intersection / post-composer；Web 端新增 web-timeline / web-bio-editor / web-intersection，替换 web-home 的故事栅格为 dashboard 内容。
-6. **Phase E · 新组件 + 内容填充**：小传区用 Fraunces Italic、人物页三段式；交集视图调用 `renderIntersection` 用 mock 数据绘制。
-7. **Phase F · reminder-email 改造**：屏内容按 spec 重写（两种模式 + 预览 + 触发天数 + 紧急联系人）。
-8. **Phase G · 验收**：grep 确保「死亡 / 诅咒 / 匹配码 / 绑定 / 公共故事」全部清除；Chrome DevTools 实测所有新屏；index.html 无回归；token 守恒。
+2. **Phase A shared 资源**：`shared/style.css` 追加新组件类；`shared/app-prototype.js` / `web-prototype.js` 新增 `renderIntersection`。验证 `index.html` 无回归。
+3. **Phase B 删减旧屏**：app.html 删 care-manage + bind-modal；web.html 删 web-stories + web-story-detail；重命名 death-confirm → reminder-email（屏 id + 文案）。prototype JS 屏切换器配置同步更新。
+4. **Phase C 裁剪字段**：people-list 去匹配码 + 关心条；profile 去"我的匹配码" + "关心管理"入口；web-dashboard 去"关心我的人"格子。
+5. **Phase D 新增屏**：App 端新增 timeline / person-bio / intersection / post-composer；Web 端新增 web-timeline / web-bio-editor / web-intersection，替换 web-home 的故事栅格为 dashboard 内容。
+6. **Phase E 新组件 + 内容填充**：小传区用 Fraunces Italic、人物页三段式；交集视图调用 `renderIntersection` 用 mock 数据绘制。
+7. **Phase F reminder-email 改造**：屏内容按 spec 重写（两种模式 + 预览 + 触发天数 + 紧急联系人）。
+8. **Phase G 验收**：grep 确保「死亡 / 诅咒 / 匹配码 / 绑定 / 公共故事」全部清除；Chrome DevTools 实测所有新屏；index.html 无回归；token 守恒。
 
 **回滚**：本次所有改动通过 git 分批提交；如需回滚至 `interactive-prototypes` 状态，revert 本次相关 commit 即可。
 

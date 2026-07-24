@@ -33,7 +33,7 @@
 - [x] 3.3 标签数量超出宽度时 overflow-x: auto，不换行
 - [x] 3.4 浏览器实测：标签条可滚动；点击任一标签切换屏
 
-## 4. app.html · home-flow 屏（替换旧 today）
+## 4. app.html home-flow 屏（替换旧 today）
 
 - [x] 4.1 重命名 `<section data-screen="today">` 为 `<section data-screen="home-flow">`（保持兼容旧入口可通过 alias 重定向）
 - [x] 4.2 顶部固定区：日期 mono 字 + 「你已经活了」+ 巨字「127 天」+ 头像右上
@@ -44,10 +44,10 @@
 - [x] 4.7 历史合流区：从主区域下方开始，每个日期分隔条 sticky；同日多条按 createdAt 倒序；穿插「那天是 X 日子」过期提醒卡 + 「我还在」徽章（空打卡日）
 - [x] 4.8 移除原 today 屏的「关心动态」「今日提醒」并列 list-rows 风格（如还有残留）
 - [x] 4.9 历史区任何条目均不附加「在此处写一条」按钮
-- [x] 4.10 移除原「最近帖 · 查看完整时间线」入口（已合流到本屏）
+- [x] 4.10 移除原「最近帖 查看完整时间线」入口（已合流到本屏）
 - [x] 4.11 底部 tab-bar 第 2 项从「时间线」改为「日历」（时间线本就在主页，单独的"时间线" tab 冗余）
 
-## 5. app.html · Post Composer 改为 sheet
+## 5. app.html Post Composer 改为 sheet
 
 - [x] 5.1 把 `<section data-screen="post-composer">` 整体内容包装为 `.sheet` 容器，置于 device-screen 内（z-index 高于其它屏）
 - [x] 5.2 sheet 顶部加 `.sheet-handle` + 「记一条」标题 + 「关闭」按钮
@@ -58,7 +58,7 @@
 - [x] 5.7 完成按钮 → 触发状态切换为 C（已写过）+ 关闭 sheet
 - [x] 5.8 @ 候选改为二级 sheet：点击 `@` 图标 → 上拉小 sheet 列出最近 @ 过的人 + 搜索框
 
-## 6. app.html · 人物 tab 重构
+## 6. app.html 人物 tab 重构
 
 - [x] 6.1 新增 `<section data-screen="person-graph">`：顶部 `.segmented`（「关系图 / 列表」）+ 主区域 `.graph-canvas`
 - [x] 6.2 graph-canvas 内调用 `renderPersonGraph` 渲染 mock 关系图：「我」中心 + 妈妈/爸爸/小林/楠楠/老板 5 人，含 4 条 relation（妈↔我妈妈、爸↔我爸爸、爸↔妈伴侣、小林↔我朋友）
@@ -68,7 +68,7 @@
 - [x] 6.6 顶部右上角加「+ 新人物」浮动小按钮（FAB 风格）
 - [x] 6.7 底部 tab-bar 第 3 项「人物」点击 → 默认进入 `person-graph` 而非 `people-list`
 
-## 7. app.html · person-detail-v2
+## 7. app.html person-detail-v2
 
 - [x] 7.1 新增 `<section data-screen="person-detail-v2">`，移除旧 `person-detail`（或保留为兼容入口）
 - [x] 7.2 顶部 `.bio-card` 已有；右上「编辑」入口
@@ -84,7 +84,7 @@
 - [x] 7.8 事件流末尾 `+ 写一条经历` 按钮 → 触发 event-composer sheet
 - [x] 7.9 事件支持拖拽排序（mock：长按 0.4s 后跟手位移，可视即可不必真持久化）
 
-## 8. app.html · event-composer 与 relation-picker sheet
+## 8. app.html event-composer 与 relation-picker sheet
 
 - [x] 8.1 新增 `<section data-screen="event-composer">` 作为 sheet 内容容器
 - [x] 8.2 字段：标题 input / 描述 textarea / 时间提示 input (placeholder「高三那年 / 2018-06 / 童年 都可以」) / 参与者头像串（点击可增删）
@@ -111,7 +111,7 @@
 - [x] 10.4 「云同步」折叠区位于主导出按钮下方：默认收起，点开「也可以同步到云端 →」展开
 - [x] 10.5 云端配置 sheet：字段「网盘服务（下拉）/ 网盘地址 / 账号 / 密码 / 文件夹路径 / 上传前加密保护 toggle」
 - [x] 10.6 测试连接按钮文案「测试一下」；mock 成功显示「✓ 可以连接」
-- [x] 10.7 备份文件名 mock：「还活着 · 2026-05-13 09-41.zip」
+- [x] 10.7 备份文件名 mock：「还活着 2026-05-13 09-41.zip」
 - [x] 10.8 web `web-settings` 屏同步：把原 WebDAV/S3 配置区 全部按上述新文案重写
 - [x] 10.9 grep 验证：`grep -rE "WebDAV|S3 兼容|AES-256|PBKDF2|accessKeyId|secretAccessKey|endpoint" docs/design/*.html` 应仅出现在折叠「技术细节」区（如有），否则全无
 
@@ -141,4 +141,4 @@
 - [x] 12.6 移动视口 393×852：home-flow 三态卡片不溢出；person-graph 节点可见
 - [x] 12.7 grep 文案合规：`grep -rE "WebDAV|S3 兼容|AES-256" docs/design/*.html` 全无；`grep -rE "Markdown\|.md\|草稿\|自动保存" docs/design/*.html` 应仅出现在 web-editor 桌面版（保留）
 - [x] 12.8 屏数量核对：App ≥ 9（目标含 home-flow + person-graph + person-detail-v2 + event-composer + relation-picker + backup 等）；Web ≥ 7
-- [x] 12.9 在 `docs/design/index.html` 顶部注释追加：`<!-- Humane redesign → 苹果风分阶段心流 + 关系图 + 事件流 · 见 openspec/changes/humane-redesign/ -->`
+- [x] 12.9 在 `docs/design/index.html` 顶部注释追加：`<!-- Humane redesign → 苹果风分阶段心流 + 关系图 + 事件流 见 openspec/changes/humane-redesign/ -->`

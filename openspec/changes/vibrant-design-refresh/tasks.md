@@ -17,18 +17,18 @@
 
 ## 2. 重构 docs/design/index.html（封面/导航）
 
-- [x] 2.1 删除头部 `<header class="running">` 中的"Vol. IV — A Personal Herbarium / Hangzhou · Anno MMXXVI"古籍铭牌
+- [x] 2.1 删除头部 `<header class="running">` 中的"Vol. IV — A Personal Herbarium / Hangzhou Anno MMXXVI"古籍铭牌
 - [x] 2.2 删除四角装饰 SVG（`.corner-svg.tl`、`.corner-svg.br`）及其相关 CSS
-- [x] 2.3 删除 `.latin-plate` 拉丁文铭牌区（`Cotidie florēs · Specimen vitae`）
+- [x] 2.3 删除 `.latin-plate` 拉丁文铭牌区（`Cotidie florēs Specimen vitae`）
 - [x] 2.4 删除 `.margin-note`（"读这本书,就像翻一页自己的春天"手写体批注）
 - [x] 2.5 删除每张 `.plate` 上的 `.stamp`（`Specimen Mobile Edition` 圆形钢印）与 `::before` tape 胶带伪元素
-- [x] 2.6 重写 hero 区域：`<h1>还活<em>着</em></h1>` 字体改为 `--sans`，`em` 强调色改为 `--vital-green`；副标题保留中文「记录每一天的活着」与一行简短英文 `Still Alive · One Day at a Time`，字体使用 `--sans`
-- [x] 2.7 重写"Index of Plates"区段：标题改名为「两端预览 · App / Web」（中文优先），删除 `Catalogus Specierum`、`Pigmentum & Litterae` 类拉丁标题
+- [x] 2.6 重写 hero 区域：`<h1>还活<em>着</em></h1>` 字体改为 `--sans`，`em` 强调色改为 `--vital-green`；副标题保留中文「记录每一天的活着」与一行简短英文 `Still Alive One Day at a Time`，字体使用 `--sans`
+- [x] 2.7 重写"Index of Plates"区段：标题改名为「两端预览 App / Web」（中文优先），删除 `Catalogus Specierum`、`Pigmentum & Litterae` 类拉丁标题
 - [x] 2.8 重写两张大卡（指向 `app.html` / `web.html`）：使用 `.panel` 白底卡片 + `--radius-lg` 圆角 + `--shadow-soft`；卡片顶部用色块而非"罗马数字 i / ii"作视觉锚（保留小字编号）；hover 改为 `translateY(-4px)` + `--shadow-lift`
-- [x] 2.9 重写"Catalogus Specierum"为「核心模块 · Core Modules」六宫格：现代极简描边图标替代古籍线描叶片 SVG；卡片改用浅色填充 + 主色细边或彩色顶部 accent
+- [x] 2.9 重写"Catalogus Specierum"为「核心模块 Core Modules」六宫格：现代极简描边图标替代古籍线描叶片 SVG；卡片改用浅色填充 + 主色细边或彩色顶部 accent
 - [x] 2.10 重写"Pigmentum & Litterae"色板与字体样张：色板改为现代色卡（圆角色块 + hex），字体样张展示 Manrope（标题）/ Manrope（正文）/ Fraunces（日记示例）/ JetBrains Mono（元数据）
-- [x] 2.11 重写 `.colophon` 页脚：删除 `❦ · ❦`、`Composed and bound in Hangzhou` 古籍尾跋；改为简洁版权 + 版本号 + 日期（中文优先）
-- [x] 2.12 删除 `.folio` 右下角 "Plate · 序 · Folium" 古籍页码
+- [x] 2.11 重写 `.colophon` 页脚：删除 `❦ ❦`、`Composed and bound in Hangzhou` 古籍尾跋；改为简洁版权 + 版本号 + 日期（中文优先）
+- [x] 2.12 删除 `.folio` 右下角 "Plate 序 Folium" 古籍页码
 - [x] 2.13 在浏览器打开 `docs/design/index.html` 实际核对：背景明亮纸白、文字深墨灰、主标题鲜活色强调、无 tape/钢印/角花/拉丁文
 - [x] 2.14 截图或目视确认动效：标题 fade-up、卡片 hover 上浮且无倾斜、植物图标轻微浮动
 

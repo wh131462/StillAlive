@@ -1,6 +1,6 @@
 ## Context
 
-`docs/design/` 目录下的现有设计稿（`index.html`、`app.html`、`web.html` 与共享 `shared/style.css`）采用「Herbarium of Days · 压花标本」视觉风格：奶白纸基底（`#F4ECDB`）、铁胆墨深褐（`#1F1A14`）、低饱和苔绿/赭石/陶土点缀，Fraunces Italic 显眼标题，纸张噪点滤镜、tape 胶带、圆形钢印、四角古籍花纹 SVG、拉丁文铭牌等密集装饰。
+`docs/design/` 目录下的现有设计稿（`index.html`、`app.html`、`web.html` 与共享 `shared/style.css`）采用「Herbarium of Days 压花标本」视觉风格：奶白纸基底（`#F4ECDB`）、铁胆墨深褐（`#1F1A14`）、低饱和苔绿/赭石/陶土点缀，Fraunces Italic 显眼标题，纸张噪点滤镜、tape 胶带、圆形钢印、四角古籍花纹 SVG、拉丁文铭牌等密集装饰。
 
 该风格成功传达「珍藏、凝视、纪念」氛围，但产品「还活着」的叙事核心是「当下、活力、生长、陪伴」。当前视觉与"活着"的鲜活感存在错位。本次改版需要在保留产品叙事母题（人=花、日记=标本、活着=每一天）的同时，整体替换视觉语言为「明亮、清晰、生长感」的现代风格。
 
@@ -123,7 +123,7 @@ Manrope 字形带轻微人文柔和度（不像 Inter 那样几何刚硬），�
 
 ### 决策 6：三个入口页结构保持，仅替换视觉
 
-- `index.html` 仍是封面/导航，但去除"Herbarium of Days · 标本志"古籍铭牌；保留中文「还活着」主标题与中文/英文副标题（如 `Still Alive · 活着的每一天`）。
+- `index.html` 仍是封面/导航，但去除"Herbarium of Days 标本志"古籍铭牌；保留中文「还活着」主标题与中文/英文副标题（如 `Still Alive 活着的每一天`）。
 - `app.html`、`web.html` 保持其作为"移动端预览总览 / Web 端预览总览"的角色，仅替换样式。如这两个文件本身较长且包含大量原标本风装饰，本次仅做"风格替换"层级的修改，不重设信息架构。
 - 三页共享 `shared/style.css`，page-specific 样式留在各 `<style>` 中。
 

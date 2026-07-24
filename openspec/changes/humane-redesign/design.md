@@ -181,16 +181,16 @@
 
 ## Migration Plan
 
-1. **Phase A · CSS 追加**：`shared/style.css` 末尾新增 checkin-card 三态 / sheet / graph-* / kv-row / segmented-control。`index.html` 验证无回归。
-2. **Phase B · 共用 JS 扩展**：新增 `renderPersonGraph(target, data)`；调整 `renderHeatmap` 等保持向后兼容。
-3. **Phase C · 屏切换器视觉降级**：app.html 与 web.html 的屏切换器去掉数字编号 chip。
-4. **Phase D · App home-flow**：替换 `today` 屏内容为状态机三态卡片 + 历史合流；移除并列双 CTA。
-5. **Phase E · App person-graph 与 person-detail-v2**：新增两屏，替代旧 `person-detail`；人物 tab 默认进图。
-6. **Phase F · Post Composer sheet**：将原 `post-composer` 屏改造为 sheet 形态；底部按钮变 4 个圆形小图标。
-7. **Phase G · Web 同步更新**：dashboard 顶部加打卡卡片；新增 `web-person-graph` 屏；`web-bio-editor` 升级为 v2。
-8. **Phase H · 备份 UI 重构**：app + web 的设置页备份区按新文案 / 流程重写。
-9. **Phase I · PRD 同步**：`docs/PRD.md` §3.2 / §3.4 / §3.6.5 / §4 同步更新。
-10. **Phase J · 验收**：屏切换全部可达；状态机三态可流转；关系图能拖动 / 缩放；事件流 mock 数据可见；备份 UI 无技术术语。
+1. **Phase A CSS 追加**：`shared/style.css` 末尾新增 checkin-card 三态 / sheet / graph-* / kv-row / segmented-control。`index.html` 验证无回归。
+2. **Phase B 共用 JS 扩展**：新增 `renderPersonGraph(target, data)`；调整 `renderHeatmap` 等保持向后兼容。
+3. **Phase C 屏切换器视觉降级**：app.html 与 web.html 的屏切换器去掉数字编号 chip。
+4. **Phase D App home-flow**：替换 `today` 屏内容为状态机三态卡片 + 历史合流；移除并列双 CTA。
+5. **Phase E App person-graph 与 person-detail-v2**：新增两屏，替代旧 `person-detail`；人物 tab 默认进图。
+6. **Phase F Post Composer sheet**：将原 `post-composer` 屏改造为 sheet 形态；底部按钮变 4 个圆形小图标。
+7. **Phase G Web 同步更新**：dashboard 顶部加打卡卡片；新增 `web-person-graph` 屏；`web-bio-editor` 升级为 v2。
+8. **Phase H 备份 UI 重构**：app + web 的设置页备份区按新文案 / 流程重写。
+9. **Phase I PRD 同步**：`docs/PRD.md` §3.2 / §3.4 / §3.6.5 / §4 同步更新。
+10. **Phase J 验收**：屏切换全部可达；状态机三态可流转；关系图能拖动 / 缩放；事件流 mock 数据可见；备份 UI 无技术术语。
 
 回滚：所有改动通过 git 分批提交；如需回滚至 `chronicle-pivot` 状态，revert 本次相关 commit。
 

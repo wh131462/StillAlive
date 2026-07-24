@@ -28,7 +28,7 @@
 - [x] 3.6 profile 屏移除「关心管理」list-row 入口
 - [x] 3.7 profile 屏把「死亡确认」list-row 入口重命名为「提醒邮件」，data-go 改 `reminder-email`
 - [x] 3.8 today 屏移除「关心动态」整段（section-title + list-rows 含 avatars 堆叠）
-- [x] 3.9 people-list 屏移除「8 位 · 你重要的人」副标，改为「你记录过的人」
+- [x] 3.9 people-list 屏移除「8 位 你重要的人」副标，改为「你记录过的人」
 - [x] 3.10 全文 grep 确认 app.html 中不再出现 `care-manage / bind-confirm / death-confirm / 匹配码 / 关心` 等字样
 
 ## 4. app.html 新增屏
@@ -70,7 +70,7 @@
 
 ## 8. 一致性与验收
 
-- [x] 8.1 `docs/design/index.html` 顶部注释追加：`<!-- Chronicle pivot → 本地优先个人编年史 · 见 openspec/changes/chronicle-pivot/ -->`
+- [x] 8.1 `docs/design/index.html` 顶部注释追加：`<!-- Chronicle pivot → 本地优先个人编年史 见 openspec/changes/chronicle-pivot/ -->`
 - [x] 8.2 浏览器实测 `index.html` 无回归
 - [x] 8.3 浏览器实测 `app.html`：所有新屏可切换到达；post-composer @ 交互可模拟；intersection 视图绘制无控制台错误
 - [x] 8.4 浏览器实测 `web.html`：左 nav-rail 重整后结构清晰；timeline / bio-editor / intersection 三新屏可达；address bar 同步更新
@@ -82,12 +82,12 @@
 ## 9. PRD 同步（docs/PRD.md）
 
 - [x] 9.1 改写 §1.1 产品定位：去「社交纽带 / 匹配码 / 关心」；新定位为「本地优先的个人编年史工具」
-- [x] 9.2 改写 §1.3 核心价值观：删「社交纽带」行；新增「本地优先 · 数据自主」「长久可回看」
+- [x] 9.2 改写 §1.3 核心价值观：删「社交纽带」行；新增「本地优先 数据自主」「长久可回看」
 - [x] 9.3 改写 §1.4 核心叙事：保留「你已经活了 N 天」巨字；新增「每一天可以打卡 + 写」+「回看历史与人物」两条次叙事
 - [x] 9.4 改写 §1.5 多端形态：明确 Web 端定位为「桌面写作/阅读视图」而非公共故事舞台
 - [x] 9.5 改写 §2.1 导航结构：保留 4 Tab（主页 / 打卡 / 人物 / 我的），但「打卡」tab 内核变为「时间线」为主、日历为辅
 - [x] 9.6 改写 §2.2 模块关系图：去「关心」子模块节点，新增「时间线 / 人物小传 / 交集 / 备份」
-- [x] 9.7 新增 §3.2.5 快速写入（Post Composer 入口 · 独立于打卡）
+- [x] 9.7 新增 §3.2.5 快速写入（Post Composer 入口 独立于打卡）
 - [x] 9.8 改写 §3.2.6「关心动态」→「最近记录」（列举最近 3 条 Post 与本月 @ 过的人）
 - [x] 9.9 §3.3 打卡模块 → 重命名为「记录模块」；内容升级为：时间线（反向时序 + 日期分隔 + 过期提醒穿插）+ 打卡日历（保留）+ 近期记录（保留 + 链接到 Post 详情）
 - [x] 9.10 §3.3 新增：Post 数据模型说明 + @ 提及说明（纯本地、不推送）
