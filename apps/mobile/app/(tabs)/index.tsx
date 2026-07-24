@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Alert, Image, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { Media, Post } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
+import { DatePickerField } from '../../src/components/date-time-picker';
+import type { DateParts } from '../../src/components/date-time-picker';
+import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 
 export default function TodayScreen() {
   const router = useRouter();
@@ -43,13 +47,9 @@ export default function TodayScreen() {
   };
 
   const completeOnboarding = async () => {
-    const value = birthDate.trim();
-    if (value && !validOptionalDate(value, today)) {
-      Alert.alert('出生日期格式不正确', '请使用 YYYY-MM-DD，并且不能晚于今天。');
-      return;
-    }
-    await updatePreferences({ onboardingCompleted: true, nickname: nickname.trim(), birthDate: value });
+    await updatePreferences({ onboardingCompleted: true, nickname: nickname.trim(), birthDate });
   };
+  const birthDateParts: DateParts | null = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? (() => { const [year, month, day] = birthDate.split('-').map(Number); return { year, month, day }; })() : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -62,14 +62,14 @@ export default function TodayScreen() {
           <Text style={styles.date}>{formatDisplayDate(new Date())}</Text>
         </View>
 
-        <Text style={styles.kicker}>{recordedDayCount ? `DAY ${recordedDayCount} · ${recordedDayCount} 个坐标` : '从今天开始 · 留下第一个坐标'}</Text>
+        <Text style={styles.kicker}>{recordedDayCount ? `DAY ${recordedDayCount} ${recordedDayCount} 个坐标` : '从今天开始 留下第一个坐标'}</Text>
         <Text style={styles.title}>{returningAfterBreak ? '欢迎回来。' : preferences.nickname ? `早上好，${preferences.nickname}。` : '早上好。'}{`\n`}{returningAfterBreak ? '今天也可以重新开始。' : '今天，也在这里。'}</Text>
         {!ready ? <Text style={styles.stateMessage}>正在打开你的本地记录…</Text> : null}
         {error ? <Text style={styles.errorMessage}>本地记录暂时无法打开：{error}</Text> : null}
 
         <View style={[styles.checkCard, todayCheckIn && styles.checkCardDone]}>
           <View style={styles.cardMetaRow}>
-            <Text style={styles.cardMeta}>TODAY · {today.slice(5).replace('-', '.')}</Text>
+            <Text style={styles.cardMeta}>TODAY {today.slice(5).replace('-', '.')}</Text>
             <View style={[styles.pulse, todayCheckIn && styles.pulseDone]} />
           </View>
           <Text style={styles.cardTitle}>
@@ -95,9 +95,11 @@ export default function TodayScreen() {
             </View>
             {todayPosts.map((post, index) => (
               <TodayPostCard
+                authorName={preferences.nickname || '我'}
                 key={post.id}
                 index={index}
                 mediaById={mediaById}
+                onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
                 onPress={() => router.push(`/post/${post.id}`)}
                 post={post}
               />
@@ -135,11 +137,11 @@ export default function TodayScreen() {
       <Modal animationType="fade" transparent visible={ready && !preferences.onboardingCompleted}>
         <SafeAreaView style={styles.onboardingBackdrop}>
           <View style={styles.onboardingSheet}>
-            <Text style={styles.onboardingLabel}>STILL ALIVE · 仍在</Text>
+            <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
             <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
             <Text style={styles.onboardingText}>无需注册。日记、人物和图片默认只保存在这台设备，可以随时完整导出。</Text>
-            <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 · 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
-            <TextInput autoCapitalize="none" keyboardType="numbers-and-punctuation" maxLength={10} onChangeText={setBirthDate} placeholder="出生日期 YYYY-MM-DD · 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={birthDate} />
+            <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
+            <DatePickerField label="出生日期 可跳过" onChange={({ year, month, day }) => setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)} onClear={() => setBirthDate('')} value={birthDateParts} />
             <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入今天</Text></Pressable>
             <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
           </View>
@@ -149,7 +151,7 @@ export default function TodayScreen() {
   );
 }
 
-function TodayPostCard({ index, mediaById, onPress, post }: { index: number; mediaById: Map<string, Media>; onPress(): void; post: Post }) {
+function TodayPostCard({ authorName, index, mediaById, onImagePress, onPress, post }: { authorName: string; index: number; mediaById: Map<string, Media>; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post }) {
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const excerpt = markdownToPlainText(post.bodyMarkdown);
@@ -157,42 +159,37 @@ function TodayPostCard({ index, mediaById, onPress, post }: { index: number; med
   return (
     <Pressable accessibilityLabel={`打开今天 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.todayNote, index === 0 && styles.todayNoteFirst, pressed && styles.pressed]}>
       <View style={styles.todayNoteMetaRow}>
-        <View style={styles.todayNoteTimeRow}>
-          <View style={styles.todayNoteDot} />
-          <Text style={styles.todayNoteMeta}>{formatTime(post.createdAt)}</Text>
-          {post.updatedAt !== post.createdAt ? <Text style={styles.todayNoteUpdated}>修改过</Text> : null}
+        <View style={styles.todayNoteAvatar}><Text style={styles.todayNoteAvatarText}>{authorName.slice(0, 1)}</Text></View>
+        <View style={styles.todayNoteIdentity}>
+          <Text style={styles.todayNoteAuthor}>{authorName}</Text>
+          <Text style={styles.todayNoteMeta}>{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' 修改过' : ''}</Text>
         </View>
-        <Text style={styles.todayNoteOpen}>阅读　›</Text>
       </View>
-      {images.length ? <PostImageGrid images={images} totalCount={mediaIds.length} /> : null}
-      <Text numberOfLines={4} style={[styles.todayNoteText, images.length > 0 && styles.todayNoteTextWithImage]}>
+      <Text numberOfLines={6} style={styles.todayNoteText}>
         {excerpt || `今天留下了 ${mediaIds.length} 张照片。`}
       </Text>
+      {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
       <View style={styles.todayNoteFooter}>
-        <Text style={styles.todayNoteType}>{images.length ? images.length > 1 ? 'PHOTO STORY' : 'PHOTO NOTE' : 'TEXT NOTE'}</Text>
-        {mediaIds.length ? <Text style={styles.todayNotePhotoCount}>{mediaIds.length} 张照片</Text> : null}
+        <Text style={styles.todayNoteType}>{images.length ? `${mediaIds.length} 张照片` : '文字记录'}</Text>
+        <Text style={styles.todayNoteOpen}>查看全文　›</Text>
       </View>
     </Pressable>
   );
 }
 
-function PostImageGrid({ images, totalCount }: { images: Media[]; totalCount: number }) {
-  const visibleImages = images.slice(0, 3);
-  if (visibleImages.length === 1) {
-    return <Image accessibilityLabel="日记图片" resizeMode="cover" source={{ uri: visibleImages[0].localPath }} style={styles.todaySingleImage} />;
+function PostImageGrid({ images, onPressImage, totalCount }: { images: Media[]; onPressImage(index: number): void; totalCount: number }) {
+  if (images.length === 1) {
+    return <Pressable accessibilityLabel="预览日记图片" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPressImage(0); }}><Image accessibilityLabel="日记图片" resizeMode="cover" source={{ uri: images[0].localPath }} style={styles.todaySingleImage} /></Pressable>;
   }
+  const visibleImages = images.slice(0, 9);
   return (
     <View style={styles.todayImageGrid}>
-      <Image accessibilityLabel="日记图片 1" resizeMode="cover" source={{ uri: visibleImages[0].localPath }} style={styles.todayImageMain} />
-      <View style={styles.todayImageSide}>
-        <Image accessibilityLabel="日记图片 2" resizeMode="cover" source={{ uri: visibleImages[1].localPath }} style={[styles.todayImageSmall, visibleImages.length === 2 && styles.todayImageOnlySide]} />
-        {visibleImages[2] ? (
-          <View style={styles.todayImageLast}>
-            <Image accessibilityLabel="日记图片 3" resizeMode="cover" source={{ uri: visibleImages[2].localPath }} style={styles.todayImageSmall} />
-            {totalCount > 3 ? <View style={styles.todayImageMore}><Text style={styles.todayImageMoreText}>+{totalCount - 3}</Text></View> : null}
-          </View>
-        ) : null}
-      </View>
+      {visibleImages.map((image, index) => (
+        <Pressable accessibilityLabel={`预览日记图片 ${index + 1}`} accessibilityRole="button" key={`${image.id}_${index}`} onPress={(event) => { event.stopPropagation(); onPressImage(index); }} style={styles.todayImageCell}>
+          <Image accessibilityLabel={`日记图片 ${index + 1}`} resizeMode="cover" source={{ uri: image.localPath }} style={styles.todayImage} />
+          {index === visibleImages.length - 1 && totalCount > 9 ? <View style={styles.todayImageMore}><Text style={styles.todayImageMoreText}>+{totalCount - 9}</Text></View> : null}
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -219,7 +216,7 @@ function markdownToPlainText(markdown: string): string {
     .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
     .replace(/~~|\*\*|__|[*_`]/g, '')
     .replace(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, '')
-    .replace(/\s*\|\s*/g, ' · ')
+    .replace(/\s*\|\s*/g, ' ')
     .replace(/<[^>]+>/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -241,12 +238,6 @@ function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMem
   if (memory.kind === 'person') return `想起 ${memory.person.name}`;
   const years = Number(today.slice(0, 4)) - Number(memory.post.dayKey.slice(0, 4));
   return years === 1 ? '一年前的今天' : `${years} 年前的今天`;
-}
-
-function validOptionalDate(value: string, today: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value > today) return false;
-  const [year, month, day] = value.split('-').map(Number);
-  return toDayKey(new Date(year, month - 1, day)) === value;
 }
 
 const styles = StyleSheet.create({
@@ -278,28 +269,24 @@ const styles = StyleSheet.create({
   todaySectionHeader: { paddingHorizontal: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   todaySectionTitle: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 18 },
   todaySectionCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.1 },
-  todayNote: { marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet, shadowColor: colors.ink, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 3 },
+  todayNote: { marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
   todayNoteFirst: { marginTop: spacing.md },
-  todayNoteMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  todayNoteTimeRow: { flexDirection: 'row', alignItems: 'center' },
-  todayNoteDot: { width: 5, height: 5, marginRight: spacing.sm, borderRadius: 3, backgroundColor: colors.sun },
-  todayNoteMeta: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
-  todayNoteUpdated: { marginLeft: spacing.sm, color: colors.inkFaint, fontSize: 8 },
-  todayNoteOpen: { color: colors.inkFaint, fontSize: 9 },
-  todaySingleImage: { width: '100%', height: 205, marginTop: spacing.md, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
-  todayImageGrid: { height: 220, marginTop: spacing.md, flexDirection: 'row', gap: 4 },
-  todayImageMain: { flex: 1.65, height: '100%', borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
-  todayImageSide: { flex: 1, height: '100%', gap: 4 },
-  todayImageSmall: { width: '100%', flex: 1, backgroundColor: colors.lifeLight },
-  todayImageOnlySide: { borderTopRightRadius: radius.lg },
-  todayImageLast: { flex: 1, position: 'relative', overflow: 'hidden', borderTopRightRadius: radius.lg },
+  todayNoteMetaRow: { flexDirection: 'row', alignItems: 'center' },
+  todayNoteAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.life },
+  todayNoteAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 16 },
+  todayNoteIdentity: { flex: 1, marginLeft: spacing.sm },
+  todayNoteAuthor: { color: colors.life, fontSize: 12, fontWeight: '700' },
+  todayNoteMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
+  todayNoteOpen: { color: colors.life, fontSize: 9 },
+  todaySingleImage: { width: '78%', aspectRatio: 1.15, marginTop: spacing.md, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  todayImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  todayImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  todayImage: { width: '100%', height: '100%' },
   todayImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
-  todayImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 18, fontWeight: '700' },
+  todayImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
   todayNoteText: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
-  todayNoteTextWithImage: { fontSize: 15, lineHeight: 25 },
   todayNoteFooter: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  todayNoteType: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 7, letterSpacing: 1.1 },
-  todayNotePhotoCount: { color: colors.inkFaint, fontSize: 8 },
+  todayNoteType: { color: colors.inkFaint, fontSize: 8 },
   leaveButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   leaveText: { color: colors.inkFaint, fontSize: 10 },
   memory: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
