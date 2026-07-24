@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">仍在单色 Logo</title>
+  <desc id="desc">用于 Android 主题图标与通知图标的白色单色标识</desc>
+  <circle cx="512" cy="512" r="260" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round" stroke-dasharray="1362 272" transform="rotate(-35 512 512)"/>
+  <circle cx="512" cy="512" r="54" fill="#FFFFFF"/>
+  <circle cx="722" cy="358" r="58" fill="#FFFFFF"/>
+</svg>

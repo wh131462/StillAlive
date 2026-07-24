@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">仍在 App 图标</title>
+  <desc id="desc">深绿色底色上的生命轨迹、中心坐标与今日节点</desc>
+  <rect width="1024" height="1024" fill="#1D6B49"/>
+  <circle cx="512" cy="512" r="260" fill="none" stroke="#F4F6EF" stroke-width="76" stroke-linecap="round" stroke-dasharray="1362 272" transform="rotate(-35 512 512)"/>
+  <circle cx="512" cy="512" r="54" fill="#F4F6EF"/>
+  <circle cx="722" cy="358" r="58" fill="#D4A84F"/>
+</svg>
