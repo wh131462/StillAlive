@@ -1,5 +1,5 @@
 /*
- * Still Alive · Vibrant Design System
+ * Still Alive Vibrant Design System
  * 鲜活现代风格 —— 明亮纸白 + 深墨灰 + 鲜活四色
  * See: openspec/changes/vibrant-design-refresh/
  */
@@ -1456,7 +1456,7 @@ blockquote, .quote {
 }
 .event-row .event-participants .row-lead:first-child { margin-left: 0; }
 .event-row.is-not-self .event-title::after {
-  content: '· 仅 ta';
+  content: ' 仅 ta';
   font-family: var(--mono);
   font-size: 10px;
   color: var(--ink-faint);
@@ -1503,5 +1503,4 @@ blockquote, .quote {
   background: var(--vital-green);
   border-radius: 1px;
 }
-
 

@@ -1,4 +1,4 @@
-/* Still Alive · App Prototype Bindings
+/* Still Alive App Prototype Bindings
  * 极简原生 JS，承担屏切换 / tab 切换 / 模态 / toggle / mood / pin / heatmap
  * 通过 data-* 属性触发，事件委托。零依赖。
  */
@@ -146,7 +146,7 @@
             ' style="left:' + pct.toFixed(2) + '%;"' +
             ' data-post-id="' + post.id + '"' +
             ' data-day="' + post.dayKey + '"' +
-            ' title="' + (post.dayKey + ' · ' + (post.excerpt || '')) + '"></span>';
+            ' title="' + (post.dayKey + ' ' + (post.excerpt || '')) + '"></span>';
         }).join('');
 
         var hasDots = dots.length > 0;

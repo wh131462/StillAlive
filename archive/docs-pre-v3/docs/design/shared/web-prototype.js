@@ -1,4 +1,4 @@
-/* Still Alive · Web Prototype Bindings
+/* Still Alive Web Prototype Bindings
  * Reuses the same data-* contract as app-prototype.js plus:
  *   - .nav-rail .nav-item[data-go] (highlights active nav)
  *   - syncs <header> .addr text per screen via [data-addr="..."] attribute on the screen
@@ -131,7 +131,7 @@
             ' style="left:' + pct.toFixed(2) + '%;"' +
             ' data-post-id="' + post.id + '"' +
             ' data-day="' + post.dayKey + '"' +
-            ' title="' + (post.dayKey + ' · ' + (post.excerpt || '')) + '"></span>';
+            ' title="' + (post.dayKey + ' ' + (post.excerpt || '')) + '"></span>';
         }).join('');
         var hasDots = dots.length > 0;
         var trackContent = hasDots
