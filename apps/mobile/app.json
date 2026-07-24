@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "仍在",
+    "slug": "still-alive",
+    "scheme": "stillalive",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许“仍在”选择照片，添加到你的本地日记中。"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.stillalive.mobile"
+    },
+    "android": {
+      "package": "app.stillalive.mobile"
+    }
+  }
+}
