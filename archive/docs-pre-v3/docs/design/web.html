@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Web 设计稿 · 还活着 Still Alive</title>
+  <link rel="stylesheet" href="shared/style.css">
+  <style>
+    body { overflow-x: hidden; }
+    .layout {
+      max-width: 1500px; margin: 0 auto;
+      padding: 40px 32px 96px;
+      display: flex; flex-direction: column;
+      gap: 24px;
+    }
+    .running {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 16px; border-bottom: 1px solid var(--line);
+      font-family: var(--mono); font-size: 11px;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--ink-faint);
+    }
+    .running a { color: inherit; transition: color 0.2s; }
+    .running a:hover { color: var(--warm-coral); }
+    .top-switcher {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      padding: 8px 0;
+    }
+    .device-mac {
+      width: 100%; max-width: 1280px;
+      margin: 0 auto;
+      background: var(--ink);
+      border-radius: var(--radius-md);
+      padding: 10px 10px 0;
+      box-shadow: 0 24px 48px -12px rgba(31,35,40,0.20), 0 8px 16px -4px rgba(31,35,40,0.10);
+    }
+    .device-mac .chrome {
+      display: flex; align-items: center; gap: 6px;
+      height: 24px; padding: 0 2px;
+    }
+    .chrome .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .chrome .dot.r { background: #FF5F57; }
+    .chrome .dot.y { background: #FEBC2E; }
+    .chrome .dot.g { background: #28C840; }
+    .chrome .addr {
+      margin-left: 18px;
+      flex: 0 1 auto;
+      max-width: 360px;
+      padding: 3px 12px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: rgba(255,255,255,0.78);
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    .device-mac .viewport {
+      background: var(--bg);
+      border-radius: 10px 10px 0 0;
+      height: 760px;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+    .main-area { flex: 1; min-width: 0; overflow-y: auto; position: relative; }
+    .main-area::-webkit-scrollbar { width: 6px; }
+    .main-area::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+    .screen-stack { width: 100%; min-height: 100%; position: relative; }
+    .screen-stack [data-screen] { display: none; }
+    .pg-wide { padding: 32px 48px 48px; max-width: 1080px; margin: 0 auto; }
+    /* PLACEHOLDER */
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header class="running">
+      <a href="index.html">&larr; 总览</a>
+      <span>Web &middot; 可交互原型 &middot; v5</span>
+    </header>
+
+    <nav class="screen-tabs" data-switcher-for="web" style="display:flex;overflow-x:auto;border-bottom:1px solid var(--line);padding:4px 0;">
+      <button class="screen-tab is-active" data-go="web-dashboard">仪表盘</button>
+      <button class="screen-tab" data-go="web-timeline">时间线</button>
+      <button class="screen-tab" data-go="web-editor">写一条</button>
+      <button class="screen-tab" data-go="web-person-graph">关系图</button>
+      <button class="screen-tab" data-go="web-person-detail-v2">人物详情</button>
+      <button class="screen-tab" data-go="web-intersection">交集</button>
+      <button class="screen-tab" data-go="web-auth">登录</button>
+      <button class="screen-tab" data-go="web-settings">设置</button>
+    </nav>
+
+    <div class="device-mac">
+      <div class="chrome">
+        <span class="dot r"></span>
+        <span class="dot y"></span>
+        <span class="dot g"></span>
+        <span class="addr" data-addr-display>stillalive.app/app/dashboard</span>
+      </div>
+      <div class="viewport">
+        <aside class="nav-rail" data-nav-rail>
+          <div class="nav-group-label">写作</div>
+          <button class="nav-item" data-go="web-editor">✍️ 写一条</button>
+          <div class="nav-group-label">阅读</div>
+          <button class="nav-item is-active" data-go="web-dashboard">📊 仪表盘</button>
+          <button class="nav-item" data-go="web-timeline">📓 时间线</button>
+          <div class="nav-group-label">人物</div>
+          <button class="nav-item" data-go="web-person-graph">🌿 关系图</button>
+          <button class="nav-item" data-go="web-person-detail-v2">👤 人物详情</button>
+          <button class="nav-item" data-go="web-intersection">🔗 交集</button>
+          <div class="nav-group-label">系统</div>
+          <button class="nav-item" data-go="web-settings">⚙️ 设置</button>
+          <button class="nav-item" data-go="web-auth">🔑 登录</button>
+        </aside>
+
+        <main class="main-area">
+          <div class="screen-stack" data-stack="web" data-initial-screen="web-dashboard">
+            <!-- ===== WEB AUTH ===== -->
+            <section data-screen="web-auth" data-addr="stillalive.app/login">
+              <div style="display:grid;grid-template-columns:1fr 1fr;height:100%;min-height:760px;">
+                <div style="background:linear-gradient(135deg,var(--warm-coral-soft),var(--memory-gold-soft));display:flex;align-items:center;justify-content:center;padding:48px;">
+                  <div style="max-width:360px;">
+                    <div class="section-title" style="margin:0 0 12px;">STILL ALIVE</div>
+                    <h2 style="font-family:var(--sans);font-weight:800;font-size:48px;line-height:1.1;letter-spacing:-0.03em;">
+                      记录每一天的<span style="color:var(--warm-coral);">活着</span>
+                    </h2>
+                    <p style="font-size:15px;line-height:1.85;color:var(--ink-soft);margin-top:20px;">桌面端为长写作而生。大写作区、自动保存、年度像素图，本地存储优先，可同步到你自己的服务器作备份。</p>
+                    <div style="display:flex;gap:6px;margin-top:32px;">
+                      <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--ink-faint);">v5 · 2026</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:center;padding:48px;">
+                  <div style="width:100%;max-width:360px;">
+                    <div data-pick="auth-mode" style="display:flex;gap:24px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:20px;">
+                      <button data-pick-group="auth-mode" class="screen-chip is-active" style="border:none;background:none;padding:6px 0;color:var(--ink);font-weight:700;border-bottom:2px solid var(--warm-coral);border-radius:0;">登录</button>
+                      <button data-pick-group="auth-mode" class="screen-chip" style="border:none;background:none;padding:6px 0;color:var(--ink-faint);font-weight:500;border-radius:0;">注册</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                      <input class="field" placeholder="手机号 / 邮箱">
+                      <input class="field" type="password" placeholder="密码">
+                      <button class="btn btn-coral" style="width:100%;padding:14px;margin-top:6px;" data-go="web-dashboard">登录</button>
+                      <div style="display:flex;align-items:center;gap:10px;margin:8px 0;">
+                        <span style="flex:1;height:1px;background:var(--line);"></span>
+                        <span style="font-size:11px;color:var(--ink-faint);">其他方式</span>
+                        <span style="flex:1;height:1px;background:var(--line);"></span>
+                      </div>
+                      <div style="display:flex;gap:8px;">
+                        <button class="btn btn-ghost" style="flex:1;">Wechat</button>
+                        <button class="btn btn-ghost" style="flex:1;">Apple</button>
+                        <button class="btn btn-ghost" style="flex:1;">Google</button>
+                      </div>
+                    </div>
+                    <p style="font-size:11px;color:var(--ink-faint);text-align:center;margin-top:24px;">登录即代表你同意《用户协议》《隐私政策》</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== WEB DASHBOARD ===== -->
+            <section data-screen="web-dashboard" data-addr="stillalive.app/app/dashboard">
+              <div class="pg-wide">
+                <header style="display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:24px;">
+                  <div>
+                    <div class="section-title" style="margin:0 0 4px;">2026·05·11 · 周一</div>
+                    <h1 style="font-family:var(--sans);font-weight:800;font-size:36px;letter-spacing:-0.02em;">早上好，Let me</h1>
+                  </div>
+                </header>
+
+                <div class="checkin-card is-pending" style="max-width:480px;margin-bottom:28px;">
+                  <div class="ck-title">今日打卡</div>
+                  <p class="ck-sub">先打个卡，再聊点什么</p>
+                  <button class="ck-button" data-checkin-action="checkin">✓ 打卡</button>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:24px;margin-bottom:32px;">
+                  <div class="panel" style="padding:28px;">
+                    <div class="section-title" style="margin:0 0 8px;">你已经活了</div>
+                    <div class="greeting-num size-xl"><em>127</em> 天</div>
+                    <p style="font-size:14px;color:var(--ink-soft);margin-top:12px;">连续打卡 12 天 · 共写下 86 篇记录 · 档案中 8 人</p>
+                  </div>
+                  <div class="panel" style="padding:24px;">
+                    <div class="section-title" style="margin:0 0 8px;">备份状态</div>
+                    <div style="display:flex;align-items:baseline;gap:6px;">
+                      <span style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);">已就绪</span>
+                      <span style="font-size:11px;color:var(--ink-faint);">坚果云 · 已连接</span>
+                    </div>
+                    <p style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.6;">最近一次备份：5 月 7 日 · 21:34<br>差异：12 条新帖 · 3 张新图</p>
+                    <button class="btn btn-ghost" style="margin-top:12px;width:100%;" data-go="web-settings">立即备份</button>
+                  </div>
+                </div>
+
+                <div class="panel" style="padding:24px;margin-bottom:32px;">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
+                    <h3 style="font-size:16px;font-weight:700;">2026 年度像素图</h3>
+                    <span style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:0.1em;">87 / 130 天</span>
+                  </div>
+                  <div class="heatmap" data-heatmap data-weeks="53"></div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+                  <div class="panel" style="padding:20px;cursor:pointer;" data-go="web-bio-editor">
+                    <div class="section-title" style="margin:0 0 4px;">最近人物</div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                      <div class="row-lead" style="width:32px;height:32px;font-size:13px;background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                      <div class="row-lead" style="width:32px;height:32px;font-size:13px;background:var(--vital-green-soft);color:#2F6F30;">林</div>
+                      <div class="row-lead" style="width:32px;height:32px;font-size:13px;background:var(--memory-gold-soft);color:#8A6416;">楠</div>
+                    </div>
+                    <p style="font-size:12px;color:var(--ink-soft);margin-top:8px;">本月 @ 过的人</p>
+                  </div>
+                  <div class="panel" style="padding:20px;">
+                    <div class="section-title" style="margin:0 0 4px;">最近编辑</div>
+                    <p style="font-size:13px;color:var(--ink);font-weight:600;line-height:1.5;cursor:pointer;" data-go="web-editor">下了一场大雨，看见了彩虹</p>
+                    <p style="font-size:11px;color:var(--ink-faint);margin-top:4px;">5 月 8 日 · 草稿</p>
+                  </div>
+                  <div class="panel" style="padding:20px;">
+                    <div class="section-title" style="margin:0 0 4px;">里程碑</div>
+                    <p style="font-size:13px;color:var(--ink);font-weight:600;">下一站：365 天</p>
+                    <p style="font-size:11px;color:var(--ink-faint);margin-top:4px;">还有 238 天</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== WEB EDITOR ===== -->
+            <section data-screen="web-editor" data-addr="stillalive.app/app/editor">
+              <div style="display:grid;grid-template-columns:200px 1fr 280px;gap:24px;height:100%;min-height:760px;padding:24px 32px;">
+                <aside>
+                  <div class="section-title" style="margin-top:0;">大纲</div>
+                  <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink-soft);">
+                    <span style="padding:6px 8px;border-radius:var(--radius-sm);background:var(--vital-green-soft);color:#2F6F30;font-weight:600;">标题</span>
+                    <span style="padding:6px 8px;cursor:pointer;">引子</span>
+                    <span style="padding:6px 8px;cursor:pointer;padding-left:18px;">雨</span>
+                    <span style="padding:6px 8px;cursor:pointer;padding-left:18px;">彩虹</span>
+                    <span style="padding:6px 8px;cursor:pointer;">尾声</span>
+                    <button class="btn btn-ghost" style="margin-top:10px;padding:6px;font-size:12px;">+ 章节</button>
+                  </div>
+                  <div class="section-title" style="margin-top:24px;">字数</div>
+                  <p style="font-size:13px;color:var(--ink-soft);">312 字 &middot; 约 2 分钟阅读</p>
+                </aside>
+
+                <main style="background:var(--surface);border-radius:var(--radius-md);box-shadow:var(--shadow-soft);padding:40px;overflow-y:auto;">
+                  <div class="section-title" style="margin:0 0 8px;">2026·05·08 &middot; 草稿 &middot; 自动保存于 14:32</div>
+                  <input class="field" value="下了一场大雨，看见了彩虹" style="font-family:var(--sans);font-weight:800;font-size:36px;border:none;background:transparent;padding:0 0 8px;letter-spacing:-0.02em;box-shadow:none;">
+                  <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <span class="specimen-tag is-green">日常</span>
+                    <span class="specimen-tag">+ 标签</span>
+                  </div>
+                  <textarea class="field" style="font-family:var(--serif);font-size:17px;line-height:1.9;min-height:480px;border:none;background:transparent;padding:0;box-shadow:none;resize:none;">下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。
+
+雨水砸在屋檐上的声音让我突然意识到，每一次听到都不完全一样。我们以为重复的日子在重复，其实每一天都在以微小的差异展开。
+
+活着的意义也许就藏在这些「不完全一样」里。</textarea>
+                </main>
+
+                <aside style="display:flex;flex-direction:column;gap:16px;">
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 10px;">封面</div>
+                    <div style="height:100px;border-radius:var(--radius-sm);background:linear-gradient(135deg,var(--vital-green-soft),var(--calm-blue-soft));"></div>
+                    <button class="btn btn-ghost" style="width:100%;margin-top:10px;padding:6px;font-size:12px;">更换</button>
+                  </div>
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 10px;">发布设置</div>
+                    <div class="list-row" style="padding:6px 0;background:none;">
+                      <div class="row-body"><h4 style="font-size:13px;">公开</h4><p>所有人可见</p></div>
+                      <button class="toggle is-on"></button>
+                    </div>
+                    <div class="list-row" style="padding:6px 0;background:none;border-top:none;">
+                      <div class="row-body"><h4 style="font-size:13px;">匿名</h4><p>不显示作者名</p></div>
+                      <button class="toggle"></button>
+                    </div>
+                    <div class="list-row" style="padding:6px 0;background:none;border-top:none;">
+                      <div class="row-body"><h4 style="font-size:13px;">允许留言</h4></div>
+                      <button class="toggle is-on"></button>
+                    </div>
+                  </div>
+                  <button class="btn btn-coral" style="padding:12px;">发布</button>
+                  <button class="btn btn-ghost" style="padding:10px;">保存草稿</button>
+                </aside>
+              </div>
+            </section>
+
+            <!-- ===== WEB SETTINGS ===== -->
+            <section data-screen="web-settings" data-addr="stillalive.app/app/settings">
+              <div class="pg-wide">
+                <header style="padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:32px;">
+                  <div class="section-title" style="margin:0 0 4px;">PRIVATE · SETTINGS</div>
+                  <h1 style="font-family:var(--sans);font-weight:800;font-size:36px;letter-spacing:-0.02em;">设置与备份</h1>
+                </header>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+                  <div class="panel" style="padding:24px;">
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;">账号</h3>
+                    <div class="list-row" style="padding:10px 0;background:none;"><div class="row-body"><h4>邮箱</h4><p>letme@example.com</p></div><span style="font-size:12px;color:var(--warm-coral);cursor:pointer;">修改</span></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>设备 ID</h4><p>用于备份命名</p></div><span style="font-size:12px;color:var(--ink-faint);font-family:var(--mono);">macbook-air-let</span></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>密码</h4><p>上次修改于 30 天前</p></div><span style="font-size:12px;color:var(--warm-coral);cursor:pointer;">修改</span></div>
+                  </div>
+
+                  <div class="panel" style="padding:24px;">
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;">隐私</h3>
+                    <div class="list-row" style="padding:10px 0;background:none;"><div class="row-body"><h4>故事默认可见性</h4><p>公开</p></div><button class="toggle is-on"></button></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>允许搜索引擎索引</h4></div><button class="toggle"></button></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>本地匿名分析</h4><p>仅本机统计，不上传</p></div><button class="toggle"></button></div>
+                  </div>
+
+                  <div class="panel" style="padding:24px;">
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;">通知</h3>
+                    <div class="list-row" style="padding:10px 0;background:none;"><div class="row-body"><h4>邮件提醒</h4><p>每周日 9:00 摘要</p></div><button class="toggle is-on"></button></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>留言通知</h4></div><button class="toggle is-on"></button></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>里程碑通知</h4></div><button class="toggle is-on"></button></div>
+                  </div>
+
+                  <div class="panel" style="padding:24px;">
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;">数据导出</h3>
+                    <p style="font-size:13px;color:var(--ink-soft);line-height:1.7;margin-bottom:14px;">导出全部日记、人物档案、提醒。ZIP 包含你的全部日记、人物、提醒，可选加密保护。</p>
+                    <div style="display:flex;gap:8px;">
+                      <button class="btn btn-ghost" style="flex:1;">导出 ZIP</button>
+                      <button class="btn btn-ghost" style="flex:1;">导出 JSON</button>
+                    </div>
+                  </div>
+
+                  <div class="panel" style="padding:24px;grid-column:1 / -1;">
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;">也可以同步到云端</h3>
+                    <p style="font-size:13px;color:var(--ink-soft);line-height:1.7;margin-bottom:14px;">本地优先存储。可选把加密快照定期推送到你自建的服务器。我们不存你的数据。</p>
+                    <div data-pick="backup-protocol" style="display:flex;gap:6px;margin-bottom:14px;">
+                      <button class="screen-chip is-active" data-pick-group="backup-protocol">坚果云</button>
+                      <button class="screen-chip" data-pick-group="backup-protocol">自建网盘</button>
+                      <button class="screen-chip" data-pick-group="backup-protocol">不开启</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                      <input class="field" placeholder="服务器地址" value="https://dav.jianguoyun.com/dav">
+                      <input class="field" placeholder="用户名" value="letme@example.com">
+                      <input class="field" type="password" placeholder="应用密码" value="••••••••">
+                      <input class="field" placeholder="根目录" value="/StillAlive">
+                    </div>
+                    <div class="list-row" style="padding:10px 0;background:none;margin-top:12px;"><div class="row-body"><h4>端到端加密</h4><p>口令仅你自己知道</p></div><button class="toggle is-on"></button></div>
+                    <div class="list-row" style="padding:10px 0;background:none;border-top:1px solid var(--line);"><div class="row-body"><h4>每周自动备份</h4><p>空闲时静默尝试</p></div><button class="toggle is-on"></button></div>
+                    <div style="display:flex;gap:8px;margin-top:14px;">
+                      <button class="btn btn-ghost" style="flex:1;">测试连接</button>
+                      <button class="btn btn-coral" style="flex:1;">立即备份</button>
+                    </div>
+                  </div>
+
+                  <div class="panel" style="padding:24px;grid-column:1 / -1;">
+                    <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;">提醒邮件</h3>
+                    <p style="font-size:13px;color:var(--ink-soft);line-height:1.7;margin-bottom:14px;">长时间没有记录时，给一位你信任的人发一封温柔的邮件，或者只在自己的设备上看到一条本地提醒。</p>
+                    <div data-pick="notify-mode-web" style="display:flex;gap:6px;margin-bottom:14px;">
+                      <button class="screen-chip is-active" data-pick-group="notify-mode-web">邮件提醒</button>
+                      <button class="screen-chip" data-pick-group="notify-mode-web">仅系统提示</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+                      <div class="list-row" style="padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface-2);border-top:none;"><div class="row-body"><h4 style="font-size:13px;">启用</h4></div><button class="toggle is-on"></button></div>
+                      <div style="padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface-2);"><div style="font-size:11px;color:var(--ink-faint);">触发天数</div><div style="font-size:14px;font-weight:600;margin-top:2px;">7 天</div></div>
+                      <div style="padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface-2);"><div style="font-size:11px;color:var(--ink-faint);">紧急联系人</div><div style="font-size:14px;font-weight:600;margin-top:2px;">mother@example.com</div></div>
+                    </div>
+                    <textarea class="field" style="min-height:120px;font-family:var(--sans);font-size:13px;line-height:1.7;">主题：关于 Let me 的近况提醒
+
+你好，
+Let me 已经连续 7 天没有在「还活着」中留下任何记录。
+这封邮件并不意味着什么，但如果方便的话，请轻轻确认 ta 是否安好。
+
+—— 来自「还活着」</textarea>
+                    <div style="display:flex;gap:8px;margin-top:12px;">
+                      <button class="btn btn-ghost" style="flex:1;">发送测试邮件到自己</button>
+                      <button class="btn btn-coral" style="flex:1;">保存设置</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== WEB TIMELINE ===== -->
+            <section data-screen="web-timeline" data-addr="stillalive.app/app/timeline">
+              <div style="display:grid;grid-template-columns:200px 1fr 260px;gap:32px;padding:32px 40px;">
+                <aside style="position:sticky;top:0;align-self:flex-start;">
+                  <div class="section-title" style="margin-top:0;">索引</div>
+                  <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;">
+                    <a style="color:var(--warm-coral);font-weight:700;cursor:pointer;">2026 · 5 月</a>
+                    <a style="color:var(--ink-soft);cursor:pointer;">2026 · 4 月</a>
+                    <a style="color:var(--ink-soft);cursor:pointer;">2026 · 3 月</a>
+                    <a style="color:var(--ink-soft);cursor:pointer;">2026 · 2 月</a>
+                    <a style="color:var(--ink-soft);cursor:pointer;">2026 · 1 月</a>
+                  </div>
+                  <div class="section-title" style="margin-top:24px;">筛选</div>
+                  <div data-pick="web-tl-filter" style="display:flex;flex-direction:column;gap:4px;">
+                    <button class="nav-item is-active" data-pick-group="web-tl-filter" style="text-align:left;">全部 · 87</button>
+                    <button class="nav-item" data-pick-group="web-tl-filter" style="text-align:left;">仅帖 · 64</button>
+                    <button class="nav-item" data-pick-group="web-tl-filter" style="text-align:left;">仅打卡 · 18</button>
+                    <button class="nav-item" data-pick-group="web-tl-filter" style="text-align:left;">仅提醒 · 5</button>
+                  </div>
+                </aside>
+
+                <main>
+                  <div class="section-title" style="margin:0 0 4px;">PRIVATE · TIMELINE</div>
+                  <h1 style="font-family:var(--sans);font-weight:800;font-size:36px;letter-spacing:-0.02em;margin-bottom:24px;">2026 · 5 月</h1>
+
+                  <div class="timeline">
+                    <div class="timeline-divider"><span class="day-label">5 月 8 日 · 周五</span><span>DAY 126</span></div>
+                    <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                      <div class="timeline-card">
+                        <p style="font-size:15px;line-height:1.85;">下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。雨水砸在屋檐上的声音让我突然意识到，每一次听到都不完全一样。</p>
+                        <div class="meta"><span>14:32</span><span>·</span><span class="mention-chip">妈妈</span></div>
+                      </div>
+                    </div>
+
+                    <div class="timeline-divider"><span class="day-label">5 月 7 日 · 周四</span><span>DAY 125</span></div>
+                    <div class="timeline-row" style="--theme-color: var(--vital-green);">
+                      <div class="timeline-card"><span class="timeline-checkin-badge">我还在</span></div>
+                    </div>
+
+                    <div class="timeline-divider"><span class="day-label">5 月 5 日 · 周二</span><span>DAY 123</span></div>
+                    <div class="timeline-row" style="--theme-color: var(--memory-gold);">
+                      <div class="timeline-card">
+                        <span class="reminder-badge">那天是 · 认识楠楠两周年</span>
+                        <p style="margin-top:8px;font-style:italic;color:var(--ink-faint);font-size:13px;">过期未补记 · 点击补写一条</p>
+                      </div>
+                    </div>
+
+                    <div class="timeline-divider"><span class="day-label">5 月 3 日 · 周日</span><span>DAY 121</span></div>
+                    <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                      <div class="timeline-card">
+                        <p style="font-size:15px;line-height:1.85;">和 <span class="mention-chip">爸爸</span><span class="mention-chip">妈妈</span>一起修了院子里的藤架。妈妈说今年要让紫藤再开一次。</p>
+                        <div class="meta"><span>19:02</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </main>
+
+                <aside style="position:sticky;top:0;align-self:flex-start;display:flex;flex-direction:column;gap:16px;">
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 8px;">本月统计</div>
+                    <p style="font-size:13px;color:var(--ink-soft);line-height:1.7;">9 条帖 · 2 条打卡 · 1 条过期提醒</p>
+                  </div>
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 8px;">本月 @ 过的人</div>
+                    <div style="display:flex;gap:6px;">
+                      <div class="row-lead" style="width:36px;height:36px;font-size:14px;background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                      <div class="row-lead" style="width:36px;height:36px;font-size:14px;background:var(--warm-coral-soft);color:#B8442F;">爸</div>
+                      <div class="row-lead" style="width:36px;height:36px;font-size:14px;background:var(--vital-green-soft);color:#2F6F30;">林</div>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </section>
+
+            <!-- ===== WEB BIO EDITOR ===== -->
+            <section data-screen="web-bio-editor" data-addr="stillalive.app/app/people/mom">
+              <div style="display:grid;grid-template-columns:280px 1fr 260px;gap:32px;padding:32px 40px;">
+                <aside style="display:flex;flex-direction:column;gap:16px;">
+                  <div class="bio-card" style="--theme-color: var(--warm-coral);">
+                    <div class="bio-card__avatar" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                    <div class="bio-card__info">
+                      <div class="bio-card__name">妈妈</div>
+                      <p class="bio-card__impression">永远在厨房忙碌的人。</p>
+                      <div class="bio-card__meta">
+                        <span>05·09</span><span>·</span><span>家人</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="section-title" style="margin-top:0;">人物列表</div>
+                  <div data-pick="bio-people" style="display:flex;flex-direction:column;gap:2px;">
+                    <button class="nav-item is-active" data-pick-group="bio-people" style="text-align:left;">妈妈</button>
+                    <button class="nav-item" data-pick-group="bio-people" style="text-align:left;">爸爸</button>
+                    <button class="nav-item" data-pick-group="bio-people" style="text-align:left;">小林</button>
+                    <button class="nav-item" data-pick-group="bio-people" style="text-align:left;">楠楠</button>
+                  </div>
+                </aside>
+
+                <main>
+                  <div class="section-title" style="margin:0 0 4px;">小传 · 草稿</div>
+                  <input class="field" value="妈妈" style="font-family:var(--sans);font-weight:800;font-size:32px;border:none;background:transparent;padding:0 0 8px;letter-spacing:-0.02em;box-shadow:none;">
+                  <textarea class="field" placeholder="写下你想记住的关于 ta 的一切。这是只给自己看的。" style="font-family:var(--serif);font-style:italic;font-size:17px;line-height:1.95;min-height:480px;border:none;background:transparent;padding:0;box-shadow:none;resize:none;">她是一个总在往别人碗里夹菜的人。小时候我以为所有妈妈都这样，后来才知道这是她独有的表达。
+
+她不会说出口的话，都藏在火候里。
+
+2024 春节一起包了 200 个饺子。她笑了很多次。那也许是她那一年最放松的一周。</textarea>
+                </main>
+
+                <aside style="display:flex;flex-direction:column;gap:16px;">
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 10px;">基本</div>
+                    <div class="list-row" style="padding:6px 0;background:none;"><div class="row-body"><h4 style="font-size:13px;">生日</h4></div><span style="font-size:12px;">05·09</span></div>
+                    <div class="list-row" style="padding:6px 0;background:none;border-top:none;"><div class="row-body"><h4 style="font-size:13px;">分组</h4></div><span class="specimen-tag is-coral">家人</span></div>
+                    <div class="list-row" style="padding:6px 0;background:none;border-top:none;"><div class="row-body"><h4 style="font-size:13px;">主题色</h4></div><span style="width:18px;height:18px;background:var(--warm-coral);border-radius:50%;"></span></div>
+                  </div>
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 10px;">@ 别名</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                      <span class="specimen-tag">妈</span>
+                      <span class="specimen-tag">妈妈</span>
+                      <span class="specimen-tag">老妈</span>
+                      <span class="specimen-tag" style="cursor:pointer;">+</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-coral">保存</button>
+                </aside>
+              </div>
+            </section>
+
+            <!-- ===== WEB INTERSECTION ===== -->
+            <section data-screen="web-intersection" data-addr="stillalive.app/app/intersection">
+              <div style="padding:32px 40px;">
+                <div class="section-title" style="margin:0 0 4px;">PRIVATE · INTERSECTION</div>
+                <h1 style="font-family:var(--sans);font-weight:800;font-size:36px;letter-spacing:-0.02em;">交集</h1>
+                <p style="font-size:14px;color:var(--ink-soft);margin-top:8px;">每个人一条时间轴。同一条帖里 @ 多人会被竖线连起来，孤立的人保持孤立。</p>
+
+                <div style="display:flex;align-items:center;gap:16px;margin:20px 0 8px;">
+                  <div data-pick="intx-density-web" style="display:flex;gap:6px;">
+                    <button class="screen-chip" data-pick-group="intx-density-web">年</button>
+                    <button class="screen-chip is-active" data-pick-group="intx-density-web">季</button>
+                    <button class="screen-chip" data-pick-group="intx-density-web">月</button>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);">
+                    隐藏孤立人物 <button class="toggle"></button>
+                  </div>
+                </div>
+
+                <div data-intersection="__SA_INTX_DATA__" style="margin-top:16px;"></div>
+              </div>
+            </section>
+
+            <!-- ===== WEB PERSON GRAPH ===== -->
+            <section data-screen="web-person-graph" data-addr="stillalive.app/app/people">
+              <div style="padding:32px 40px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <div>
+                    <div class="section-title" style="margin:0 0 4px;">PEOPLE · GRAPH</div>
+                    <h1 style="font-family:var(--sans);font-weight:800;font-size:32px;letter-spacing:-0.02em;">关系图</h1>
+                  </div>
+                  <div class="segmented">
+                    <button class="segmented-item is-active">关系图</button>
+                    <button class="segmented-item" data-go="web-person-detail-v2">列表</button>
+                  </div>
+                </div>
+                <div class="graph-canvas" data-graph="__SA_GRAPH_DATA__" style="height:580px;border-radius:var(--radius-md);"></div>
+              </div>
+            </section>
+
+            <!-- ===== WEB PERSON DETAIL V2 ===== -->
+            <section data-screen="web-person-detail-v2" data-addr="stillalive.app/app/people/mom">
+              <div style="display:grid;grid-template-columns:280px 1fr 260px;gap:32px;padding:32px 40px;">
+                <aside style="display:flex;flex-direction:column;gap:16px;">
+                  <div class="bio-card" style="--theme-color:var(--warm-coral);flex-direction:column;gap:12px;">
+                    <div class="bio-card__avatar" style="background:var(--warm-coral-soft);color:#B8442F;width:64px;height:64px;font-size:24px;">妈</div>
+                    <div class="bio-card__info">
+                      <div class="bio-card__name">妈妈</div>
+                      <p class="bio-card__impression">永远在厨房忙碌的人。</p>
+                      <div class="bio-card__meta"><span>05·09</span><span>·</span><span>家人</span></div>
+                    </div>
+                  </div>
+                  <div class="kv-grid" style="grid-template-columns:1fr;">
+                    <div class="kv-row"><div class="kv-key">性别</div><div class="kv-value">女</div></div>
+                    <div class="kv-row"><div class="kv-key">MBTI</div><div class="kv-value">ENFJ</div></div>
+                    <div class="kv-row"><div class="kv-key">星座</div><div class="kv-value">金牛座</div></div>
+                    <div class="kv-row"><div class="kv-key">外号</div><div class="kv-value">慢吞吞</div></div>
+                    <div class="kv-row"><div class="kv-key">喜欢</div><div class="kv-value">拿铁</div></div>
+                    <div class="kv-row is-add">+ 添加自定义</div>
+                  </div>
+                </aside>
+
+                <main style="overflow-y:auto;">
+                  <div class="section-title" style="margin:0 0 4px;">人生经历</div>
+                  <h2 style="font-family:var(--sans);font-weight:800;font-size:28px;letter-spacing:-0.02em;margin-bottom:20px;">妈妈</h2>
+                  <div class="event-row">
+                    <div class="event-title">春节包饺子</div>
+                    <div class="event-desc">一起包了 200 个饺子。她笑了很多次。</div>
+                    <div class="event-meta"><span class="event-time-hint">去年春节</span><div class="event-participants"><div class="row-lead" style="background:var(--vital-green);color:#fff;width:22px;height:22px;font-size:10px;">我</div><div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;width:22px;height:22px;font-size:10px;">妈</div></div></div>
+                  </div>
+                  <div class="event-row is-not-self">
+                    <div class="event-title">妈妈去西藏</div>
+                    <div class="event-desc">她说那是她第一次看到那么蓝的天。</div>
+                    <div class="event-meta"><span class="event-time-hint">2020-06</span><div class="event-participants"><div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;width:22px;height:22px;font-size:10px;">妈</div></div></div>
+                  </div>
+                  <div class="event-row">
+                    <div class="event-title">高三毕业</div>
+                    <div class="event-desc">她在校门口等了三个小时。</div>
+                    <div class="event-meta"><span class="event-time-hint">高三那年</span><div class="event-participants"><div class="row-lead" style="background:var(--vital-green);color:#fff;width:22px;height:22px;font-size:10px;">我</div><div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;width:22px;height:22px;font-size:10px;">妈</div></div></div>
+                  </div>
+                  <div class="event-row">
+                    <div class="event-title">春节回家</div>
+                    <div class="event-desc">那时候还小，只记得她做的红烧肉。</div>
+                    <div class="event-meta"><span class="event-time-hint">童年</span><div class="event-participants"><div class="row-lead" style="background:var(--vital-green);color:#fff;width:22px;height:22px;font-size:10px;">我</div><div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;width:22px;height:22px;font-size:10px;">妈</div><div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;width:22px;height:22px;font-size:10px;">爸</div></div></div>
+                  </div>
+                  <button class="btn btn-ghost" style="width:100%;margin-top:14px;">+ 写一条经历</button>
+                </main>
+
+                <aside style="display:flex;flex-direction:column;gap:16px;">
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 8px;">关系</div>
+                    <p style="font-size:13px;color:var(--ink);">我 → 妈妈：<strong>妈妈</strong></p>
+                    <p style="font-size:13px;color:var(--ink);margin-top:4px;">爸爸 → 妈妈：<strong>伴侣</strong></p>
+                  </div>
+                  <div class="panel" style="padding:18px;">
+                    <div class="section-title" style="margin:0 0 8px;">来自打卡的记录</div>
+                    <p style="font-size:12px;color:var(--ink-soft);line-height:1.7;">5 月 8 日 · 下了一场大雨，看见了彩虹</p>
+                    <p style="font-size:12px;color:var(--ink-soft);line-height:1.7;margin-top:6px;">5 月 3 日 · 和爸爸一起修了藤架</p>
+                  </div>
+                </aside>
+              </div>
+            </section>
+
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.__SA_GRAPH_DATA__ = {
+      self: { name: '我', avatar: '我' },
+      persons: [
+        { id: 'mom', name: '妈妈', color: 'coral', avatar: '妈' },
+        { id: 'dad', name: '爸爸', color: 'coral', avatar: '爸' },
+        { id: 'lin', name: '小林', color: 'green', avatar: '林' },
+        { id: 'nan', name: '楠楠', color: 'gold', avatar: '楠' },
+        { id: 'boss', name: '老板', color: 'blue', avatar: '老' }
+      ],
+      relations: [
+        { from: 'self', to: 'mom', type: '妈妈' },
+        { from: 'self', to: 'dad', type: '爸爸' },
+        { from: 'mom', to: 'dad', type: '伴侣' },
+        { from: 'self', to: 'lin', type: '朋友' }
+      ]
+    };
+    window.__SA_INTX_DATA__ = {
+      persons: [
+        { id: 'mom',  name: '妈妈',  color: 'coral', avatar: '妈' },
+        { id: 'dad',  name: '爸爸',  color: 'coral', avatar: '爸' },
+        { id: 'lin',  name: '小林',  color: 'green', avatar: '林' },
+        { id: 'nan',  name: '楠楠',  color: 'gold',  avatar: '楠' },
+        { id: 'boss', name: '老板',  color: 'blue',  avatar: '老' },
+        { id: 'ghost', name: '旧友 A', color: 'ink',  avatar: 'A' }
+      ],
+      posts: [
+        { id: 'p1', dayKey: '2026-01-15', mentions: ['mom'],         excerpt: '妈妈打电话' },
+        { id: 'p2', dayKey: '2026-02-14', mentions: ['mom', 'dad'],  excerpt: '春节包饺子' },
+        { id: 'p3', dayKey: '2026-03-01', mentions: ['lin'],         excerpt: '和小林看樱花' },
+        { id: 'p4', dayKey: '2026-03-22', mentions: ['nan'],         excerpt: '楠楠生日' },
+        { id: 'p5', dayKey: '2026-04-02', mentions: ['boss'],        excerpt: '老板谈话' },
+        { id: 'p6', dayKey: '2026-04-20', mentions: ['mom'],         excerpt: '回家吃牛肉汤' },
+        { id: 'p7', dayKey: '2026-05-03', mentions: ['dad', 'mom'],  excerpt: '修藤架' },
+        { id: 'p8', dayKey: '2026-05-08', mentions: ['mom', 'lin'],  excerpt: '下雨看彩虹' }
+      ]
+    };
+  </script>
+  <script src="shared/web-prototype.js" defer></script>
+</body>
+</html>

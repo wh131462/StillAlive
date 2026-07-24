@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>App 设计稿 · 还活着 Still Alive</title>
+  <link rel="stylesheet" href="shared/style.css">
+  <style>
+    body { overflow-x: hidden; }
+    .layout {
+      max-width: 1400px; margin: 0 auto;
+      padding: 48px 32px 96px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    @media (min-width: 960px) {
+      .layout { grid-template-columns: 360px 1fr; gap: 48px; }
+    }
+    .running {
+      grid-column: 1 / -1;
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 16px; border-bottom: 1px solid var(--line);
+      font-family: var(--mono); font-size: 11px;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--ink-faint);
+    }
+    .running a { color: inherit; transition: color 0.2s; }
+    .running a:hover { color: var(--vital-green); }
+    .device-col { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+    .device-phone {
+      width: 320px; height: 660px;
+      background: var(--ink); border-radius: 44px;
+      padding: 12px; position: relative;
+      box-shadow: 0 24px 48px -12px rgba(31,35,40,0.18), 0 8px 16px -4px rgba(31,35,40,0.10);
+    }
+    .device-phone::before {
+      content: ''; position: absolute;
+      top: 22px; left: 50%; transform: translateX(-50%);
+      width: 100px; height: 24px;
+      background: var(--ink); border-radius: 12px; z-index: 2;
+    }
+    .device-screen {
+      width: 100%; height: 100%;
+      border-radius: 32px; background: var(--bg);
+      overflow: hidden; position: relative;
+    }
+    .screen-stack { width: 100%; height: 100%; position: relative; }
+    .screen-stack [data-screen] {
+      position: absolute; inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    .status-bar {
+      flex-shrink: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 20px 6px; font-size: 11px; font-weight: 600;
+      color: var(--ink); background: var(--bg);
+    }
+    .side-col { display: flex; flex-direction: column; gap: 24px; }
+    .side-col h2 { font-family: var(--sans); font-weight: 700; font-size: 22px; }
+    .side-col p { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+    /* page inner: scroll container for content */
+    .pg, .pg-notab {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+    .pg { padding: 0 20px 24px; }
+    .pg-notab { padding: 0 20px 24px; }
+    .pg::-webkit-scrollbar, .pg-notab::-webkit-scrollbar { display: none; }
+    /* PLACEHOLDER_STYLES */
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header class="running">
+      <a href="index.html">&larr; 总览</a>
+      <span>App &middot; 可交互原型 &middot; v5</span>
+    </header>
+
+    <div class="device-col">
+      <div class="device-phone">
+        <div class="device-screen">
+          <div class="screen-stack" data-stack="app" data-initial-screen="home-flow">
+            <!-- ===== LOGIN ===== -->
+            <section data-screen="login">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab" style="padding-top:48px; display:flex; flex-direction:column; min-height:100%;">
+                <div class="section-title">STILL ALIVE</div>
+                <h1 style="font-family:var(--sans);font-size:28px;font-weight:700;margin-top:12px;line-height:1.2;">你好，<br><span style="color:var(--vital-green);">今天还好吗？</span></h1>
+                <p style="font-size:13px;color:var(--ink-soft);margin-top:10px;line-height:1.6;">登录，继续记录你正在活着的每一天。</p>
+                <div style="margin-top:28px;display:flex;flex-direction:column;gap:12px;">
+                  <div style="display:flex;gap:20px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:4px;">
+                    <span style="font-size:14px;font-weight:600;color:var(--ink);border-bottom:2px solid var(--vital-green);padding-bottom:6px;">手机号</span>
+                    <span style="font-size:14px;color:var(--ink-faint);padding-bottom:6px;">邮箱</span>
+                  </div>
+                  <input class="field" placeholder="手机号">
+                  <div style="position:relative;">
+                    <input class="field" placeholder="验证码" style="padding-right:72px;">
+                    <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--vital-green);font-weight:600;cursor:pointer;">发送 &rarr;</span>
+                  </div>
+                  <button class="btn btn-primary" style="width:100%;padding:14px;margin-top:8px;" data-go="home-flow">登录</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;margin:24px 0 16px;">
+                  <span style="flex:1;height:1px;background:var(--line);"></span>
+                  <span style="font-size:11px;color:var(--ink-faint);">其他方式</span>
+                  <span style="flex:1;height:1px;background:var(--line);"></span>
+                </div>
+                <div style="display:flex;gap:12px;justify-content:center;">
+                  <div style="width:44px;height:44px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);">W</div>
+                  <div style="width:44px;height:44px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);">A</div>
+                </div>
+                <div style="margin-top:auto;padding-top:32px;text-align:center;font-size:12px;color:var(--ink-faint);">
+                  还没有账号？<a style="color:var(--vital-green);cursor:pointer;" data-go="register">注册</a>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== REGISTER ===== -->
+            <section data-screen="register">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab" style="padding-top:48px;display:flex;flex-direction:column;min-height:100%;">
+                <div class="section-title">STILL ALIVE</div>
+                <h1 style="font-family:var(--sans);font-size:28px;font-weight:700;margin-top:12px;line-height:1.2;">从今天起，<br><span style="color:var(--vital-green);">开始记录</span></h1>
+                <p style="font-size:13px;color:var(--ink-soft);margin-top:10px;line-height:1.6;">从今天开始，留下每一天的痕迹。<br>本地保存为先，安心地写就好。</p>
+                <div style="margin-top:28px;display:flex;flex-direction:column;gap:12px;">
+                  <input class="field" placeholder="手机号 / 邮箱">
+                  <input class="field" placeholder="昵称（选填）">
+                  <input class="field" type="password" placeholder="密码 6 位以上">
+                  <div style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--ink-faint);">
+                    <span style="width:24px;height:3px;background:var(--vital-green);border-radius:2px;"></span>
+                    <span style="width:24px;height:3px;background:var(--vital-green);border-radius:2px;"></span>
+                    <span style="width:24px;height:3px;background:var(--line);border-radius:2px;"></span>
+                    密码强度: 中
+                  </div>
+                  <button class="btn btn-primary" style="width:100%;padding:14px;margin-top:8px;" data-go="home-flow">创建账号</button>
+                </div>
+                <div style="margin-top:auto;padding-top:32px;text-align:center;font-size:12px;color:var(--ink-faint);">
+                  已有账号？<a style="color:var(--vital-green);cursor:pointer;" data-go="login">登录</a>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== HOME FLOW ===== -->
+            <section data-screen="home-flow">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 18px;">
+                  <div>
+                    <div class="section-title" style="margin:0;">5 月 9 日 · 周六</div>
+                  </div>
+                  <div class="row-lead" style="width:32px;height:32px;font-size:12px;" data-go="profile">L</div>
+                </div>
+
+                <div style="padding:8px 0 24px;">
+                  <div class="section-title" style="margin:0 0 4px;">你已经活了</div>
+                  <div class="greeting-num size-lg"><em>127</em> 天</div>
+                </div>
+
+                <div class="checkin-card is-pending" id="main-checkin-card">
+                  <!-- pending state -->
+                  <div class="ck-title">今日打卡</div>
+                  <p class="ck-sub">先打个卡，再聊点什么</p>
+                  <button class="ck-button" data-checkin-action="checkin">✓ 打卡</button>
+                </div>
+                <div class="checkin-card is-done" id="main-checkin-done" style="display:none;">
+                  <div class="ck-icon">✓</div>
+                  <div class="ck-body">
+                    <div class="ck-title">今天的存在已记下</div>
+                    <p class="ck-sub">想写点什么吗？</p>
+                  </div>
+                  <button class="ck-button" data-sheet-open="post-composer-sheet">写一条</button>
+                </div>
+                <div class="checkin-card is-collapsed" id="main-checkin-collapsed" style="display:none;">
+                  <div class="ck-icon">✓</div>
+                  <div class="ck-body">今天已记下 1 条</div>
+                  <button class="ck-button" data-sheet-open="post-composer-sheet">再写一条</button>
+                </div>
+
+                <div class="section-title">历史</div>
+                <div style="display:flex;flex-direction:column;gap:0;">
+
+                  <div class="timeline-divider" style="position:static;background:none;padding:14px 0 6px;border:none;">
+                    <span class="day-label">昨天 · 5 月 8 日</span>
+                    <span>DAY 126</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                    <div class="timeline-card">
+                      <p>下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。</p>
+                      <div class="meta">
+                        <span>14:32</span><span>·</span>
+                        <span class="mention-chip" style="font-size:11px;">妈妈</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider" style="position:static;background:none;padding:14px 0 6px;border:none;">
+                    <span class="day-label">前天 · 5 月 7 日</span>
+                    <span>DAY 125</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--vital-green);">
+                    <div class="timeline-card">
+                      <span class="timeline-checkin-badge">我还在</span>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider" style="position:static;background:none;padding:14px 0 6px;border:none;">
+                    <span class="day-label">5 月 5 日 · 周二</span>
+                    <span>DAY 123</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--memory-gold);">
+                    <div class="timeline-card">
+                      <span class="reminder-badge">那天是 · 认识楠楠两周年</span>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider" style="position:static;background:none;padding:14px 0 6px;border:none;">
+                    <span class="day-label">5 月 3 日 · 周日</span>
+                    <span>DAY 121</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                    <div class="timeline-card">
+                      <p>和<span class="mention-chip">爸爸</span>一起修了院子里的藤架。</p>
+                      <div class="meta"><span>19:02</span></div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <nav class="tab-bar">
+                <button class="tab-item is-active" data-go="home-flow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg><span>主页</span></button>
+                <button class="tab-item" data-go="checkin-cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>日历</span></button>
+                <button class="tab-item" data-go="person-graph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>人物</span></button>
+                <button class="tab-item" data-go="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6 19c1-3 3-4 6-4s5 1 6 4"/></svg><span>我的</span></button>
+              </nav>
+            </section>
+
+            <!-- ===== CHECKIN CALENDAR ===== -->
+            <section data-screen="checkin-cal">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg">
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:8px 0 16px;">
+                  <div>
+                    <div class="section-title" style="margin:0 0 4px;">每一天</div>
+                    <h2 style="font-size:24px;font-weight:700;">打卡</h2>
+                  </div>
+                  <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;">+ 补签</button>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+                  <div style="background:var(--surface);border-radius:var(--radius-md);padding:14px 10px;box-shadow:var(--shadow-soft);">
+                    <div style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);">127</div>
+                    <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">总天数</div>
+                  </div>
+                  <div style="background:var(--surface);border-radius:var(--radius-md);padding:14px 10px;box-shadow:var(--shadow-soft);">
+                    <div style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--vital-green);">12</div>
+                    <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">连续</div>
+                  </div>
+                  <div style="background:var(--surface);border-radius:var(--radius-md);padding:14px 10px;box-shadow:var(--shadow-soft);">
+                    <div style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);">86</div>
+                    <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">记录</div>
+                  </div>
+                </div>
+
+                <div class="calendar">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h3 style="font-size:14px;font-weight:700;">2026 年 5 月</h3>
+                    <div style="display:flex;gap:8px;color:var(--ink-faint);">&lsaquo; &rsaquo;</div>
+                  </div>
+                  <div class="calendar-grid">
+                    <div class="dow">日</div><div class="dow">一</div><div class="dow">二</div><div class="dow">三</div><div class="dow">四</div><div class="dow">五</div><div class="dow">六</div>
+                    <div class="calendar-cell is-empty">26</div><div class="calendar-cell is-empty">27</div><div class="calendar-cell is-empty">28</div><div class="calendar-cell is-empty">29</div><div class="calendar-cell is-empty">30</div><div class="calendar-cell is-checked">1</div><div class="calendar-cell is-checked">2</div>
+                    <div class="calendar-cell is-checked">3</div><div class="calendar-cell is-checked">4</div><div class="calendar-cell is-retro">5</div><div class="calendar-cell is-checked">6</div><div class="calendar-cell is-checked">7</div><div class="calendar-cell is-checked">8</div><div class="calendar-cell is-today">9</div>
+                    <div class="calendar-cell is-future">10</div><div class="calendar-cell is-future">11</div><div class="calendar-cell is-future">12</div><div class="calendar-cell is-future">13</div><div class="calendar-cell is-future">14</div><div class="calendar-cell is-future">15</div><div class="calendar-cell is-future">16</div>
+                    <div class="calendar-cell is-future">17</div><div class="calendar-cell is-future">18</div><div class="calendar-cell is-future">19</div><div class="calendar-cell is-future">20</div><div class="calendar-cell is-future">21</div><div class="calendar-cell is-future">22</div><div class="calendar-cell is-future">23</div>
+                  </div>
+                </div>
+
+                <div class="section-title">近期记录</div>
+                <div class="list-rows">
+                  <div class="list-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:14px 16px;">
+                    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-faint);">
+                      <span>5 月 8 日</span><span style="color:var(--vital-green);font-weight:600;">✓ 已打卡</span>
+                    </div>
+                    <p style="font-size:13px;line-height:1.6;color:var(--ink);">下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。</p>
+                  </div>
+                  <div class="list-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:14px 16px;">
+                    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-faint);">
+                      <span>5 月 7 日</span><span style="color:var(--vital-green);font-weight:600;">✓ 已打卡</span>
+                    </div>
+                    <p style="font-size:12px;font-style:italic;color:var(--ink-faint);">— 纯粹打卡，没有记录 —</p>
+                  </div>
+                </div>
+              </div>
+
+              <nav class="tab-bar">
+                <button class="tab-item" data-go="home-flow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg><span>主页</span></button>
+                <button class="tab-item is-active" data-go="checkin-cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>打卡</span></button>
+                <button class="tab-item" data-go="people-list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>人物</span></button>
+                <button class="tab-item" data-go="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6 19c1-3 3-4 6-4s5 1 6 4"/></svg><span>我的</span></button>
+              </nav>
+            </section>
+
+            <!-- ===== CHECKIN ENTRY ===== -->
+            <section data-screen="checkin-entry">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 16px;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="home-flow">&larr; 返回</button>
+                  <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;" data-go="home-flow">什么都不写</button>
+                </div>
+
+                <h2 style="font-size:22px;font-weight:700;margin-top:8px;">今天有意义的事</h2>
+                <p class="section-title" style="margin:4px 0 0;text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:12px;">2026·05·09 · 给未来的自己一份小礼物</p>
+
+                <div class="section-title">今天的一张</div>
+                <div style="background:var(--surface-2);border:2px dashed var(--line);border-radius:var(--radius-md);aspect-ratio:16/10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--ink-faint);">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3"/><path d="M9 4l1.5 2h3L15 4"/></svg>
+                  <p style="font-size:12px;">上传今天的一帧</p>
+                </div>
+
+                <div class="section-title">文字记录</div>
+                <textarea class="field" style="min-height:110px;resize:none;line-height:1.7;">下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。</textarea>
+
+                <div class="section-title">心情（可选）</div>
+                <div class="mood-grid">
+                  <button class="mood-chip is-active" data-mood="happy">😊 开心</button>
+                  <button class="mood-chip" data-mood="calm">😌 平静</button>
+                  <button class="mood-chip" data-mood="down">😔 低落</button>
+                  <button class="mood-chip" data-mood="tired">😴 疲惫</button>
+                  <button class="mood-chip" data-mood="moved">🥲 感动</button>
+                  <button class="mood-chip" data-mood="annoyed">😡 烦躁</button>
+                </div>
+
+                <button class="btn btn-primary" style="width:100%;margin-top:24px;padding:14px;" data-go="home-flow">保存</button>
+              </div>
+            </section>
+
+            <!-- ===== PEOPLE LIST ===== -->
+            <section data-screen="people-list">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg">
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:8px 0 16px;">
+                  <div>
+                    <div class="section-title" style="margin:0 0 4px;">你记录过的人</div>
+                    <h2 style="font-size:24px;font-weight:700;">人物</h2>
+                  </div>
+                  <button class="btn btn-primary" style="padding:6px 14px;font-size:12px;">+ 添加</button>
+                </div>
+
+                <div data-pick="people-filter" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:16px;padding-bottom:4px;">
+                  <button class="screen-chip is-active" data-pick-group="people-filter">全部</button>
+                  <button class="screen-chip" data-pick-group="people-filter">家人</button>
+                  <button class="screen-chip" data-pick-group="people-filter">朋友</button>
+                  <button class="screen-chip" data-pick-group="people-filter">同事</button>
+                </div>
+
+                <div style="background:linear-gradient(135deg,var(--warm-coral-soft),var(--memory-gold-soft));border-radius:var(--radius-md);padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:16px;" data-go="person-detail">
+                  <div class="row-lead" style="width:42px;height:42px;font-size:16px;background:rgba(255,255,255,0.7);">妈</div>
+                  <div style="flex:1;">
+                    <h4 style="font-size:15px;font-weight:700;">妈妈</h4>
+                    <p style="font-size:12px;color:var(--ink-soft);">56 岁 · ENFJ · 家人</p>
+                  </div>
+                  <span style="background:var(--warm-coral);color:#fff;padding:4px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:600;">今天 🎂</span>
+                </div>
+
+                <div class="section-title">全部人物（8）</div>
+                <div class="list-rows">
+                  <div class="list-row" data-go="person-detail">
+                    <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">爸</div>
+                    <div class="row-body"><h4>爸爸</h4><p>59 岁 · ISTJ · 家人</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="person-detail">
+                    <div class="row-lead" style="background:var(--vital-green-soft);color:#2F6F30;">林</div>
+                    <div class="row-body"><h4>小林</h4><p>27 岁 · INFP · 朋友</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="person-detail">
+                    <div class="row-lead" style="background:var(--memory-gold-soft);color:#8A6416;">楠</div>
+                    <div class="row-body"><h4>楠楠</h4><p>26 岁 · ENFP · 朋友</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="person-detail">
+                    <div class="row-lead" style="background:var(--calm-blue-soft);color:#3B6A97;">老</div>
+                    <div class="row-body"><h4>老板</h4><p>42 岁 · ESTJ · 同事</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                </div>
+              </div>
+
+              <nav class="tab-bar">
+                <button class="tab-item" data-go="home-flow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg><span>主页</span></button>
+                <button class="tab-item" data-go="checkin-cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>打卡</span></button>
+                <button class="tab-item is-active" data-go="people-list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>人物</span></button>
+                <button class="tab-item" data-go="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6 19c1-3 3-4 6-4s5 1 6 4"/></svg><span>我的</span></button>
+              </nav>
+            </section>
+
+            <!-- ===== PERSON DETAIL ===== -->
+            <section data-screen="person-detail">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 8px;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="people-list">&larr; 返回</button>
+                  <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;">编辑</button>
+                </div>
+
+                <div style="background:linear-gradient(135deg,var(--warm-coral-soft),var(--memory-gold-soft));margin:0 -20px 0;padding:24px 20px;border-radius:0 0 var(--radius-lg) var(--radius-lg);text-align:center;">
+                  <div class="row-lead" style="width:72px;height:72px;font-size:28px;background:rgba(255,255,255,0.85);margin:0 auto 12px;">妈</div>
+                  <h2 style="font-size:22px;font-weight:700;">妈妈</h2>
+                  <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">家人 · ENFJ · 56 岁</div>
+                </div>
+
+                <div class="section-title" style="margin-top:24px;">基本信息</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--line);">
+                  <div style="background:var(--surface);padding:12px 14px;"><div style="font-size:10px;color:var(--ink-faint);letter-spacing:0.1em;">生日</div><div style="font-size:13px;font-weight:600;margin-top:2px;color:var(--warm-coral);">今天 🎂</div></div>
+                  <div style="background:var(--surface);padding:12px 14px;"><div style="font-size:10px;color:var(--ink-faint);letter-spacing:0.1em;">性别</div><div style="font-size:13px;font-weight:600;margin-top:2px;">女</div></div>
+                  <div style="background:var(--surface);padding:12px 14px;"><div style="font-size:10px;color:var(--ink-faint);letter-spacing:0.1em;">主题色</div><div style="font-size:13px;font-weight:600;margin-top:2px;">🟠 暖橙</div></div>
+                  <div style="background:var(--surface);padding:12px 14px;"><div style="font-size:10px;color:var(--ink-faint);letter-spacing:0.1em;">分组</div><div style="font-size:13px;font-weight:600;margin-top:2px;">家人</div></div>
+                </div>
+
+                <div class="section-title">个人印象</div>
+                <div class="panel" style="padding:16px;">
+                  <p style="font-family:var(--serif);font-style:italic;font-size:14px;line-height:1.75;color:var(--ink);">永远在厨房忙碌的人。她不太会直接说爱，但每次回家，桌上永远多一道你随口提过的菜。</p>
+                </div>
+
+                <div class="section-title">关系时间轴</div>
+                <div style="position:relative;padding-left:18px;">
+                  <span style="position:absolute;left:5px;top:8px;bottom:8px;width:2px;background:var(--line);"></span>
+                  <div style="position:relative;padding-bottom:16px;">
+                    <span style="position:absolute;left:-15px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--warm-coral);border:2px solid var(--surface);box-shadow:0 0 0 2px var(--warm-coral-soft);"></span>
+                    <div style="font-size:11px;color:var(--ink-faint);font-weight:600;">2024 · 春节</div>
+                    <p style="font-size:13px;line-height:1.6;margin-top:4px;">一起包了 200 个饺子。她笑了很多次。</p>
+                  </div>
+                  <div style="position:relative;padding-bottom:16px;">
+                    <span style="position:absolute;left:-15px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--vital-green);border:2px solid var(--surface);"></span>
+                    <div style="font-size:11px;color:var(--ink-faint);font-weight:600;">2023 · 9 月</div>
+                    <p style="font-size:13px;line-height:1.6;margin-top:4px;">带她坐了第一次飞机，落地的时候她一直拍窗户。</p>
+                  </div>
+                  <div style="position:relative;">
+                    <span style="position:absolute;left:-15px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--ink-faint);border:2px solid var(--surface);"></span>
+                    <div style="font-size:11px;color:var(--ink-faint);font-weight:600;">2022 · 12 月</div>
+                    <p style="font-size:13px;line-height:1.6;margin-top:4px;">她生病住院的那一周。</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== MILESTONE 7 ===== -->
+            <section data-screen="milestone">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab" style="background:linear-gradient(180deg,var(--memory-gold-soft) 0%,var(--bg) 320px);min-height:100%;">
+                <div style="padding:8px 0;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="home-flow">&larr; 返回</button>
+                </div>
+                <div style="margin-top:16px;">
+                  <span style="display:inline-block;padding:6px 14px;background:var(--memory-gold);color:#fff;border-radius:var(--radius-pill);font-size:11px;font-weight:700;letter-spacing:0.05em;">里程碑 · 7 天</span>
+                  <div class="greeting-num size-xl" style="margin-top:18px;color:var(--memory-gold);"><em style="color:var(--memory-gold);">7</em></div>
+                  <h2 style="font-size:22px;font-weight:700;margin-top:8px;line-height:1.3;">连续 7 天<br>你是真的在认真活着</h2>
+                  <div style="font-family:var(--serif);font-style:italic;font-size:14px;line-height:1.85;color:var(--ink-soft);margin-top:20px;padding:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+                    7 个&ldquo;还活着&rdquo;，<br>拼成了只属于你的小勋章。<br>认真地活，认真地记录，<br>这件事本身就很了不起。
+                  </div>
+                  <div style="margin-top:24px;display:flex;flex-direction:column;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:var(--radius-md);box-shadow:var(--shadow-soft);">
+                      <div style="width:32px;height:32px;border-radius:50%;background:var(--memory-gold);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">7</div>
+                      <div style="flex:1;font-size:13px;">7 天</div>
+                      <div style="font-size:11px;color:var(--ink-faint);">今天达成</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:var(--radius-md);box-shadow:var(--shadow-soft);">
+                      <div style="width:32px;height:32px;border-radius:50%;background:var(--surface-2);color:var(--ink-faint);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">365</div>
+                      <div style="flex:1;font-size:13px;color:var(--ink-soft);">365 天</div>
+                      <div style="font-size:11px;color:var(--ink-faint);">还有 358 天</div>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary" style="width:100%;margin-top:28px;padding:14px;" data-go="home-flow">继续活着 &rarr;</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== PROFILE ===== -->
+            <section data-screen="profile">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg">
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:8px 0 12px;">
+                  <div>
+                    <div class="section-title" style="margin:0 0 4px;">个人</div>
+                    <h2 style="font-size:24px;font-weight:700;">我的</h2>
+                  </div>
+                </div>
+
+                <div style="text-align:center;padding:18px 0 24px;">
+                  <div class="row-lead" style="width:72px;height:72px;font-size:26px;margin:0 auto 12px;">L</div>
+                  <h3 style="font-size:18px;font-weight:700;">Let me</h3>
+                  <div style="font-size:12px;color:var(--ink-faint);margin-top:4px;">已确认存活 127 天</div>
+                  <div style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 14px;background:var(--vital-green-soft);color:#2F6F30;border-radius:var(--radius-pill);font-family:var(--mono);font-size:12px;font-weight:600;">
+                    ✓ 我的码 · A8K3M2
+                  </div>
+                </div>
+
+                <div class="section-title">数据</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+                  <div style="background:var(--surface);border-radius:var(--radius-md);padding:14px 10px;box-shadow:var(--shadow-soft);">
+                    <div style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--vital-green);">127</div>
+                    <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">生存天数</div>
+                  </div>
+                  <div style="background:var(--surface);border-radius:var(--radius-md);padding:14px 10px;box-shadow:var(--shadow-soft);">
+                    <div style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);">8</div>
+                    <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">人物</div>
+                  </div>
+                  <div style="background:var(--surface);border-radius:var(--radius-md);padding:14px 10px;box-shadow:var(--shadow-soft);">
+                    <div style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--ink);">86</div>
+                    <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">记录</div>
+                  </div>
+                </div>
+
+                <div class="section-title">2026 像素图</div>
+                <div class="panel" style="padding:16px;">
+                  <div class="heatmap" data-heatmap data-weeks="20"></div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-faint);margin-top:8px;align-items:center;">
+                    <span>少</span>
+                    <div style="display:flex;gap:2px;">
+                      <span style="width:10px;height:10px;background:var(--surface-2);border-radius:2px;"></span>
+                      <span style="width:10px;height:10px;background:rgba(91,184,92,0.22);border-radius:2px;"></span>
+                      <span style="width:10px;height:10px;background:rgba(91,184,92,0.45);border-radius:2px;"></span>
+                      <span style="width:10px;height:10px;background:rgba(91,184,92,0.72);border-radius:2px;"></span>
+                      <span style="width:10px;height:10px;background:var(--vital-green);border-radius:2px;"></span>
+                    </div>
+                    <span>多</span>
+                  </div>
+                </div>
+
+                <div class="section-title">入口</div>
+                <div class="list-rows" style="margin-bottom:16px;">
+                  <div class="list-row" data-go="timeline">
+                    <div class="row-lead" style="background:var(--vital-green-soft);">📓</div>
+                    <div class="row-body"><h4>时间线</h4><p>反向时序回看每一天</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="intersection">
+                    <div class="row-lead" style="background:var(--calm-blue-soft);">🌿</div>
+                    <div class="row-body"><h4>交集</h4><p>看人物时间轴的共现</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="reminder-email">
+                    <div class="row-lead" style="background:var(--memory-gold-soft);">✉️</div>
+                    <div class="row-body"><h4>提醒邮件</h4><p>长时间无记录时温柔提醒</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="milestone">
+                    <div class="row-lead" style="background:var(--memory-gold-soft);">🏆</div>
+                    <div class="row-body"><h4>里程碑</h4><p>下一站：365 天</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                  <div class="list-row" data-go="settings">
+                    <div class="row-lead">⚙️</div>
+                    <div class="row-body"><h4>偏好设置</h4><p>主题 · 通知 · 隐私</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                </div>
+              </div>
+
+              <nav class="tab-bar">
+                <button class="tab-item" data-go="home-flow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg><span>主页</span></button>
+                <button class="tab-item" data-go="checkin-cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>打卡</span></button>
+                <button class="tab-item" data-go="people-list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>人物</span></button>
+                <button class="tab-item is-active" data-go="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6 19c1-3 3-4 6-4s5 1 6 4"/></svg><span>我的</span></button>
+              </nav>
+            </section>
+
+            <!-- ===== SETTINGS ===== -->
+            <section data-screen="settings">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;align-items:center;padding:8px 0 12px;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="profile">&larr; 返回</button>
+                </div>
+                <h2 style="font-size:22px;font-weight:700;">偏好设置</h2>
+
+                <div class="section-title">打卡提醒</div>
+                <div class="list-rows">
+                  <div class="list-row">
+                    <div class="row-body"><h4>每日提醒</h4><p>每日推送通知</p></div>
+                    <button class="toggle is-on" aria-label="每日提醒"></button>
+                  </div>
+                  <div class="list-row">
+                    <div class="row-body"><h4>提醒时间</h4><p>21:00</p></div>
+                    <div class="row-tail">&rsaquo;</div>
+                  </div>
+                </div>
+
+                <div class="section-title">外观</div>
+                <div data-pick="theme" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:4px;">
+                  <button class="screen-chip is-active" data-pick-group="theme" style="border:none;">浅色</button>
+                  <button class="screen-chip" data-pick-group="theme" style="border:none;">深色</button>
+                  <button class="screen-chip" data-pick-group="theme" style="border:none;">系统</button>
+                </div>
+
+                <div class="section-title">通知</div>
+                <div class="list-rows">
+                  <div class="list-row"><div class="row-body"><h4>生日提醒</h4></div><button class="toggle is-on"></button></div>
+                  <div class="list-row"><div class="row-body"><h4>里程碑通知</h4></div><button class="toggle is-on"></button></div>
+                  <div class="list-row"><div class="row-body"><h4>静默打卡</h4><p>当天活动不弹通知</p></div><button class="toggle"></button></div>
+                </div>
+
+                <div class="section-title">数据</div>
+                <div class="list-rows">
+                  <div class="list-row"><div class="row-body"><h4>数据备份</h4><p>导出所有数据</p></div><div class="row-tail">&rsaquo;</div></div>
+                </div>
+
+                <button class="btn btn-ghost" style="width:100%;margin-top:20px;color:var(--warm-coral);" data-go="login">退出登录</button>
+                <p style="text-align:center;font-size:11px;color:var(--ink-faint);margin-top:16px;font-family:var(--mono);">v5.0 · 你的日子值得被记住</p>
+              </div>
+            </section>
+
+            <!-- ===== REMINDER EMAIL ===== -->
+            <section data-screen="reminder-email">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;align-items:center;padding:8px 0 12px;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="profile">&larr; 返回</button>
+                </div>
+
+                <h2 style="font-size:22px;font-weight:700;">提醒邮件</h2>
+                <p style="font-size:12px;color:var(--ink-soft);margin-top:6px;">长时间没有记录时，温柔提醒一下</p>
+
+                <div style="background:var(--memory-gold-soft);border-left:3px solid var(--memory-gold);padding:14px;border-radius:var(--radius-sm);font-size:12px;line-height:1.7;color:var(--ink-soft);margin-top:18px;">
+                  当你连续多天没有打卡或写下任何记录时，可以选择给一位你信任的人发一封温柔的邮件，或者只在自己的设备上看到一条本地提醒。怎么选都好。
+                </div>
+
+                <div class="section-title">通知方式</div>
+                <div data-pick="notify-mode" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                  <button class="screen-chip is-active" data-pick-group="notify-mode">邮件提醒</button>
+                  <button class="screen-chip" data-pick-group="notify-mode">仅系统提示</button>
+                </div>
+
+                <div class="section-title">总开关</div>
+                <div class="list-rows">
+                  <div class="list-row">
+                    <div class="row-body"><h4>启用提醒邮件</h4><p>关闭后所有触发不再生效</p></div>
+                    <button class="toggle is-on"></button>
+                  </div>
+                </div>
+
+                <div class="section-title">触发天数</div>
+                <div data-pick="trigger-days" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">
+                  <button class="screen-chip" data-pick-group="trigger-days">3 天</button>
+                  <button class="screen-chip is-active" data-pick-group="trigger-days">7 天</button>
+                  <button class="screen-chip" data-pick-group="trigger-days">14 天</button>
+                  <button class="screen-chip" data-pick-group="trigger-days">30 天</button>
+                  <button class="screen-chip" data-pick-group="trigger-days">自定义</button>
+                </div>
+                <p style="font-size:11px;color:var(--ink-faint);margin-top:8px;">连续 7 天没有任何记录后触发通知</p>
+
+                <div class="section-title">紧急联系人</div>
+                <input class="field" placeholder="email@example.com" value="mother@example.com">
+                <p style="font-size:11px;color:var(--ink-faint);margin-top:8px;">仅在「邮件提醒」模式下使用</p>
+
+                <div class="section-title">邮件模板</div>
+                <textarea class="field" style="min-height:140px;font-family:var(--sans);font-size:13px;line-height:1.7;">主题：关于 Let me 的近况提醒
+
+你好，
+Let me 已经连续 7 天没有在「还活着」中留下任何记录。
+这封邮件并不意味着什么，但如果方便的话，请轻轻确认 ta 是否安好。
+
+—— 来自「还活着」</textarea>
+
+                <div class="section-title">预览</div>
+                <div class="panel" style="padding:16px;font-size:12px;line-height:1.8;color:var(--ink-soft);">
+                  <div style="font-weight:700;color:var(--ink);margin-bottom:6px;">主题：关于 Let me 的近况提醒</div>
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--ink-faint);letter-spacing:0.1em;margin-bottom:8px;">TO mother@example.com · FROM noreply@stillalive.app</div>
+                  你好，<br>
+                  Let me 已经连续 7 天没有在「还活着」中留下任何记录。<br>
+                  这封邮件并不意味着什么，但如果方便的话，请轻轻确认 ta 是否安好。<br><br>
+                  —— 来自「还活着」
+                </div>
+
+                <button class="btn btn-ghost" style="width:100%;margin-top:14px;">发送测试邮件到自己</button>
+              </div>
+            </section>
+
+            <!-- ===== TIMELINE ===== -->
+            <section data-screen="timeline">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg">
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;padding:8px 0 12px;">
+                  <div>
+                    <div class="section-title" style="margin:0 0 4px;">最近三个月</div>
+                    <h2 style="font-size:22px;font-weight:700;">时间线</h2>
+                  </div>
+                  <button class="fab" data-go="post-composer" style="width:40px;height:40px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                </div>
+
+                <div data-pick="tl-filter" style="display:flex;gap:6px;margin-bottom:12px;">
+                  <button class="screen-chip is-active" data-pick-group="tl-filter">全部</button>
+                  <button class="screen-chip" data-pick-group="tl-filter">仅帖</button>
+                  <button class="screen-chip" data-pick-group="tl-filter">仅提醒</button>
+                </div>
+
+                <div class="timeline">
+                  <div class="timeline-divider">
+                    <span class="day-label">5 月 9 日 · 周六</span>
+                    <span>DAY 127</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--vital-green);">
+                    <div class="timeline-card">
+                      <span class="timeline-checkin-badge">我还在</span>
+                      <p style="margin-top:8px;">今天还没来得及写。</p>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider">
+                    <span class="day-label">5 月 8 日 · 周五</span>
+                    <span>DAY 126</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                    <div class="timeline-card">
+                      <p>下了一场大雨，透过窗户看外面出了彩虹。突然觉得活着其实有很多不期而遇的美好。</p>
+                      <div class="meta">
+                        <span>14:32</span><span>·</span>
+                        <span class="mention-chip" style="font-size:11px;">妈妈</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider">
+                    <span class="day-label">5 月 7 日 · 周四</span>
+                    <span>DAY 125</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--calm-blue);">
+                    <div class="timeline-card">
+                      <span class="timeline-checkin-badge">我还在</span>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider">
+                    <span class="day-label">5 月 5 日 · 周二</span>
+                    <span>DAY 123</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--memory-gold);">
+                    <div class="timeline-card">
+                      <span class="reminder-badge">那天是 · 认识楠楠两周年</span>
+                      <p style="margin-top:8px;font-style:italic;color:var(--ink-faint);">过期未补记 · 点击补写一条</p>
+                    </div>
+                  </div>
+
+                  <div class="timeline-divider">
+                    <span class="day-label">5 月 3 日 · 周日</span>
+                    <span>DAY 121</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--vital-green);">
+                    <div class="timeline-card">
+                      <p>和<span class="mention-chip">爸爸</span>一起修了院子里的藤架。</p>
+                      <div class="meta">
+                        <span>19:02</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <nav class="tab-bar">
+                <button class="tab-item" data-go="home-flow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg><span>主页</span></button>
+                <button class="tab-item is-active" data-go="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>时间线</span></button>
+                <button class="tab-item" data-go="people-list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>人物</span></button>
+                <button class="tab-item" data-go="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6 19c1-3 3-4 6-4s5 1 6 4"/></svg><span>我的</span></button>
+              </nav>
+            </section>
+
+            <!-- ===== PERSON BIO ===== -->
+            <section data-screen="person-bio">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="people-list">&larr; 返回</button>
+                  <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;">编辑</button>
+                </div>
+
+                <div class="bio-card" style="--theme-color: var(--warm-coral);margin-top:8px;">
+                  <div class="bio-card__avatar" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                  <div class="bio-card__info">
+                    <div class="bio-card__name">妈妈</div>
+                    <p class="bio-card__impression">永远在厨房忙碌的人。不太会直接说爱，但桌上永远多一道你随口提过的菜。</p>
+                    <div class="bio-card__meta">
+                      <span>生日 · 05·09</span>
+                      <span>·</span>
+                      <span>ENFJ</span>
+                      <span>·</span>
+                      <span>家人</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section-title">小传</div>
+                <div class="bio-longform">
+                  <p>她是一个总在往别人碗里夹菜的人。小时候我以为所有妈妈都这样，后来才知道这是她独有的表达。</p>
+                  <p>她不会说出口的话，都藏在火候里。</p>
+                </div>
+
+                <div class="section-title">相关记录 · 自动聚合</div>
+                <div class="timeline">
+                  <div class="timeline-divider">
+                    <span class="day-label">5 月 8 日</span>
+                    <span>DAY 126</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                    <div class="timeline-card">
+                      <p>下了一场大雨，看见了彩虹。</p>
+                      <div class="meta">
+                        <span>14:32</span>
+                        <span>·</span>
+                        <span>同时 @ 的人</span>
+                        <span class="mentions">
+                          <span class="row-lead" style="background:var(--vital-green-soft);color:#2F6F30;">林</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="timeline-divider">
+                    <span class="day-label">4 月 20 日</span>
+                    <span>DAY 108</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                    <div class="timeline-card">
+                      <p>回家的那天她做了牛肉汤。</p>
+                      <div class="meta"><span>20:11</span></div>
+                    </div>
+                  </div>
+                  <div class="timeline-divider">
+                    <span class="day-label">2 月 14 日</span>
+                    <span>DAY 43</span>
+                  </div>
+                  <div class="timeline-row" style="--theme-color: var(--warm-coral);">
+                    <div class="timeline-card">
+                      <p>春节一起包了 200 个饺子。她笑了很多次。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== INTERSECTION ===== -->
+            <section data-screen="intersection">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="profile">&larr; 返回</button>
+                </div>
+                <h2 style="font-size:22px;font-weight:700;">交集</h2>
+                <p style="font-size:12px;color:var(--ink-soft);margin-top:4px;">每个人一条时间轴，同一条帖里的共现会被连起来。</p>
+
+                <div data-pick="intx-density" style="display:flex;gap:6px;margin-top:14px;">
+                  <button class="screen-chip" data-pick-group="intx-density">年</button>
+                  <button class="screen-chip is-active" data-pick-group="intx-density">季</button>
+                  <button class="screen-chip" data-pick-group="intx-density">月</button>
+                </div>
+
+                <div class="list-row" style="background:none;padding:8px 0;margin-top:8px;">
+                  <div class="row-body"><h4 style="font-size:13px;">隐藏孤立人物</h4></div>
+                  <button class="toggle"></button>
+                </div>
+
+                <div data-intersection="__SA_INTX_DATA__" style="margin-top:8px;"></div>
+              </div>
+            </section>
+
+            <!-- ===== PERSON GRAPH ===== -->
+            <section data-screen="person-graph">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 12px;">
+                  <div class="segmented">
+                    <button class="segmented-item is-active">关系图</button>
+                    <button class="segmented-item" data-go="people-list">列表</button>
+                  </div>
+                  <button class="fab" style="width:36px;height:36px;" data-go="person-detail-v2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                </div>
+                <div class="graph-canvas" data-graph="__SA_GRAPH_DATA__" style="height:440px;border-radius:var(--radius-md);"></div>
+              </div>
+              <nav class="tab-bar">
+                <button class="tab-item" data-go="home-flow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg><span>主页</span></button>
+                <button class="tab-item" data-go="checkin-cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>日历</span></button>
+                <button class="tab-item is-active" data-go="person-graph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>人物</span></button>
+                <button class="tab-item" data-go="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6 19c1-3 3-4 6-4s5 1 6 4"/></svg><span>我的</span></button>
+              </nav>
+            </section>
+
+            <!-- ===== PERSON DETAIL V2 ===== -->
+            <section data-screen="person-detail-v2">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="person-graph">&larr; 返回</button>
+                  <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;">编辑</button>
+                </div>
+
+                <div class="bio-card" style="--theme-color:var(--warm-coral);margin-top:8px;">
+                  <div class="bio-card__avatar" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                  <div class="bio-card__info">
+                    <div class="bio-card__name">妈妈</div>
+                    <p class="bio-card__impression">永远在厨房忙碌的人。不太会直接说爱，但桌上永远多一道你随口提过的菜。</p>
+                    <div class="bio-card__meta"><span>05·09</span><span>·</span><span>家人</span><span>·</span><span>ENFJ</span></div>
+                  </div>
+                </div>
+
+                <div class="section-title">基本信息</div>
+                <div class="kv-grid">
+                  <div class="kv-row"><div class="kv-key">性别</div><div class="kv-value">女</div></div>
+                  <div class="kv-row"><div class="kv-key">生日</div><div class="kv-value">05·09</div></div>
+                  <div class="kv-row"><div class="kv-key">MBTI</div><div class="kv-value">ENFJ</div></div>
+                  <div class="kv-row"><div class="kv-key">星座</div><div class="kv-value">金牛座</div></div>
+                  <div class="kv-row"><div class="kv-key">外号</div><div class="kv-value">慢吞吞</div></div>
+                  <div class="kv-row"><div class="kv-key">喜欢</div><div class="kv-value">拿铁</div></div>
+                  <div class="kv-row"><div class="kv-key">怕</div><div class="kv-value">雷雨</div></div>
+                  <div class="kv-row is-add" data-sheet-open="kv-add-sheet">+ 添加自定义</div>
+                </div>
+
+                <div class="section-title">人生经历</div>
+                <div class="event-row">
+                  <div class="event-title">春节包饺子</div>
+                  <div class="event-desc">一起包了 200 个饺子。她笑了很多次。那也许是她那一年最放松的一周。</div>
+                  <div class="event-meta">
+                    <span class="event-time-hint">去年春节</span>
+                    <div class="event-participants">
+                      <div class="row-lead" style="background:var(--vital-green);color:#fff;">我</div>
+                      <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="event-row is-not-self">
+                  <div class="event-title">妈妈去西藏</div>
+                  <div class="event-desc">她说那是她第一次看到那么蓝的天。</div>
+                  <div class="event-meta">
+                    <span class="event-time-hint">2020-06</span>
+                    <div class="event-participants">
+                      <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="event-row">
+                  <div class="event-title">高三毕业</div>
+                  <div class="event-desc">她在校门口等了三个小时。</div>
+                  <div class="event-meta">
+                    <span class="event-time-hint">高三那年</span>
+                    <div class="event-participants">
+                      <div class="row-lead" style="background:var(--vital-green);color:#fff;">我</div>
+                      <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="event-row">
+                  <div class="event-title">春节回家</div>
+                  <div class="event-desc">那时候还小，只记得她做的红烧肉。</div>
+                  <div class="event-meta">
+                    <span class="event-time-hint">童年</span>
+                    <div class="event-participants">
+                      <div class="row-lead" style="background:var(--vital-green);color:#fff;">我</div>
+                      <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                      <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">爸</div>
+                    </div>
+                  </div>
+                </div>
+                <button class="btn btn-ghost" style="width:100%;margin-top:14px;" data-sheet-open="event-composer-sheet">+ 写一条经历</button>
+              </div>
+            </section>
+
+            <!-- ===== BACKUP ===== -->
+            <section data-screen="backup">
+              <div class="status-bar"><span>9:41</span><span>●●● 100%</span></div>
+              <div class="pg pg-notab">
+                <div style="display:flex;align-items:center;padding:8px 0 12px;">
+                  <button class="btn btn-ghost" style="padding:4px 8px;font-size:13px;" data-go="profile">&larr; 返回</button>
+                </div>
+                <h2 style="font-size:22px;font-weight:700;">备份</h2>
+                <p style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.6;">你的数据默认只在这台设备上。可以导出一份副本，也可以同步到你自己的网盘。</p>
+
+                <div style="display:flex;flex-direction:column;gap:12px;margin-top:24px;">
+                  <button class="btn btn-primary" style="width:100%;padding:16px;font-size:15px;">导出全部数据</button>
+                  <p style="font-size:11px;color:var(--ink-faint);text-align:center;margin-top:-6px;">会生成一个 .zip 文件，包含你的全部日记、人物、提醒</p>
+                  <button class="btn btn-ghost" style="width:100%;padding:14px;">从备份导入</button>
+                  <p style="font-size:11px;color:var(--ink-faint);text-align:center;margin-top:-6px;">从之前导出的文件恢复数据（会覆盖现在的内容）</p>
+                </div>
+
+                <div style="margin-top:32px;padding-top:16px;border-top:1px solid var(--line);">
+                  <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                    <span style="font-size:13px;color:var(--ink-soft);">也可以同步到云端 →</span>
+                    <span style="font-size:11px;color:var(--ink-faint);">展开</span>
+                  </div>
+                  <div style="display:none;margin-top:14px;">
+                    <p style="font-size:12px;color:var(--ink-soft);line-height:1.7;margin-bottom:14px;">目前支持坚果云、Nextcloud 这类标准网盘。</p>
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                      <div style="display:flex;gap:8px;">
+                        <span class="specimen-tag is-green">坚果云</span>
+                        <span class="specimen-tag">Nextcloud</span>
+                        <span class="specimen-tag">自建网盘</span>
+                      </div>
+                      <input class="field" placeholder="网盘地址">
+                      <input class="field" placeholder="账号">
+                      <input class="field" type="password" placeholder="密码">
+                      <input class="field" placeholder="文件夹路径（如 /StillAlive）">
+                      <div class="list-row" style="padding:10px 0;background:none;">
+                        <div class="row-body"><h4 style="font-size:13px;">上传前加密保护</h4><p>打开后，文件需要密码才能打开</p></div>
+                        <button class="toggle"></button>
+                      </div>
+                      <button class="btn btn-ghost" style="width:100%;">测试一下</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="margin-top:24px;text-align:center;">
+                  <p style="font-size:11px;color:var(--ink-faint);">上次备份：还活着 · 2026-05-07 21-34.zip</p>
+                </div>
+              </div>
+            </section>
+
+
+            <div class="sheet-scrim" data-sheet-scrim-for="post-composer-sheet" id="post-composer-scrim"></div>
+            <div class="sheet" id="post-composer-sheet">
+              <div class="sheet-handle"></div>
+              <div class="sheet-header">
+                <span class="sheet-title">记一条</span>
+                <button class="sheet-close" data-sheet-close>&times;</button>
+              </div>
+              <div class="sheet-body">
+                <textarea style="width:100%;min-height:180px;border:none;outline:none;font-family:var(--sans);font-size:15px;line-height:1.7;color:var(--ink);resize:none;background:transparent;" placeholder="今天发生了什么？也可以什么都不写"></textarea>
+              </div>
+              <div class="sheet-toolbar">
+                <button class="tb-icon" data-sheet-open="at-picker-sheet">@</button>
+                <button class="tb-icon">📷</button>
+                <button class="tb-icon">⏰</button>
+                <button class="tb-icon tb-primary" data-sheet-close data-checkin-action="collapse">✓</button>
+              </div>
+            </div>
+
+            <!-- @ picker sub-sheet -->
+            <div class="sheet-scrim" data-sheet-scrim-for="at-picker-sheet" id="at-picker-scrim" style="z-index:70;"></div>
+            <div class="sheet" id="at-picker-sheet" style="z-index:80;max-height:50%;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-header">
+                <span class="sheet-title">选一个人</span>
+                <button class="sheet-close" data-sheet-close>&times;</button>
+              </div>
+              <div class="sheet-body">
+                <input class="field" placeholder="搜索人物" style="margin-bottom:10px;">
+                <div class="list-rows">
+                  <div class="list-row" data-sheet-close>
+                    <div class="row-lead" style="background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                    <div class="row-body"><h4>妈妈</h4><p>最近 @</p></div>
+                  </div>
+                  <div class="list-row" data-sheet-close>
+                    <div class="row-lead" style="background:var(--vital-green-soft);color:#2F6F30;">林</div>
+                    <div class="row-body"><h4>小林</h4></div>
+                  </div>
+                  <div class="list-row" data-sheet-close>
+                    <div class="row-lead" style="background:var(--memory-gold-soft);color:#8A6416;">楠</div>
+                    <div class="row-body"><h4>楠楠</h4></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- event-composer sheet -->
+            <div class="sheet-scrim" data-sheet-scrim-for="event-composer-sheet"></div>
+            <div class="sheet" id="event-composer-sheet">
+              <div class="sheet-handle"></div>
+              <div class="sheet-header">
+                <span class="sheet-title">写一条经历</span>
+                <button class="sheet-close" data-sheet-close>&times;</button>
+              </div>
+              <div class="sheet-body">
+                <input class="field" placeholder="标题（如：春节包饺子）" style="margin-bottom:10px;">
+                <textarea class="field" style="min-height:100px;resize:none;" placeholder="描述（可选）"></textarea>
+                <input class="field" placeholder="时间提示（高三那年 / 2018-06 / 童年 都可以）" style="margin-top:10px;">
+                <div class="section-title">参与者</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <div class="row-lead" style="width:32px;height:32px;font-size:12px;background:var(--vital-green);color:#fff;">我</div>
+                  <div class="row-lead" style="width:32px;height:32px;font-size:12px;background:var(--warm-coral-soft);color:#B8442F;">妈</div>
+                  <div class="row-lead" style="width:32px;height:32px;font-size:12px;background:var(--surface-2);color:var(--ink-faint);cursor:pointer;">+</div>
+                </div>
+              </div>
+              <div class="sheet-toolbar">
+                <span class="tb-icon tb-primary" data-sheet-close>保存</span>
+              </div>
+            </div>
+
+            <!-- kv-add sheet -->
+            <div class="sheet-scrim" data-sheet-scrim-for="kv-add-sheet"></div>
+            <div class="sheet" id="kv-add-sheet" style="max-height:40%;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-header">
+                <span class="sheet-title">添加自定义字段</span>
+                <button class="sheet-close" data-sheet-close>&times;</button>
+              </div>
+              <div class="sheet-body">
+                <input class="field" placeholder="键（如：外号）" style="margin-bottom:10px;">
+                <input class="field" placeholder="值（如：小笨蛋）">
+              </div>
+              <div class="sheet-toolbar">
+                <span class="tb-icon tb-primary" data-sheet-close>保存</span>
+              </div>
+            </div>
+
+            <!-- relation-picker sheet -->
+            <div class="sheet-scrim" data-sheet-scrim-for="relation-picker-sheet"></div>
+            <div class="sheet" id="relation-picker-sheet">
+              <div class="sheet-handle"></div>
+              <div class="sheet-header">
+                <span class="sheet-title">选择关系</span>
+                <button class="sheet-close" data-sheet-close>&times;</button>
+              </div>
+              <div class="sheet-body">
+                <div class="section-title" style="margin-top:0;">家人</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+                  <span class="specimen-tag" data-sheet-close>爸爸</span>
+                  <span class="specimen-tag" data-sheet-close>妈妈</span>
+                  <span class="specimen-tag" data-sheet-close>儿子</span>
+                  <span class="specimen-tag" data-sheet-close>女儿</span>
+                  <span class="specimen-tag" data-sheet-close>兄弟</span>
+                  <span class="specimen-tag" data-sheet-close>姐妹</span>
+                  <span class="specimen-tag" data-sheet-close>伴侣</span>
+                  <span class="specimen-tag" data-sheet-close>爷爷</span>
+                  <span class="specimen-tag" data-sheet-close>奶奶</span>
+                  <span class="specimen-tag" data-sheet-close>外公</span>
+                  <span class="specimen-tag" data-sheet-close>外婆</span>
+                </div>
+                <div class="section-title">社会</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+                  <span class="specimen-tag" data-sheet-close>朋友</span>
+                  <span class="specimen-tag" data-sheet-close>同学</span>
+                  <span class="specimen-tag" data-sheet-close>老师</span>
+                  <span class="specimen-tag" data-sheet-close>同事</span>
+                  <span class="specimen-tag" data-sheet-close>邻居</span>
+                  <span class="specimen-tag" data-sheet-close>室友</span>
+                  <span class="specimen-tag" data-sheet-close>恋人</span>
+                  <span class="specimen-tag" data-sheet-close>前任</span>
+                </div>
+                <div class="section-title">自定义</div>
+                <div style="display:flex;gap:8px;">
+                  <input class="field" placeholder="输入关系（最长 8 字）" style="flex:1;">
+                  <button class="btn btn-ghost" data-sheet-close>保存</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- END_SCREENS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col">
+      <div>
+        <h2>屏切换</h2>
+        <p>点标签直接跳转任一子屏；或在设备内通过 tab bar / 按钮 / 卡片自然流转。</p>
+      </div>
+      <nav class="screen-tabs" data-switcher-for="app" style="display:block;column-count:1;">
+        <div style="display:flex;flex-wrap:wrap;gap:2px;">
+          <button class="screen-tab is-active" data-go="home-flow">主页</button>
+          <button class="screen-tab" data-go="checkin-cal">日历</button>
+          <button class="screen-tab" data-go="post-composer">写一条</button>
+          <button class="screen-tab" data-go="person-graph">人物图</button>
+          <button class="screen-tab" data-go="people-list">人物列表</button>
+          <button class="screen-tab" data-go="person-detail-v2">人物详情</button>
+          <button class="screen-tab" data-go="event-composer">写一条经历</button>
+          <button class="screen-tab" data-go="relation-picker">选关系</button>
+          <button class="screen-tab" data-go="intersection">交集</button>
+          <button class="screen-tab" data-go="milestone">里程碑</button>
+          <button class="screen-tab" data-go="profile">我的</button>
+          <button class="screen-tab" data-go="backup">备份</button>
+          <button class="screen-tab" data-go="reminder-email">提醒邮件</button>
+          <button class="screen-tab" data-go="settings">偏好</button>
+          <button class="screen-tab" data-go="login">登录</button>
+          <button class="screen-tab" data-go="register">注册</button>
+        </div>
+      </nav>
+    </div>
+  </div>
+
+  <script>
+    window.__SA_GRAPH_DATA__ = {
+      self: { name: '我', avatar: '我' },
+      persons: [
+        { id: 'mom', name: '妈妈', color: 'coral', avatar: '妈' },
+        { id: 'dad', name: '爸爸', color: 'coral', avatar: '爸' },
+        { id: 'lin', name: '小林', color: 'green', avatar: '林' },
+        { id: 'nan', name: '楠楠', color: 'gold', avatar: '楠' },
+        { id: 'boss', name: '老板', color: 'blue', avatar: '老' }
+      ],
+      relations: [
+        { from: 'self', to: 'mom', type: '妈妈' },
+        { from: 'self', to: 'dad', type: '爸爸' },
+        { from: 'mom', to: 'dad', type: '伴侣' },
+        { from: 'self', to: 'lin', type: '朋友' }
+      ]
+    };
+    window.__SA_INTX_DATA__ = {
+      persons: [
+        { id: 'mom',  name: '妈妈',  color: 'coral', avatar: '妈' },
+        { id: 'dad',  name: '爸爸',  color: 'coral', avatar: '爸' },
+        { id: 'lin',  name: '小林',  color: 'green', avatar: '林' },
+        { id: 'nan',  name: '楠楠',  color: 'gold',  avatar: '楠' },
+        { id: 'boss', name: '老板',  color: 'blue',  avatar: '老' },
+        { id: 'ghost', name: '旧友 A', color: 'ink',  avatar: 'A' }
+      ],
+      posts: [
+        { id: 'p1', dayKey: '2026-01-15', mentions: ['mom'],         excerpt: '妈妈打电话' },
+        { id: 'p2', dayKey: '2026-02-14', mentions: ['mom', 'dad'],  excerpt: '春节包饺子' },
+        { id: 'p3', dayKey: '2026-03-01', mentions: ['lin'],         excerpt: '和小林看樱花' },
+        { id: 'p4', dayKey: '2026-03-22', mentions: ['nan'],         excerpt: '楠楠生日' },
+        { id: 'p5', dayKey: '2026-04-02', mentions: ['boss'],        excerpt: '老板谈话' },
+        { id: 'p6', dayKey: '2026-04-20', mentions: ['mom'],         excerpt: '回家吃牛肉汤' },
+        { id: 'p7', dayKey: '2026-05-03', mentions: ['dad', 'mom'],  excerpt: '修藤架' },
+        { id: 'p8', dayKey: '2026-05-08', mentions: ['mom', 'lin'],  excerpt: '下雨看彩虹' }
+      ]
+    };
+  </script>
+  <script src="shared/app-prototype.js" defer></script>
+</body>
+</html>
