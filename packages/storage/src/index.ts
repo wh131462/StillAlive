@@ -1,4 +1,4 @@
-import type { CheckIn, DayKey, Draft, Media, Person, Post } from '@still-alive/types';
+import type { AlbumMedia, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
@@ -15,6 +15,7 @@ export interface StillAliveRepository {
   getDraft(dayKey: DayKey): Promise<Draft | null>;
   listMedia(): Promise<Media[]>;
   createMedia(media: Media): Promise<void>;
+  updateMedia(media: Media): Promise<void>;
   deleteMedia(mediaId: string): Promise<void>;
   isMediaReferenced(mediaId: string): Promise<boolean>;
   listPeople(): Promise<Person[]>;
@@ -22,4 +23,23 @@ export interface StillAliveRepository {
   updatePerson(person: Person): Promise<void>;
   deletePerson(personId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
+  listTagDefinitions(): Promise<TagDefinition[]>;
+  createTagDefinition(tag: TagDefinition): Promise<void>;
+  updateTagDefinition(tag: TagDefinition): Promise<void>;
+  deleteTagDefinition(tagId: string): Promise<void>;
+  countPeopleByTag(tagId: string): Promise<number>;
+  listTagSystemSettings(): Promise<TagSystemSetting[]>;
+  updateTagSystemSettings(settings: TagSystemSetting[]): Promise<void>;
+  listPersonTagAssignments(): Promise<PersonTagAssignment[]>;
+  setPersonTags(personId: string, mbti: string | null, customTagIds: string[]): Promise<void>;
+  listAlbums(): Promise<PersonAlbum[]>;
+  createAlbum(album: PersonAlbum): Promise<void>;
+  updateAlbum(album: PersonAlbum): Promise<void>;
+  deleteAlbum(albumId: string): Promise<void>;
+  listAlbumMedia(): Promise<AlbumMedia[]>;
+  addAlbumMedia(item: AlbumMedia, media: Media): Promise<void>;
+  updateAlbumMedia(albumId: string, items: AlbumMedia[]): Promise<void>;
+  removeAlbumMedia(albumId: string, mediaId: string): Promise<void>;
+  listBirthdayNotificationSchedules(): Promise<BirthdayNotificationSchedule[]>;
+  replaceBirthdayNotificationSchedules(items: BirthdayNotificationSchedule[]): Promise<void>;
 }
