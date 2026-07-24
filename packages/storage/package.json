@@ -1,5 +1,5 @@
 {
-  "name": "@still-alive/types",
+  "name": "@still-alive/storage",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,5 +10,6 @@
     "test": "echo 'No tests yet'",
     "clean": "rm -rf dist"
   },
+  "dependencies": { "@still-alive/types": "workspace:*" },
   "devDependencies": { "typescript": "~6.0.3" }
 }
