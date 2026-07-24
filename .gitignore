@@ -5,9 +5,6 @@ node_modules/
 # Build outputs
 dist/
 build/
-.next/
-.nuxt/
-.output/
 out/
 
 # Turbo
@@ -59,24 +56,10 @@ coverage/
 *.orig.*
 web-build/
 
-# Taro (Miniprogram)
-.temp/
-.swc/
-
-# Prisma
-apps/server/prisma/*.db
-apps/server/prisma/*.db-journal
-
 # Misc
 *.local
 .cache/
 
-# Docker & SSL
-certbot/
-downloads/
+# Certificates
 *.pem
 *.crt
-
-# Database dumps
-*.sql
-*.dump
