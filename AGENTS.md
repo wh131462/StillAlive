@@ -52,7 +52,7 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
 
 ## Code Rules
 - Do NOT change business logic unless explicitly asked
-- Do NOT introduce new dependencies unless explicitly asked
+- Introduce a dependency only when it is necessary to complete the requested feature; document the reason and keep the addition minimal
 - Do NOT refactor unrelated code
 - Keep changes local, minimal, and reviewable
 - Always follow the project's ESLint specifications
