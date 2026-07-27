@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
@@ -22,7 +23,8 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import RichTextEditor from '../src/components/rich-text-editor.dom';
 import type { EditorCommand, EditorCommandType, EditorMediaSource } from '../src/components/rich-text-editor.types';
 import { useAppState } from '../src/state/app-state';
-import { persistPickedImage } from '../src/data/local-media';
+import { persistPickedImage, persistVoiceRecording } from '../src/data/local-media';
+import { extractEmbeddedMediaIds } from '../src/domain/embedded-media';
 
 type PersonPickerMode = 'manage' | 'mention';
 
@@ -35,6 +37,7 @@ export default function EditorScreen() {
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
   const initialPersonIdsRef = useRef<string[]>([]);
+  const createdAudioRef = useRef<Media[]>([]);
   const commandIdRef = useRef(0);
   const [body, setBody] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -50,7 +53,10 @@ export default function EditorScreen() {
   const [linkUrl, setLinkUrl] = useState('https://');
   const [draftStatus, setDraftStatus] = useState('本地草稿');
   const [saving, setSaving] = useState(false);
+  const [audioSaving, setAudioSaving] = useState(false);
   const editingPost = posts.find((item) => item.id === postId);
+  const audioRecorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, directory: 'document' });
+  const recorderState = useAudioRecorderState(audioRecorder, 250);
   const targetDay = editingPost?.dayKey ?? validPastDay(requestedDayKey, today);
   const isPastEntry = !postId && targetDay !== today;
 
@@ -79,8 +85,8 @@ export default function EditorScreen() {
     }
     initializedRef.current = true;
     void loadDraft(targetDay).then((draft) => {
-      initialBodyRef.current = draft;
-      setBody(draft);
+      initialBodyRef.current = draft?.bodyMarkdown ?? '';
+      setBody(draft?.bodyMarkdown ?? '');
       setInitialized(true);
     });
   }, [getPersonIdsByPost, loadDraft, postId, posts, ready, router, targetDay, today, todayCheckIn]);
@@ -92,7 +98,7 @@ export default function EditorScreen() {
   }, [people, personId]);
 
   useEffect(() => {
-    if (!body || postId) return;
+    if (postId || !body) return;
     setDraftStatus('保存中…');
     const timer = setTimeout(() => {
       void saveDraft(body, targetDay).then(() => setDraftStatus('刚刚已保存'));
@@ -101,8 +107,12 @@ export default function EditorScreen() {
   }, [body, postId, saveDraft, targetDay]);
 
   useEffect(() => navigation.addListener('beforeRemove', (event) => {
-    if (allowExitRef.current || !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current)) return;
+    if (allowExitRef.current || (!recorderState.isRecording && !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current))) return;
     event.preventDefault();
+    if (recorderState.isRecording) {
+      Alert.alert('正在录音', '停止录音后才能离开这条记录。');
+      return;
+    }
     Alert.alert(
       postId ? '放弃这次修改？' : '先退出编写？',
       postId ? '尚未保存的修改会丢失。' : '正文会保留在本地草稿中，下次可以继续。',
@@ -114,18 +124,30 @@ export default function EditorScreen() {
           onPress: () => {
             allowExitRef.current = true;
             const leave = () => navigation.dispatch(event.data.action);
-            if (!postId && body) void saveDraft(body, targetDay).then(leave, leave);
-            else leave();
+            if (!postId && body) {
+              void saveDraft(body, targetDay).then(leave, leave);
+            } else if (postId && createdAudioRef.current.length) {
+              void Promise.all(createdAudioRef.current.map(discardMedia)).then(leave, leave);
+            } else leave();
           },
         },
       ],
     );
-  }), [body, navigation, postId, saveDraft, selectedPersonIds, targetDay]);
+  }), [body, discardMedia, navigation, postId, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
 
   const editorMedia = useMemo<EditorMediaSource[]>(() => {
-    const ids = new Set([...body.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].map((match) => match[1]));
+    const ids = new Set(extractEmbeddedMediaIds(body));
     return media.filter((item) => ids.has(item.id)).map((item) => ({ id: item.id, uri: item.localPath }));
   }, [body, media]);
+
+  const handleBodyChange = (markdown: string) => {
+    setBody(markdown);
+    const referencedIds = new Set(extractEmbeddedMediaIds(markdown));
+    const removed = createdAudioRef.current.filter((item) => !referencedIds.has(item.id));
+    if (!removed.length) return;
+    createdAudioRef.current = createdAudioRef.current.filter((item) => referencedIds.has(item.id));
+    void Promise.all(removed.map(discardMedia));
+  };
 
   const sendCommand = (type: EditorCommandType, value?: EditorCommand['value']) => {
     commandIdRef.current += 1;
@@ -133,9 +155,10 @@ export default function EditorScreen() {
   };
 
   const handleSave = async () => {
+    if (audioSaving) return;
     const value = body.trim();
     if (!value) {
-      Alert.alert('还没有内容', '写下一点内容后再记下。');
+      Alert.alert('还没有内容', '写下一点内容或录一段语音后再记下。');
       return;
     }
     try {
@@ -149,6 +172,64 @@ export default function EditorScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const beginRecording = async () => {
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('无法使用麦克风', '请在系统设置中允许“仍在”使用麦克风。');
+        return;
+      }
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      sendCommand('recordingStart');
+      setDraftStatus('正在录音…');
+    } catch (cause: unknown) {
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => undefined);
+      Alert.alert('录音失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    }
+  };
+
+  const startRecording = async () => {
+    if (recorderState.isRecording || audioSaving) return;
+    if (Platform.OS === 'web') {
+      Alert.alert('当前设备暂不支持', '请在 iOS 或 Android 客户端中录入语音。');
+      return;
+    }
+    await beginRecording();
+  };
+
+  const stopRecording = async () => {
+    if (!recorderState.isRecording) return;
+    let importedAudio: Media | null = null;
+    try {
+      setAudioSaving(true);
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
+      if (!uri) throw new Error('录音文件没有生成');
+      const item = await persistVoiceRecording(uri);
+      importedAudio = item;
+      await saveMedia(item);
+      const durationMs = Math.max(recorderState.durationMillis, Math.round(audioRecorder.currentTime * 1000));
+      createdAudioRef.current = [...createdAudioRef.current, item];
+      sendCommand('audio', { durationMs, id: item.id, uri: item.localPath });
+      setDraftStatus('语音已保存到本机');
+    } catch (cause: unknown) {
+      if (importedAudio) await discardMedia(importedAudio);
+      sendCommand('recordingCancel');
+      Alert.alert('语音保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
+      setDraftStatus('本地草稿');
+    } finally {
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false }).catch(() => undefined);
+      setAudioSaving(false);
+    }
+  };
+
+  const handleRecordPress = () => {
+    if (recorderState.isRecording) void stopRecording();
+    else void startRecording();
   };
 
   const openPersonPicker = (mode: PersonPickerMode) => {
@@ -259,7 +340,7 @@ export default function EditorScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}>
             <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
@@ -268,8 +349,8 @@ export default function EditorScreen() {
             <Text style={styles.headerTitle}>{postId ? '编辑长文' : isPastEntry ? '补写长文' : '写长文'}</Text>
             <Text style={styles.statusText}>{draftStatus}</Text>
           </View>
-          <Pressable accessibilityRole="button" disabled={saving} onPress={() => void handleSave()} style={[styles.saveButton, saving && styles.saveButtonDisabled]}>
-            <Text style={styles.saveText}>{saving ? '保存中' : '完成'}</Text>
+          <Pressable accessibilityRole="button" disabled={saving || audioSaving || recorderState.isRecording} onPress={() => void handleSave()} style={[styles.saveButton, (saving || audioSaving || recorderState.isRecording) && styles.saveButtonDisabled]}>
+            <Text style={styles.saveText}>{saving ? '保存中' : audioSaving ? '保存语音' : '完成'}</Text>
           </Pressable>
         </View>
 
@@ -282,15 +363,18 @@ export default function EditorScreen() {
 
         {initialized ? (
           <RichTextEditor
+            audioSaving={audioSaving}
             command={command}
             dom={{ allowFileAccess: true, keyboardDisplayRequiresUserAction: false, style: styles.domEditor }}
             initialMarkdown={initialBodyRef.current}
             media={editorMedia}
-            onChange={setBody}
+            onChange={handleBodyChange}
             onFormatsChange={setActiveFormats}
             onMention={() => openPersonPicker('mention')}
             onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
+            onStopRecording={() => void stopRecording()}
             placeholder={`${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
+            recordingDurationMs={recorderState.isRecording ? recorderState.durationMillis : null}
           />
         ) : <View style={styles.domEditor} />}
 
@@ -328,14 +412,15 @@ export default function EditorScreen() {
             </ScrollView>
           ) : null}
 
-          <View style={styles.toolbar}>
+          <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.toolbar} contentContainerStyle={styles.toolbarContent}>
             <ToolButton active={showBlocks} androidIcon="text_format" icon="textformat" label="文字样式" onPress={() => { setShowBlocks((value) => !value); setShowMore(false); }} />
             <ToolButton active={activeFormats.includes('bold')} androidIcon="format_bold" icon="bold" label="粗体" onPress={() => sendCommand('bold')} />
             <ToolButton active={activeFormats.includes('bulletList')} androidIcon="format_list_bulleted" icon="list.bullet" label="无序列表" onPress={() => sendCommand('bulletList')} />
             <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={() => openPersonPicker('mention')} />
             <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={() => void handlePickImages()} />
+            <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />
             <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => { setShowMore((value) => !value); setShowBlocks(false); }} />
-          </View>
+          </ScrollView>
         </View>
 
         <Modal animationType="slide" onRequestClose={() => setPersonPickerOpen(false)} transparent visible={personPickerOpen}>
@@ -439,7 +524,8 @@ const styles = StyleSheet.create({
   meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: 8 },
   toolbarStage: { paddingHorizontal: spacing.md, paddingTop: 5, paddingBottom: spacing.sm, gap: 8, backgroundColor: colors.sheet },
-  toolbar: { height: 58, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: 29, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
+  toolbar: { height: 58, flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: 29, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
+  toolbarContent: { minWidth: '100%', paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 2 },
   moreBar: { flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.08)', borderRadius: 23, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 12, elevation: 6 },
   expandedToolbarContent: { gap: 4, paddingHorizontal: 7, paddingVertical: 6 },
   toolButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },

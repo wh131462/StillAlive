@@ -28,6 +28,15 @@
         {
           "photosPermission": "允许“仍在”选择照片，添加到你的本地日记中。"
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "允许“仍在”使用麦克风，将语音保存到你的本地记录中。",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
       ]
     ],
     "experiments": {
@@ -35,18 +44,33 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.stillalive.mobile"
+      "buildNumber": "1",
+      "bundleIdentifier": "com.wh131462.stillalive",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "app.stillalive.mobile",
+      "package": "com.wh131462.stillalive",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
         "backgroundColor": "#1D6B49"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "10d061f3-30ec-4fd5-bde1-45ccb235661d"
+      }
+    },
+    "owner": "eternalheart"
   }
 }

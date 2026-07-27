@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -11,7 +11,9 @@ import type { AppPreferences, HomeMemory } from '../data/sqlite-repository';
 import { cleanupOrphanedAlbumFiles, deletePersonAlbumDirectory } from '../data/local-media';
 import { MBTI_TYPES, validateBirthday } from '../domain/person-profile';
 import { cancelBirthdayNotifications, reconcileBirthdayNotifications } from '../domain/birthday-notifications';
-import { expoBirthdayNotificationAdapter, initializeBirthdayNotificationChannel } from '../data/expo-birthday-notifications';
+import { cancelMemoryNotifications, reconcileMemoryNotifications } from '../domain/memory-notifications';
+import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter, initializeBirthdayNotificationChannel, initializeMemoryNotificationChannel } from '../data/expo-birthday-notifications';
+import { extractEmbeddedMediaIds, extractImageMediaIds } from '../domain/embedded-media';
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   onboardingCompleted: false,
@@ -28,6 +30,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   birthdayReminderHour: 9,
   birthdayReminderMinute: 0,
   birthdayNotificationError: null,
+  memoryNotificationsEnabled: false,
+  memoryNotificationError: null,
 };
 
 interface AppStateValue {
@@ -77,12 +81,14 @@ interface AppStateValue {
   reorderAlbumPhotos(albumId: string, orderedMediaIds: string[]): Promise<void>;
   removePhotoFromAlbum(albumId: string, mediaId: string): Promise<void>;
   saveDraft(bodyMarkdown: string, dayKey?: DayKey): Promise<void>;
-  loadDraft(dayKey?: DayKey): Promise<string>;
+  loadDraft(dayKey?: DayKey): Promise<Draft | null>;
   createBackupSnapshot(): Promise<BackupSnapshot>;
   restoreBackupSnapshot(snapshot: BackupSnapshot): Promise<void>;
   updatePreferences(changes: Partial<AppPreferences>): Promise<void>;
   setBirthdayNotificationsEnabled(enabled: boolean): Promise<void>;
   retryBirthdayNotifications(): Promise<void>;
+  setMemoryNotificationsEnabled(enabled: boolean): Promise<void>;
+  retryMemoryNotifications(): Promise<void>;
   openNotificationSettings(): Promise<void>;
   recordBackupExport(): Promise<void>;
   dismissBackupReminder(): Promise<void>;
@@ -94,6 +100,7 @@ const AppStateContext = createContext<AppStateValue | null>(null);
 export function AppStateProvider({ children }: PropsWithChildren) {
   const database = useSQLiteContext();
   const repository = useMemo(() => new SQLiteStillAliveRepository(database), [database]);
+  const databaseReadyRef = useRef(false);
   const [today, setToday] = useState<DayKey>(() => toDayKey(new Date()));
   const [todayCheckIn, setTodayCheckIn] = useState<CheckIn | null>(null);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
@@ -130,23 +137,59 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
   }, [repository]);
 
+  const syncMemoryNotifications = useCallback(async (storedPosts: Post[], storedPreferences: AppPreferences, requestPermission = false) => {
+    try {
+      await reconcileMemoryNotifications(repository, expoMemoryNotificationAdapter, storedPosts, storedPreferences.memoryNotificationsEnabled, requestPermission);
+      setNotificationPermission(await expoMemoryNotificationAdapter.getPermission());
+      if (storedPreferences.memoryNotificationError) {
+        await repository.updatePreferences({ memoryNotificationError: null });
+        setPreferences((current) => ({ ...current, memoryNotificationError: null }));
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : '回忆通知调度失败';
+      setNotificationPermission(await expoMemoryNotificationAdapter.getPermission());
+      await repository.updatePreferences({ memoryNotificationError: message });
+      setPreferences((current) => ({ ...current, memoryNotificationError: message }));
+      throw cause;
+    }
+  }, [repository]);
+
   useEffect(() => {
-    void initializeBirthdayNotificationChannel().catch(() => undefined);
+    void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch(() => undefined);
     const subscription = NativeAppState.addEventListener('change', (state) => {
-      if (state === 'active') {
+      if (state === 'active' && databaseReadyRef.current) {
         setToday(toDayKey(new Date()));
-        void Promise.all([repository.listPeople(), repository.getPreferences()]).then(([storedPeople, storedPreferences]) => syncBirthdayNotifications(storedPeople, storedPreferences)).catch(() => undefined);
+        void (async () => {
+          const storedPeople = await repository.listPeople();
+          const storedPosts = await repository.listPosts();
+          const storedPreferences = await repository.getPreferences();
+          await syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
+          await syncMemoryNotifications(storedPosts, storedPreferences).catch(() => undefined);
+        })().catch(() => undefined);
       }
     });
     return () => subscription.remove();
-  }, [repository, syncBirthdayNotifications]);
+  }, [repository, syncBirthdayNotifications, syncMemoryNotifications]);
 
   useEffect(() => {
     let active = true;
+    databaseReadyRef.current = false;
     setReady(false);
-    void Promise.all([repository.getCheckIn(today), repository.listCheckIns(), repository.listPosts(), repository.listPeople(), repository.listMedia(), repository.getHomeMemory(today), repository.getPreferences(), repository.listTagDefinitions(), repository.listTagGroups(), repository.listTagSystemSettings(), repository.listPersonTagAssignments(), repository.listAlbums(), repository.listAlbumMedia()])
-      .then(([checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia]) => {
-        if (!active) return;
+    void (async () => {
+      const checkIn = await repository.getCheckIn(today);
+      const storedCheckIns = await repository.listCheckIns();
+      const storedPosts = await repository.listPosts();
+      const storedPeople = await repository.listPeople();
+      const storedMedia = await repository.listMedia();
+      const memory = await repository.getHomeMemory(today);
+      const storedPreferences = await repository.getPreferences();
+      const storedTags = await repository.listTagDefinitions();
+      const storedTagGroups = await repository.listTagGroups();
+      const storedTagSystems = await repository.listTagSystemSettings();
+      const storedPersonTags = await repository.listPersonTagAssignments();
+      const storedAlbums = await repository.listAlbums();
+      const storedAlbumMedia = await repository.listAlbumMedia();
+      if (active) {
         setError(null);
         setTodayCheckIn(checkIn);
         setCheckIns(storedCheckIns);
@@ -166,18 +209,26 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           ? { ...storedPreferences, onboardingCompleted: true }
           : storedPreferences;
         setPreferences(effectivePreferences);
-        void syncBirthdayNotifications(storedPeople, effectivePreferences).catch(() => undefined);
-        if (effectivePreferences.onboardingCompleted !== storedPreferences.onboardingCompleted) void repository.updatePreferences({ onboardingCompleted: true });
-        if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
-        setReady(true);
-      })
-      .catch((cause: unknown) => {
+        void (async () => {
+          await syncBirthdayNotifications(storedPeople, effectivePreferences).catch(() => undefined);
+          await syncMemoryNotifications(storedPosts, effectivePreferences).catch(() => undefined);
+          if (memory) await repository.markMemoryShown(memory).catch(() => undefined);
+          if (effectivePreferences.onboardingCompleted !== storedPreferences.onboardingCompleted) await repository.updatePreferences({ onboardingCompleted: true }).catch(() => undefined);
+          setReady(true);
+          databaseReadyRef.current = true;
+        })().catch(() => {
+          setReady(true);
+          databaseReadyRef.current = true;
+        });
+      }
+    })().catch((cause: unknown) => {
         if (!active) return;
         setError(cause instanceof Error ? cause.message : '本地数据加载失败');
+        databaseReadyRef.current = true;
         setReady(true);
       });
     return () => { active = false; };
-  }, [repository, syncBirthdayNotifications, today]);
+  }, [repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
   const checkInToday = useCallback(async () => {
     const checkIn = await repository.checkIn(today);
@@ -196,11 +247,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       updatedAt: now,
     };
     await repository.createPost(post, personIds);
-    setPosts(await repository.listPosts());
+    const storedPosts = await repository.listPosts();
+    setPosts(storedPosts);
     const memory = await repository.getHomeMemory(today);
     setHomeMemory(memory);
     if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
-  }, [repository, today]);
+    void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch(() => undefined);
+  }, [repository, syncMemoryNotifications, today]);
 
   const cleanupUnreferencedMedia = useCallback(async (mediaIds: string[], fallbackMedia: Media[] = []) => {
     const removable: string[] = [];
@@ -229,18 +282,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await repository.updatePost(nextPost, personIds);
     const storedPosts = await repository.listPosts();
     setPosts(storedPosts);
-    const removedMediaIds = extractMediaIds(existing.bodyMarkdown).filter((id) => !extractMediaIds(bodyMarkdown).includes(id));
+    const nextMediaIds = new Set(extractEmbeddedMediaIds(bodyMarkdown));
+    const removedMediaIds = extractEmbeddedMediaIds(existing.bodyMarkdown).filter((id) => !nextMediaIds.has(id));
     await cleanupUnreferencedMedia(removedMediaIds);
   }, [cleanupUnreferencedMedia, posts, repository]);
 
   const deletePost = useCallback(async (postId: string) => {
     const existing = posts.find((post) => post.id === postId);
     if (!existing) return;
+    await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter, postId);
     await repository.deletePost(postId);
-    setPosts(await repository.listPosts());
+    const storedPosts = await repository.listPosts();
+    setPosts(storedPosts);
     setHomeMemory((current) => current?.post.id === postId ? null : current);
-    await cleanupUnreferencedMedia(extractMediaIds(existing.bodyMarkdown));
-  }, [cleanupUnreferencedMedia, posts, repository]);
+    await cleanupUnreferencedMedia(extractEmbeddedMediaIds(existing.bodyMarkdown));
+    void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch(() => undefined);
+  }, [cleanupUnreferencedMedia, posts, repository, syncMemoryNotifications]);
 
   const getPersonIdsByPost = useCallback((postId: string) => repository.listPersonIdsByPost(postId), [repository]);
 
@@ -468,6 +525,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const discardMedia = useCallback((item: Media) => cleanupUnreferencedMedia([item.id], [item]), [cleanupUnreferencedMedia]);
 
   const saveDraft = useCallback(async (bodyMarkdown: string, dayKey: DayKey = today) => {
+    const existing = await repository.getDraft(dayKey);
     const draft: Draft = {
       id: `draft_${dayKey}`,
       dayKey,
@@ -475,11 +533,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       updatedAt: new Date().toISOString(),
     };
     await repository.saveDraft(draft);
-  }, [repository, today]);
+    if (existing) {
+      const nextMediaIds = new Set(extractEmbeddedMediaIds(bodyMarkdown));
+      const removedMediaIds = extractEmbeddedMediaIds(existing.bodyMarkdown).filter((id) => !nextMediaIds.has(id));
+      await cleanupUnreferencedMedia(removedMediaIds);
+    }
+  }, [cleanupUnreferencedMedia, repository, today]);
 
   const loadDraft = useCallback(async (dayKey: DayKey = today) => {
-    const draft = await repository.getDraft(dayKey);
-    return draft?.bodyMarkdown ?? '';
+    return repository.getDraft(dayKey);
   }, [repository, today]);
 
   const createBackupSnapshot = useCallback(() => repository.exportBackupSnapshot(), [repository]);
@@ -489,12 +551,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const stored = await repository.getPreferences();
     setPreferences(stored);
     if ('birthdayNotificationsEnabled' in changes || 'birthdayReminderHour' in changes || 'birthdayReminderMinute' in changes) await syncBirthdayNotifications(people, stored, changes.birthdayNotificationsEnabled === true);
+    if ('memoryNotificationsEnabled' in changes) await syncMemoryNotifications(posts, stored, changes.memoryNotificationsEnabled === true);
     if ('globalMemoryEnabled' in changes) {
       const memory = await repository.getHomeMemory(today);
       setHomeMemory(memory);
       if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
     }
-  }, [people, repository, syncBirthdayNotifications, today]);
+  }, [people, posts, repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
   const setBirthdayNotificationsEnabled = useCallback(async (enabled: boolean) => {
     await repository.updatePreferences({ birthdayNotificationsEnabled: enabled });
@@ -507,6 +570,18 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const stored = await repository.getPreferences();
     await syncBirthdayNotifications(await repository.listPeople(), stored, false);
   }, [repository, syncBirthdayNotifications]);
+
+  const setMemoryNotificationsEnabled = useCallback(async (enabled: boolean) => {
+    await repository.updatePreferences({ memoryNotificationsEnabled: enabled });
+    const stored = await repository.getPreferences();
+    setPreferences(stored);
+    await syncMemoryNotifications(posts, stored, enabled);
+  }, [posts, repository, syncMemoryNotifications]);
+
+  const retryMemoryNotifications = useCallback(async () => {
+    const stored = await repository.getPreferences();
+    await syncMemoryNotifications(await repository.listPosts(), stored, false);
+  }, [repository, syncMemoryNotifications]);
 
   const openNotificationSettings = useCallback(() => Linking.openSettings(), []);
 
@@ -521,12 +596,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const restoreBackupSnapshot = useCallback(async (snapshot: BackupSnapshot) => {
     const oldMedia = media;
     const oldPeople = people;
+    const oldPosts = posts;
     const oldPreferences = preferences;
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
+    await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
     try {
       await repository.replaceFromBackup(snapshot);
     } catch (cause) {
       void syncBirthdayNotifications(oldPeople, oldPreferences).catch(() => undefined);
+      void syncMemoryNotifications(oldPosts, oldPreferences).catch(() => undefined);
       throw cause;
     }
     const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia] = await Promise.all([
@@ -559,6 +637,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setAlbumMedia(storedAlbumMedia);
     if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
     void syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
+    void syncMemoryNotifications(storedPosts, storedPreferences).catch(() => undefined);
 
     const restoredPaths = new Set(storedMedia.map((item) => item.localPath));
     for (const item of oldMedia) {
@@ -570,11 +649,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         // 数据已经成功恢复；旧的孤立文件可在后续维护时再次清理。
       }
     }
-  }, [media, people, preferences, repository, syncBirthdayNotifications, today]);
+  }, [media, people, posts, preferences, repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
   const deleteAllLocalData = useCallback(async () => {
     const storedMedia = media;
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
+    await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
     await repository.deleteAllData();
     setTodayCheckIn(null);
     setCheckIns([]);
@@ -670,11 +750,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     updatePreferences,
     setBirthdayNotificationsEnabled,
     retryBirthdayNotifications,
+    setMemoryNotificationsEnabled,
+    retryMemoryNotifications,
     openNotificationSettings,
     recordBackupExport,
     dismissBackupReminder,
     deleteAllLocalData,
-  }), [addPhotoToAlbum, albumMedia, albums, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
+  }), [addPhotoToAlbum, albumMedia, albums, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }
@@ -685,13 +767,9 @@ export function useAppState(): AppStateValue {
   return value;
 }
 
-function extractMediaIds(markdown: string): string[] {
-  return [...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].map((match) => match[1]);
-}
-
 function validatePost(bodyMarkdown: string, personIds: string[]): void {
-  if (!bodyMarkdown.trim()) throw new Error('正文和图片至少需要保留一项');
-  if (extractMediaIds(bodyMarkdown).length > 9) throw new Error('一篇日记最多包含 9 张图片');
+  if (!bodyMarkdown.trim()) throw new Error('正文、图片或语音至少需要保留一项');
+  if (extractImageMediaIds(bodyMarkdown).length > 9) throw new Error('一篇日记最多包含 9 张图片');
   if (new Set(personIds).size > 10) throw new Error('一篇日记最多关联 10 个人物');
 }
 

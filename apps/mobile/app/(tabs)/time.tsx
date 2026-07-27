@@ -7,6 +7,7 @@ import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../src/state/app-state';
+import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
 
 type ViewMode = 'timeline' | 'calendar';
 
@@ -129,6 +130,7 @@ function TimelinePost({ authorName, mediaById, onPress, post }: { authorName: st
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is { localPath: string } => Boolean(item));
   const plainText = markdownToPlainText(post.bodyMarkdown);
+  const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.entry, pressed && styles.pressed]}>
       <View style={styles.entryHeader}>
@@ -141,7 +143,7 @@ function TimelinePost({ authorName, mediaById, onPress, post }: { authorName: st
       {plainText ? <Text numberOfLines={6} style={styles.entryText}>{plainText}</Text> : null}
       {images.length ? <TimelineImages images={images} totalCount={mediaIds.length} /> : null}
       <View style={styles.entryFooter}>
-        <Text style={styles.entryType}>{images.length ? `${mediaIds.length} 张照片` : '文字记录'}</Text>
+        <Text style={styles.entryType}>{[images.length ? `${mediaIds.length} 张照片` : '', audioEmbeds.length ? audioEmbeds.length === 1 ? `语音 · ${formatAudioDuration(audioEmbeds[0].durationMs)}` : `${audioEmbeds.length} 段语音` : ''].filter(Boolean).join(' · ') || '文字记录'}</Text>
         <Text style={styles.entryOpen}>查看全文　›</Text>
       </View>
     </Pressable>
@@ -258,7 +260,7 @@ function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOp
         </View>
         {selectedPosts.map((post) => (
           <Pressable key={post.id} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedPost, pressed && styles.pressed]}>
-            <Text numberOfLines={3} style={styles.selectedPostText}>{markdownToPlainText(post.bodyMarkdown) || '一张照片'}</Text>
+            <Text numberOfLines={3} style={styles.selectedPostText}>{markdownToPlainText(post.bodyMarkdown) || (extractAudioEmbeds(post.bodyMarkdown).length ? `${extractAudioEmbeds(post.bodyMarkdown).length} 段语音` : '一张照片')}</Text>
             <Text style={styles.selectedPostArrow}>查看 →</Text>
           </Pressable>
         ))}

@@ -43,7 +43,7 @@ export default function BackupScreen() {
 
   const confirmRestore = (parsed: ParsedBackup) => {
     const { snapshot } = parsed;
-    Alert.alert('检查到有效备份', `导出于 ${formatDateTime(parsed.exportedAt)}\n包含 ${snapshot.posts.length} 篇日记、${snapshot.people.length} 个人物和 ${snapshot.media.length} 张图片。\n\n继续后，当前设备上的全部内容将被替换。`, [
+    Alert.alert('检查到有效备份', `导出于 ${formatDateTime(parsed.exportedAt)}\n包含 ${snapshot.posts.length} 篇日记、${snapshot.people.length} 个人物和 ${snapshot.media.length} 个媒体文件。\n\n继续后，当前设备上的全部内容将被替换。`, [
       { text: '取消', style: 'cancel' },
       { text: '继续', onPress: () => Alert.alert('最后确认', '恢复无法撤销。建议先导出当前数据，再覆盖恢复。', [
         { text: '暂不恢复', style: 'cancel' },
@@ -58,7 +58,7 @@ export default function BackupScreen() {
       setBusy('restore');
       materialized = materializeBackupMedia(parsed);
       await restoreBackupSnapshot(materialized.snapshot);
-      Alert.alert('恢复完成', '备份中的日记、人物和图片已经恢复到本机。');
+      Alert.alert('恢复完成', '备份中的日记、人物和媒体已经恢复到本机。');
     } catch (cause: unknown) {
       if (materialized) removeMaterializedMedia(materialized);
       Alert.alert('恢复失败', errorMessage(cause));

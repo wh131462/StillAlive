@@ -6,6 +6,7 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import type { Post } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
+import { extractAudioEmbeds } from '../../src/domain/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from '../../src/domain/person-profile';
 
 export default function PersonScreen() {
@@ -92,7 +93,7 @@ export default function PersonScreen() {
                 <Pressable key={post.id} accessibilityRole="button" onPress={() => router.push(`/post/${post.id}`)} style={({ pressed }) => [styles.memory, pressed && styles.memoryPressed]}>
                   <Text style={styles.date}>{post.dayKey.replaceAll('-', '.')}</Text>
                   {image ? <Image accessibilityLabel="共同记忆图片" resizeMode="cover" source={{ uri: image.localPath }} style={styles.memoryImage} /> : null}
-                  <Text style={styles.body}>{markdownToPlainText(post.bodyMarkdown)}</Text>
+                  <Text style={styles.body}>{markdownToPlainText(post.bodyMarkdown) || (extractAudioEmbeds(post.bodyMarkdown).length ? `${extractAudioEmbeds(post.bodyMarkdown).length} 段语音` : '一张照片')}</Text>
                 </Pressable>
               );
             })}

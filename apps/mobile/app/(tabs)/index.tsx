@@ -9,6 +9,7 @@ import { useAppState } from '../../src/state/app-state';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
+import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
 
 export default function TodayScreen() {
   const router = useRouter();
@@ -155,6 +156,7 @@ function TodayPostCard({ authorName, index, mediaById, onImagePress, onPress, po
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const excerpt = markdownToPlainText(post.bodyMarkdown);
+  const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
 
   return (
     <Pressable accessibilityLabel={`打开今天 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.todayNote, index === 0 && styles.todayNoteFirst, pressed && styles.pressed]}>
@@ -166,11 +168,11 @@ function TodayPostCard({ authorName, index, mediaById, onImagePress, onPress, po
         </View>
       </View>
       <Text numberOfLines={6} style={styles.todayNoteText}>
-        {excerpt || `今天留下了 ${mediaIds.length} 张照片。`}
+        {excerpt || [mediaIds.length ? `${mediaIds.length} 张照片` : '', audioEmbeds.length ? `${audioEmbeds.length} 段语音` : ''].filter(Boolean).join(' · ')}
       </Text>
       {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
       <View style={styles.todayNoteFooter}>
-        <Text style={styles.todayNoteType}>{images.length ? `${mediaIds.length} 张照片` : '文字记录'}</Text>
+        <Text style={styles.todayNoteType}>{[images.length ? `${mediaIds.length} 张照片` : '', audioEmbeds.length ? audioEmbeds.length === 1 ? `语音 · ${formatAudioDuration(audioEmbeds[0].durationMs)}` : `${audioEmbeds.length} 段语音` : ''].filter(Boolean).join(' · ') || '文字记录'}</Text>
         <Text style={styles.todayNoteOpen}>查看全文　›</Text>
       </View>
     </Pressable>
@@ -231,7 +233,8 @@ function firstMediaId(markdown: string): string | null {
 }
 
 function memoryExcerpt(markdown: string): string {
-  return markdownToPlainText(markdown).replace(/\[照片\]/g, '').trim() || '那天留下了一张照片。';
+  const audioEmbeds = extractAudioEmbeds(markdown);
+  return markdownToPlainText(markdown).replace(/\[照片\]/g, '').trim() || (audioEmbeds.length ? `那天留下了 ${audioEmbeds.length} 段语音。` : '那天留下了一张照片。');
 }
 
 function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMemory']>, today: string): string {

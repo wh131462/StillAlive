@@ -25,6 +25,7 @@ export default function FilePreview({ currentIndex, files, onClose, onNavigate, 
         onClose={() => void onClose()}
         onNavigate={(index) => void onNavigate(index)}
         requestHandler={(url: string, init?: RequestInit) => requestFile(url, init, readLocalFile)}
+        showDownload={false}
         shouldFetchAsBlob={() => true}
       />
     </>

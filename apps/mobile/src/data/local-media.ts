@@ -23,6 +23,31 @@ export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media
   };
 }
 
+export async function persistVoiceRecording(uri: string): Promise<Media> {
+  const id = createLocalId('media');
+  const directory = new Directory(Paths.document, 'media');
+  directory.create({ idempotent: true, intermediates: true });
+  const source = new File(uri);
+  const extension = source.extension || '.m4a';
+  const destination = new File(directory, `${id}${extension}`);
+  try {
+    await source.move(destination);
+    if (!destination.exists || destination.size <= 0) throw new Error('录音文件为空');
+    return {
+      id,
+      localPath: destination.uri,
+      mimeType: mimeTypeForAudioExtension(extension),
+      width: null,
+      height: null,
+      checksum: destination.md5 ?? '',
+      createdAt: new Date().toISOString(),
+    };
+  } catch (cause) {
+    if (destination.exists) destination.delete();
+    throw cause;
+  }
+}
+
 export async function persistAlbumImage(personId: string | null, albumId: string, asset: ImagePickerAsset): Promise<Media> {
   const id = createLocalId('media');
   const targetDirectory = personId
@@ -95,6 +120,13 @@ function mimeTypeForExtension(extension: string): string {
   if (extension === '.webp') return 'image/webp';
   if (extension === '.heic' || extension === '.heif') return 'image/heic';
   return 'image/jpeg';
+}
+
+function mimeTypeForAudioExtension(extension: string): string {
+  if (extension === '.webm') return 'audio/webm';
+  if (extension === '.caf') return 'audio/x-caf';
+  if (extension === '.3gp') return 'audio/3gpp';
+  return 'audio/mp4';
 }
 
 function createLocalId(prefix: string): string {

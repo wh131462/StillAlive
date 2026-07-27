@@ -2,8 +2,10 @@ import { Platform } from 'react-native';
 import { isRunningInExpoGo } from 'expo';
 import type * as ExpoNotifications from 'expo-notifications';
 import type { BirthdayNotificationAdapter, PlannedBirthdayNotification } from '../domain/birthday-notifications';
+import type { MemoryNotificationAdapter, PlannedMemoryNotification } from '../domain/memory-notifications';
 
-const CHANNEL_ID = 'birthday-reminders';
+const BIRTHDAY_CHANNEL_ID = 'birthday-reminders';
+const MEMORY_CHANNEL_ID = 'memory-reminders';
 let notificationsModule: typeof ExpoNotifications | null | undefined;
 
 export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
@@ -13,12 +15,12 @@ export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
   },
   async requestPermission() {
     const notifications = requireNotifications();
-    await ensureAndroidChannel(notifications);
+    await ensureBirthdayChannel(notifications);
     return permissionStatus(await notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: false, allowSound: true } }), notifications);
   },
   async schedule(item: PlannedBirthdayNotification) {
     const notifications = requireNotifications();
-    await ensureAndroidChannel(notifications);
+    await ensureBirthdayChannel(notifications);
     return notifications.scheduleNotificationAsync({
       content: {
         title: item.eventType === 'advance' ? `${item.personName}的生日快到了` : `今天是${item.personName}的生日`,
@@ -29,7 +31,7 @@ export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
       trigger: {
         type: notifications.SchedulableTriggerInputTypes.DATE,
         date: item.triggerAt,
-        channelId: CHANNEL_ID,
+        channelId: BIRTHDAY_CHANNEL_ID,
       },
     });
   },
@@ -38,8 +40,39 @@ export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
   },
 };
 
+export const expoMemoryNotificationAdapter: MemoryNotificationAdapter = {
+  getPermission: expoBirthdayNotificationAdapter.getPermission,
+  async requestPermission() {
+    const notifications = requireNotifications();
+    await ensureMemoryChannel(notifications);
+    return permissionStatus(await notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: false, allowSound: true } }), notifications);
+  },
+  async schedule(item: PlannedMemoryNotification) {
+    const notifications = requireNotifications();
+    await ensureMemoryChannel(notifications);
+    return notifications.scheduleNotificationAsync({
+      content: {
+        title: item.onThisDay ? '那年今天，你留下了一段记录' : '偶尔翻到一段以前的你',
+        body: `${item.post.dayKey.replaceAll('-', '.')} 的这段记忆，想和你再见一面。`,
+        data: { postId: item.post.id, type: 'memory' },
+        sound: 'default',
+      },
+      trigger: {
+        type: notifications.SchedulableTriggerInputTypes.DATE,
+        date: item.triggerAt,
+        channelId: MEMORY_CHANNEL_ID,
+      },
+    });
+  },
+  cancel: expoBirthdayNotificationAdapter.cancel,
+};
+
 export async function initializeBirthdayNotificationChannel(): Promise<void> {
-  await ensureAndroidChannel(loadNotifications());
+  await ensureBirthdayChannel(loadNotifications());
+}
+
+export async function initializeMemoryNotificationChannel(): Promise<void> {
+  await ensureMemoryChannel(loadNotifications());
 }
 
 export function getLastBirthdayNotificationResponse(): ExpoNotifications.NotificationResponse | null {
@@ -63,14 +96,24 @@ function permissionStatus(status: ExpoNotifications.NotificationPermissionsStatu
   return status.status === 'denied' ? 'denied' : 'undetermined';
 }
 
-async function ensureAndroidChannel(notifications: typeof ExpoNotifications | null): Promise<void> {
+async function ensureBirthdayChannel(notifications: typeof ExpoNotifications | null): Promise<void> {
   if (Platform.OS !== 'android' || !notifications) return;
-  await notifications.setNotificationChannelAsync(CHANNEL_ID, {
+  await notifications.setNotificationChannelAsync(BIRTHDAY_CHANNEL_ID, {
     name: '人物生日提醒',
     description: '人物生日提前三天和当天的本地提醒',
     importance: notifications.AndroidImportance.HIGH,
     sound: 'default',
     vibrationPattern: [0, 250, 180, 250],
+  });
+}
+
+async function ensureMemoryChannel(notifications: typeof ExpoNotifications | null): Promise<void> {
+  if (Platform.OS !== 'android' || !notifications) return;
+  await notifications.setNotificationChannelAsync(MEMORY_CHANNEL_ID, {
+    name: '旧日回忆',
+    description: '偶尔推荐以前留下的本地记录',
+    importance: notifications.AndroidImportance.DEFAULT,
+    sound: 'default',
   });
 }
 

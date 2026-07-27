@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from '@still-alive/storage';
 import type { AlbumMedia, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../domain/memory-notifications';
 
 interface CheckInRow {
   id: string;
@@ -80,6 +81,8 @@ export interface AppPreferences {
   birthdayReminderHour: number;
   birthdayReminderMinute: number;
   birthdayNotificationError: string | null;
+  memoryNotificationsEnabled: boolean;
+  memoryNotificationError: string | null;
 }
 
 export type HomeMemory =
@@ -242,11 +245,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     PRAGMA user_version = 6;
   `);
 
-  if (currentVersion < 7) await db.execAsync(`
+  if (currentVersion < 7) {
+    await repairAlbumTablesBeforeV7(db);
+    await db.execAsync(`
     PRAGMA foreign_keys = OFF;
     BEGIN IMMEDIATE;
-    DROP INDEX person_albums_person_idx;
-    DROP INDEX album_media_album_idx;
+    DROP INDEX IF EXISTS person_albums_person_idx;
+    DROP INDEX IF EXISTS album_media_album_idx;
     ALTER TABLE album_media RENAME TO album_media_v6;
     ALTER TABLE person_albums RENAME TO person_albums_v6;
     CREATE TABLE person_albums (
@@ -274,7 +279,123 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     PRAGMA user_version = 7;
     COMMIT;
     PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  if (currentVersion < 8) {
+    await addColumnIfMissing(db, 'posts', 'audio_media_id', 'TEXT REFERENCES media(id) ON DELETE SET NULL');
+    await addColumnIfMissing(db, 'posts', 'audio_duration_ms', 'INTEGER');
+    await addColumnIfMissing(db, 'drafts', 'audio_media_id', 'TEXT REFERENCES media(id) ON DELETE SET NULL');
+    await addColumnIfMissing(db, 'drafts', 'audio_duration_ms', 'INTEGER');
+    await db.execAsync('PRAGMA user_version = 8;');
+  }
+
+  if (currentVersion < 9) {
+    await migrateLegacyAudioColumns(db);
+    await db.execAsync('PRAGMA user_version = 9;');
+  }
+
+  if (currentVersion < 10) {
+    await addColumnIfMissing(db, 'memory_exposures', 'review_count', 'INTEGER NOT NULL DEFAULT 0');
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS memory_notification_schedules (
+        id TEXT PRIMARY KEY NOT NULL,
+        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        scheduled_at TEXT NOT NULL,
+        platform_identifier TEXT NOT NULL UNIQUE
+      );
+      CREATE INDEX IF NOT EXISTS memory_notification_schedules_post_idx ON memory_notification_schedules(post_id);
+      PRAGMA user_version = 10;
+    `);
+  }
+
+  if (currentVersion < 11) {
+    await migrateLegacyAudioColumns(db);
+    await db.execAsync('PRAGMA user_version = 11;');
+  }
+}
+
+async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    UPDATE posts
+    SET body_markdown = CASE
+      WHEN TRIM(body_markdown) = '' THEN '![语音](audio://' || audio_media_id || '?duration=' || COALESCE(audio_duration_ms, 0) || ')'
+      ELSE body_markdown || CHAR(10) || CHAR(10) || '![语音](audio://' || audio_media_id || '?duration=' || COALESCE(audio_duration_ms, 0) || ')'
+    END,
+    audio_media_id = NULL,
+    audio_duration_ms = NULL
+    WHERE audio_media_id IS NOT NULL;
+
+    UPDATE drafts
+    SET body_markdown = CASE
+      WHEN TRIM(body_markdown) = '' THEN '![语音](audio://' || audio_media_id || '?duration=' || COALESCE(audio_duration_ms, 0) || ')'
+      ELSE body_markdown || CHAR(10) || CHAR(10) || '![语音](audio://' || audio_media_id || '?duration=' || COALESCE(audio_duration_ms, 0) || ')'
+    END,
+    audio_media_id = NULL,
+    audio_duration_ms = NULL
+    WHERE audio_media_id IS NOT NULL;
   `);
+}
+
+async function repairAlbumTablesBeforeV7(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync('PRAGMA foreign_keys = OFF;');
+  try {
+    let hasAlbums = await tableExists(db, 'person_albums');
+    let hasAlbumMedia = await tableExists(db, 'album_media');
+    let hasLegacyAlbums = await tableExists(db, 'person_albums_v6');
+    let hasLegacyAlbumMedia = await tableExists(db, 'album_media_v6');
+
+    if (!hasAlbums && hasLegacyAlbums) {
+      await db.execAsync('ALTER TABLE person_albums_v6 RENAME TO person_albums;');
+      hasAlbums = true;
+      hasLegacyAlbums = false;
+    }
+    if (!hasAlbumMedia && hasLegacyAlbumMedia) {
+      await db.execAsync('ALTER TABLE album_media_v6 RENAME TO album_media;');
+      hasAlbumMedia = true;
+      hasLegacyAlbumMedia = false;
+    }
+    if (!hasAlbums) await db.execAsync(`
+      CREATE TABLE person_albums (
+        id TEXT PRIMARY KEY NOT NULL,
+        person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        cover_media_id TEXT REFERENCES media(id) ON DELETE SET NULL,
+        sort_order INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    if (!hasAlbumMedia) await db.execAsync(`
+      CREATE TABLE album_media (
+        album_id TEXT NOT NULL REFERENCES person_albums(id) ON DELETE CASCADE,
+        media_id TEXT NOT NULL UNIQUE REFERENCES media(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL,
+        added_at TEXT NOT NULL,
+        PRIMARY KEY (album_id, media_id)
+      );
+    `);
+
+    if (hasAlbums && hasLegacyAlbums) {
+      await db.execAsync('INSERT OR IGNORE INTO person_albums SELECT * FROM person_albums_v6;');
+    }
+    if (hasAlbumMedia && hasLegacyAlbumMedia) {
+      await db.execAsync('INSERT OR IGNORE INTO album_media SELECT * FROM album_media_v6;');
+    }
+    await db.execAsync('DROP TABLE IF EXISTS album_media_v6; DROP TABLE IF EXISTS person_albums_v6;');
+  } finally {
+    await db.execAsync('PRAGMA foreign_keys = ON;');
+  }
+}
+
+async function tableExists(db: SQLiteDatabase, table: string): Promise<boolean> {
+  const row = await db.getFirstAsync<{ name: string }>('SELECT name FROM sqlite_master WHERE type = ? AND name = ?', 'table', table);
+  return Boolean(row);
+}
+
+async function addColumnIfMissing(db: SQLiteDatabase, table: string, column: string, definition: string): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (!columns.some((item) => item.name === column)) await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
 }
 
 export class SQLiteStillAliveRepository implements StillAliveRepository {
@@ -450,9 +571,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async isMediaReferenced(mediaId: string): Promise<boolean> {
-    const reference = `%media://${mediaId}%`;
+    const imageReference = `%media://${mediaId}%`;
+    const audioReference = `%audio://${mediaId}%`;
     const row = await this.db.getFirstAsync<{ referenced: number }>(
       `SELECT EXISTS(
+        SELECT 1 FROM posts WHERE body_markdown LIKE ?
+        UNION ALL
+        SELECT 1 FROM drafts WHERE body_markdown LIKE ?
+        UNION ALL
         SELECT 1 FROM posts WHERE body_markdown LIKE ?
         UNION ALL
         SELECT 1 FROM drafts WHERE body_markdown LIKE ?
@@ -463,8 +589,10 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         UNION ALL
         SELECT 1 FROM settings WHERE key = 'profileAvatarMediaId' AND value = ?
       ) AS referenced`,
-      reference,
-      reference,
+      imageReference,
+      imageReference,
+      audioReference,
+      audioReference,
       mediaId,
       mediaId,
       mediaId,
@@ -666,6 +794,34 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     });
   }
 
+  async listMemoryNotificationSchedules(): Promise<MemoryNotificationSchedule[]> {
+    const rows = await this.db.getAllAsync<{ id: string; post_id: string; scheduled_at: string; platform_identifier: string }>('SELECT id, post_id, scheduled_at, platform_identifier FROM memory_notification_schedules ORDER BY scheduled_at');
+    return rows.map((row) => ({ id: row.id, postId: row.post_id, scheduledAt: row.scheduled_at, platformIdentifier: row.platform_identifier }));
+  }
+
+  async replaceMemoryNotificationSchedules(items: MemoryNotificationSchedule[]): Promise<void> {
+    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+      await transaction.runAsync('DELETE FROM memory_notification_schedules');
+      for (const item of items) await transaction.runAsync('INSERT INTO memory_notification_schedules (id, post_id, scheduled_at, platform_identifier) VALUES (?, ?, ?, ?)', item.id, item.postId, item.scheduledAt, item.platformIdentifier);
+    });
+  }
+
+  async listMemoryNotificationExposures(): Promise<MemoryNotificationExposure[]> {
+    const rows = await this.db.getAllAsync<{ post_id: string; shown_at: string; review_count: number }>("SELECT post_id, shown_at, review_count FROM memory_exposures WHERE kind = 'notification'");
+    return rows.map((row) => ({ postId: row.post_id, lastShownAt: row.shown_at, reviewCount: row.review_count }));
+  }
+
+  async recordMemoryNotificationExposure(postId: string, shownAt: string): Promise<void> {
+    await this.db.runAsync(
+      `INSERT INTO memory_exposures (post_id, kind, shown_at, review_count) VALUES (?, 'notification', ?, 1)
+       ON CONFLICT(post_id, kind) DO UPDATE SET
+         review_count = memory_exposures.review_count + CASE WHEN excluded.shown_at > memory_exposures.shown_at THEN 1 ELSE 0 END,
+         shown_at = MAX(memory_exposures.shown_at, excluded.shown_at)`,
+      postId,
+      shownAt,
+    );
+  }
+
   async getHomeMemory(today: DayKey): Promise<HomeMemory | null> {
     const preferences = await this.getPreferences();
     if (!preferences.globalMemoryEnabled) return null;
@@ -730,6 +886,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       birthdayReminderHour: Number(values.birthdayReminderHour ?? 9),
       birthdayReminderMinute: Number(values.birthdayReminderMinute ?? 0),
       birthdayNotificationError: values.birthdayNotificationError || null,
+      memoryNotificationsEnabled: values.memoryNotificationsEnabled === 'true',
+      memoryNotificationError: values.memoryNotificationError || null,
     };
   }
 
@@ -749,7 +907,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
-      await transaction.execAsync("DELETE FROM birthday_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
+      await transaction.execAsync("DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
     });
   }
 
@@ -788,7 +946,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, created_at) VALUES (?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.createdAt);
       }

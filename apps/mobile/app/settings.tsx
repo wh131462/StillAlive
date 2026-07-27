@@ -9,7 +9,7 @@ import { TimePickerField } from '../src/components/date-time-picker';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { deleteAllLocalData, notificationPermission, openNotificationSettings, preferences, retryBirthdayNotifications, setBirthdayNotificationsEnabled, updatePreferences } = useAppState();
+  const { deleteAllLocalData, notificationPermission, openNotificationSettings, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, updatePreferences } = useAppState();
 
   const savePreference = (changes: Parameters<typeof updatePreferences>[0]) => void updatePreferences(changes).catch((cause: unknown) => Alert.alert('设置失败', errorMessage(cause)));
   const confirmDeleteAll = () => {
@@ -41,6 +41,8 @@ export default function SettingsScreen() {
       <Text style={styles.eyebrow}>MEMORIES</Text>
       <View style={styles.group}>
         <SwitchRow checked={preferences.globalMemoryEnabled} hint="控制那年今日和人物回忆在今日页出现" label="今日回忆" onPress={() => savePreference({ globalMemoryEnabled: !preferences.globalMemoryEnabled })} />
+        <View style={styles.separator} />
+        <SwitchRow checked={preferences.memoryNotificationsEnabled} hint="在记忆逐渐模糊时，偶尔推荐以前的记录" label="回忆通知" onPress={() => void setMemoryNotificationsEnabled(!preferences.memoryNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
       </View>
 
       <Text style={styles.eyebrow}>REMINDERS</Text>
@@ -51,6 +53,7 @@ export default function SettingsScreen() {
       <Text style={styles.permissionState}>系统权限 {notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text>
       {notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
       {preferences.birthdayNotificationError ? <><Pressable onPress={() => void retryBirthdayNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试通知调度</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
+      {preferences.memoryNotificationError ? <><Pressable onPress={() => void retryMemoryNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试回忆通知</Text></Pressable><Text style={styles.error}>{preferences.memoryNotificationError}</Text></> : null}
 
       <Text style={styles.eyebrow}>PRIVACY</Text>
       <View style={styles.privacyCard}><Text style={styles.privacyTitle}>数据只保存在这台设备</Text><Text style={styles.privacyText}>没有账号、后台同步或第三方行为追踪。只有主动导出时，内容才会通过系统分享面板离开应用。</Text><Text style={styles.location}>当前设备 应用私有目录</Text></View>
@@ -73,7 +76,7 @@ function errorMessage(cause: unknown) { return cause instanceof Error ? cause.me
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, eyebrow: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
-  group: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, entry: { minHeight: 72, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, entryCopy: { flex: 1 }, entryTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' }, entryHint: { marginTop: 5, color: colors.inkFaint, fontSize: 9, lineHeight: 15 },
+  group: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.line }, entry: { minHeight: 72, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, entryCopy: { flex: 1 }, entryTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' }, entryHint: { marginTop: 5, color: colors.inkFaint, fontSize: 9, lineHeight: 15 },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, switchTrack: { width: 44, height: 26, marginLeft: spacing.md, padding: 2, borderRadius: 13, backgroundColor: colors.line }, switchTrackOn: { backgroundColor: colors.life }, switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper }, switchThumbOn: { alignSelf: 'flex-end' },
   permissionState: { marginTop: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 }, inlineButton: { minHeight: 42, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet }, inlineButtonText: { color: colors.life, fontSize: 10, fontWeight: '700' }, error: { marginTop: spacing.sm, color: '#9B493F', fontSize: 9, lineHeight: 16 },
   privacyCard: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet }, privacyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17 }, privacyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 10, lineHeight: 19 }, location: { marginTop: spacing.md, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },

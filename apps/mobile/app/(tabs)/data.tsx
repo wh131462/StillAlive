@@ -21,6 +21,8 @@ export default function DataScreen() {
   const firstAlbum = selfAlbums.sort((a, b) => a.sortOrder - b.sortOrder)[0];
   const firstPhotoId = firstAlbum?.coverMediaId ?? selfPhotos.find((item) => item.albumId === firstAlbum?.id)?.mediaId;
   const albumCover = media.find((item) => item.id === firstPhotoId);
+  const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
+  const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
 
   return <SafeAreaView style={styles.safeArea}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -40,7 +42,7 @@ export default function DataScreen() {
         <View style={styles.statDivider} />
         <Stat label="人物" value={people.length} />
         <View style={styles.statDivider} />
-        <Stat label="图片" value={media.length} />
+        <Stat label="媒体" value={imageCount + voiceCount} />
       </View>
 
       <Pressable accessibilityLabel="打开我的相册" accessibilityRole="button" onPress={() => router.push('/person/albums')} style={({ pressed }) => [styles.albumCard, pressed && styles.pressed]}>
@@ -58,7 +60,7 @@ export default function DataScreen() {
           <SymbolView name={{ android: 'arrow_outward', ios: 'arrow.up.right', web: 'arrow_outward' }} pointerEvents="none" size={18} tintColor={colors.life} type="hierarchical" />
         </View>
         <Text style={styles.memoryText}>{latestDay ? `最近一次留下在 ${formatDate(latestDay)}。` : '从今天开始，留下第一段属于你的时间。'}</Text>
-        <View style={styles.memoryMeta}><Text style={styles.memoryMetaText}>已记录 {recordedDays} 天</Text><View style={styles.memoryDot} /><Text style={styles.memoryMetaText}>收藏 {media.length} 张图片</Text></View>
+        <View style={styles.memoryMeta}><Text style={styles.memoryMetaText}>已记录 {recordedDays} 天</Text><View style={styles.memoryDot} /><Text style={styles.memoryMetaText}>{imageCount} 张图片 · {voiceCount} 段语音</Text></View>
       </Pressable>
     </ScrollView>
   </SafeAreaView>;

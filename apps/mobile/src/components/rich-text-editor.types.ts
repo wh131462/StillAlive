@@ -21,7 +21,10 @@ export type EditorCommandType =
   | 'horizontalRule'
   | 'table'
   | 'images'
-  | 'mention';
+  | 'mention'
+  | 'audio'
+  | 'recordingStart'
+  | 'recordingCancel';
 
 export interface EditorImage {
   id: string;
@@ -29,10 +32,16 @@ export interface EditorImage {
   alt: string;
 }
 
+export interface EditorAudio {
+  durationMs: number;
+  id: string;
+  uri: string;
+}
+
 export interface EditorCommand {
   id: number;
   type: EditorCommandType;
-  value?: string | EditorImage[];
+  value?: string | EditorAudio | EditorImage[];
 }
 
 export interface EditorMediaSource {

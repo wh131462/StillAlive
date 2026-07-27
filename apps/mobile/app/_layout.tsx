@@ -10,12 +10,18 @@ import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationRes
 export default function RootLayout() {
   const router = useRouter();
   useEffect(() => {
-    const openPerson = (response: NotificationResponse | null) => {
-      const personId = response?.notification.request.content.data?.personId;
+    const openNotification = (response: NotificationResponse | null) => {
+      const data = response?.notification.request.content.data;
+      const postId = data?.postId;
+      if (typeof postId === 'string' && postId) {
+        router.push({ pathname: '/post/[id]', params: { id: postId } });
+        return;
+      }
+      const personId = data?.personId;
       if (typeof personId === 'string' && personId) router.push({ pathname: '/person/[id]', params: { id: personId } });
     };
-    openPerson(getLastBirthdayNotificationResponse());
-    const subscription = addBirthdayNotificationResponseListener(openPerson);
+    openNotification(getLastBirthdayNotificationResponse());
+    const subscription = addBirthdayNotificationResponseListener(openNotification);
     return () => subscription.remove();
   }, [router]);
   return (

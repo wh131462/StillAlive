@@ -6,6 +6,7 @@ import { Alert, Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text
 import type { Media } from '@still-alive/types';
 import { colors, spacing, typography } from '@still-alive/tokens';
 import MarkdownView from '../../src/components/markdown-view.dom';
+import VoicePlayer from '../../src/components/voice-player';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { useAppState } from '../../src/state/app-state';
 
@@ -24,7 +25,7 @@ export default function PostDetailScreen() {
 
   const confirmDelete = () => {
     if (!post) return;
-    Alert.alert('删除这篇日记？', '正文和人物关联会被删除，不再使用的本地图片也会一并清理。', [
+    Alert.alert('删除这篇日记？', '正文、语音、人物关联和不再使用的本地媒体也会一并清理。', [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
@@ -135,6 +136,13 @@ function PostBody({ markdown, mediaById, onImagePress }: { markdown: string; med
       );
     }
 
+    if (segment.type === 'audio') {
+      const item = mediaById.get(segment.id);
+      return item
+        ? <View key={`audio_${segment.id}_${index}`} style={styles.audioSection}><VoicePlayer durationMs={segment.durationMs} uri={item.localPath} /></View>
+        : <View key={`audio_missing_${segment.id}_${index}`} style={styles.audioMissing}><Text style={styles.audioMissingText}>本地语音文件暂时无法播放</Text></View>;
+    }
+
     const item = mediaById.get(segment.id);
     if (!item) return <ImageFallback key={`missing_${segment.id}_${index}`} />;
     return <PostImage alt={segment.alt} item={item} key={`image_${segment.id}_${index}`} onPress={() => onImagePress(item)} />;
@@ -180,16 +188,18 @@ function ImageFallback({ aspectRatio = 4 / 3, onRetry }: { aspectRatio?: number;
 
 type PostBodySegment =
   | { type: 'markdown'; value: string }
-  | { type: 'image'; id: string; alt: string };
+  | { type: 'image'; id: string; alt: string }
+  | { type: 'audio'; id: string; durationMs: number };
 
 function splitPostBody(markdown: string): PostBodySegment[] {
   const segments: PostBodySegment[] = [];
-  const pattern = /!\[([^\]]*)\]\(media:\/\/([^)]+)\)/g;
+  const pattern = /!\[([^\]]*)\]\(media:\/\/([^)]+)\)|!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g;
   let offset = 0;
   for (const match of markdown.matchAll(pattern)) {
     const index = match.index ?? 0;
     if (index > offset) segments.push({ type: 'markdown', value: markdown.slice(offset, index) });
-    segments.push({ type: 'image', alt: match[1], id: match[2] });
+    if (match[3]) segments.push({ type: 'audio', durationMs: Number(match[4] ?? 0), id: match[3] });
+    else segments.push({ type: 'image', alt: match[1], id: match[2] });
     offset = index + match[0].length;
   }
   if (offset < markdown.length) segments.push({ type: 'markdown', value: markdown.slice(offset) });
@@ -223,6 +233,9 @@ const styles = StyleSheet.create({
   rule: { width: 42, height: 2, marginTop: spacing.xl, backgroundColor: colors.sun },
   markdown: { marginTop: spacing.xl },
   markdownView: { width: '100%', backgroundColor: 'transparent' },
+  audioSection: { marginTop: spacing.md },
+  audioMissing: { minHeight: 64, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.paper },
+  audioMissingText: { color: colors.inkFaint, fontSize: 10 },
   postImage: { width: '100%', marginBottom: spacing.lg, borderTopRightRadius: 22, borderBottomLeftRadius: 22, backgroundColor: colors.lifeLight },
   imageFallback: { width: '100%', marginBottom: spacing.lg, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderTopRightRadius: 22, borderBottomLeftRadius: 22, backgroundColor: colors.paper },
   imageFallbackTitle: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 11 },

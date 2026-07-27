@@ -6,31 +6,39 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import type { DOMProps } from 'expo/dom';
-import type { EditorCommand, EditorImage, EditorMediaSource } from './rich-text-editor.types';
+import type { EditorAudio, EditorCommand, EditorImage, EditorMediaSource } from './rich-text-editor.types';
+import { createAudioEmbed, formatAudioDuration } from '../domain/embedded-media';
 
 interface RichTextEditorProps {
   initialMarkdown: string;
   placeholder: string;
   command: EditorCommand | null;
+  audioSaving: boolean;
   media: EditorMediaSource[];
+  recordingDurationMs: number | null;
   onChange(markdown: string): void;
   onFormatsChange(formats: string[]): void;
   onMention(): void;
   onReplaceImage(mediaId: string): void;
+  onStopRecording(): void;
   dom?: DOMProps;
 }
 
 const MEDIA_ORIGIN = 'https://still-alive.local/media/';
+const AUDIO_ORIGIN = 'https://still-alive.local/audio/';
 
 export default function RichTextEditor({
   initialMarkdown,
   placeholder,
   command,
+  audioSaving,
   media,
+  recordingDurationMs,
   onChange,
   onFormatsChange,
   onMention,
   onReplaceImage,
+  onStopRecording,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
@@ -70,6 +78,16 @@ export default function RichTextEditor({
   }, [command, onChange, onFormatsChange]);
 
   useEffect(() => {
+    const frame = editorRef.current?.querySelector<HTMLElement>('.audio-recording-frame');
+    if (!frame) return;
+    frame.classList.toggle('is-saving', audioSaving);
+    const title = frame.querySelector<HTMLElement>('.audio-recording-title');
+    const meta = frame.querySelector<HTMLElement>('.audio-recording-meta');
+    if (title) title.textContent = audioSaving ? '正在保存语音' : '正在录音';
+    if (meta) meta.textContent = audioSaving ? '完成后会插入当前位置' : `${formatAudioDuration(recordingDurationMs)} · 轻声说下此刻`;
+  }, [audioSaving, recordingDurationMs]);
+
+  useEffect(() => {
     const handleSelectionChange = () => {
       const editor = editorRef.current;
       if (!editor) return;
@@ -105,6 +123,27 @@ export default function RichTextEditor({
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target instanceof Element ? event.target : null;
+    const audioFrame = target?.closest<HTMLElement>('.audio-frame');
+    if (audioFrame && target?.closest('.audio-remove')) {
+      event.preventDefault();
+      audioFrame.remove();
+      ensureTrailingParagraph(event.currentTarget);
+      emitMarkdown(event.currentTarget, onChange);
+      return;
+    }
+    if (audioFrame && target?.closest('.audio-play')) {
+      event.preventDefault();
+      const audio = audioFrame.querySelector('audio');
+      if (!audio) return;
+      if (audio.paused) void audio.play().catch(() => audioFrame.classList.add('is-audio-error'));
+      else audio.pause();
+      return;
+    }
+    if (target?.closest('.audio-recording-stop')) {
+      event.preventDefault();
+      onStopRecording();
+      return;
+    }
     const mediaId = target?.closest<HTMLElement>('.media-frame')?.dataset.mediaId;
     if (mediaId) onReplaceImage(mediaId);
   };
@@ -215,8 +254,14 @@ export default function RichTextEditor({
   );
 }
 
+const WAVE_HEIGHTS = [10, 16, 24, 15, 30, 19, 12, 27, 17, 32, 21, 14, 25, 18, 11, 22, 29, 16];
+
 function markdownToHtml(markdown: string): string {
-  const mediaSafeMarkdown = markdown.replace(
+  const audioSafeMarkdown = markdown.replace(
+    /!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g,
+    (_match, id: string, duration: string | undefined) => `![语音](${AUDIO_ORIGIN}${encodeURIComponent(id)}?duration=${Number(duration ?? 0)})`,
+  );
+  const mediaSafeMarkdown = audioSafeMarkdown.replace(
     /!\[([^\]]*)\]\(media:\/\/([^)]+)\)/g,
     (_match, alt: string, id: string) => `![${alt}](${MEDIA_ORIGIN}${encodeURIComponent(id)})`,
   );
@@ -233,6 +278,14 @@ function createTurndownService(): TurndownService {
     strongDelimiter: '**',
   });
   service.use(gfm);
+  service.addRule('localAudio', {
+    filter: (node) => node.nodeName === 'FIGURE' && Boolean(node.getAttribute('data-audio-id')),
+    replacement: (_content, node) => createAudioEmbed(node.getAttribute('data-audio-id') ?? '', Number(node.getAttribute('data-duration-ms') ?? 0)),
+  });
+  service.addRule('pendingAudio', {
+    filter: (node) => node.nodeName === 'FIGURE' && node.classList.contains('audio-recording-frame'),
+    replacement: () => '',
+  });
   service.addRule('localMedia', {
     filter: (node) => node.nodeName === 'IMG' && Boolean(node.getAttribute('data-media-id')),
     replacement: (_content, node) => {
@@ -260,6 +313,15 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
     checkbox.closest('ul')?.classList.add('task-list');
   });
   editor.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
+    if (image.src.startsWith(AUDIO_ORIGIN)) {
+      const url = new URL(image.src);
+      const id = decodeURIComponent(url.pathname.slice(url.pathname.lastIndexOf('/') + 1));
+      const frame = createAudioFrame({ durationMs: Number(url.searchParams.get('duration') ?? 0), id, uri: mediaById.get(id) ?? '' });
+      const paragraph = image.parentElement?.tagName === 'P' && image.parentElement.childNodes.length === 1 ? image.parentElement : null;
+      if (paragraph) paragraph.replaceWith(frame);
+      else image.replaceWith(frame);
+      return;
+    }
     const encodedId = image.src.startsWith(MEDIA_ORIGIN) ? image.src.slice(MEDIA_ORIGIN.length) : null;
     const id = image.dataset.mediaId ?? (encodedId ? decodeURIComponent(encodedId) : null);
     if (!id) return;
@@ -282,7 +344,67 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
     if (uri && image.getAttribute('src') !== uri) image.setAttribute('src', uri);
     else if (!uri) frame?.classList.add('is-media-error');
   });
+  editor.querySelectorAll<HTMLElement>('.audio-frame').forEach((frame) => decorateAudioFrame(frame, mediaById));
   ensureTrailingParagraph(editor);
+}
+
+function createAudioFrame(audio: EditorAudio): HTMLElement {
+  const frame = document.createElement('figure');
+  frame.className = 'audio-frame';
+  frame.contentEditable = 'false';
+  frame.dataset.audioId = audio.id;
+  frame.dataset.durationMs = String(Math.max(0, Math.round(audio.durationMs)));
+  frame.innerHTML = `
+    <button aria-label="播放语音" class="audio-play" type="button"><span aria-hidden="true">&#9654;</span></button>
+    <span class="audio-content">
+      <span aria-hidden="true" class="audio-wave">${WAVE_HEIGHTS.map((height) => `<i style="height:${height}px"></i>`).join('')}</span>
+      <span class="audio-meta"><small>语音记录</small><small class="audio-duration">${formatAudioDuration(audio.durationMs)}</small></span>
+    </span>
+    <button aria-label="删除语音" class="audio-remove" type="button">
+      <span aria-hidden="true" class="audio-trash"></span>
+    </button>
+    <audio preload="metadata"></audio>
+  `;
+  if (audio.uri) frame.querySelector('audio')?.setAttribute('src', audio.uri);
+  return frame;
+}
+
+function decorateAudioFrame(frame: HTMLElement, mediaById: Map<string, string>) {
+  const id = frame.dataset.audioId ?? '';
+  if (!frame.querySelector('audio')) {
+    const replacement = createAudioFrame({ durationMs: Number(frame.dataset.durationMs ?? 0), id, uri: mediaById.get(id) ?? '' });
+    frame.replaceChildren(...replacement.childNodes);
+  }
+  const audio = frame.querySelector('audio');
+  if (!audio) return;
+  const uri = mediaById.get(id);
+  if (uri && audio.getAttribute('src') !== uri) audio.setAttribute('src', uri);
+  frame.classList.toggle('is-audio-error', !uri);
+  const update = () => updateAudioFrame(frame, audio);
+  audio.onended = update;
+  audio.onerror = () => frame.classList.add('is-audio-error');
+  audio.onloadedmetadata = () => {
+    if (Number.isFinite(audio.duration)) frame.dataset.durationMs = String(Math.round(audio.duration * 1000));
+    update();
+  };
+  audio.onpause = update;
+  audio.onplay = update;
+  audio.ontimeupdate = update;
+  update();
+}
+
+function updateAudioFrame(frame: HTMLElement, audio: HTMLAudioElement) {
+  const fallbackDuration = Number(frame.dataset.durationMs ?? 0) / 1000;
+  const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : fallbackDuration;
+  const progress = duration > 0 ? Math.min(1, audio.currentTime / duration) : 0;
+  frame.classList.toggle('is-playing', !audio.paused);
+  const button = frame.querySelector<HTMLElement>('.audio-play span');
+  const label = frame.querySelector<HTMLElement>('.audio-meta small');
+  const durationLabel = frame.querySelector<HTMLElement>('.audio-duration');
+  if (button) button.textContent = audio.paused ? '▶' : 'Ⅱ';
+  if (label) label.textContent = audio.paused ? '语音记录' : '正在播放';
+  if (durationLabel) durationLabel.textContent = formatAudioDuration(duration * 1000);
+  frame.querySelectorAll<HTMLElement>('.audio-wave i').forEach((bar, index) => bar.classList.toggle('played', index / WAVE_HEIGHTS.length <= progress));
 }
 
 function ensureTrailingParagraph(editor: HTMLDivElement) {
@@ -328,6 +450,11 @@ function runCommand(editor: HTMLDivElement, command: EditorCommand) {
     case 'images':
       if (Array.isArray(command.value)) insertImages(command.value);
       break;
+    case 'audio':
+      if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'id' in command.value) insertAudio(editor, command.value);
+      break;
+    case 'recordingStart': insertRecordingFrame(); break;
+    case 'recordingCancel': editor.querySelector('.audio-recording-frame')?.remove(); break;
     case 'mention':
       if (typeof command.value === 'string') insertMention(command.value);
       break;
@@ -422,6 +549,53 @@ function insertImages(images: EditorImage[]) {
   placeCursorAtEnd(paragraph);
 }
 
+function insertAudio(editor: HTMLDivElement, audio: EditorAudio) {
+  const frame = createAudioFrame(audio);
+  const recordingFrame = editor.querySelector('.audio-recording-frame');
+  if (recordingFrame) {
+    recordingFrame.replaceWith(frame);
+  } else {
+    insertBlockAtSelection(frame);
+  }
+  placeCursorAfterBlock(editor, frame);
+}
+
+function insertRecordingFrame() {
+  const frame = document.createElement('figure');
+  frame.className = 'audio-recording-frame';
+  frame.contentEditable = 'false';
+  frame.innerHTML = `
+    <span aria-hidden="true" class="recording-dot"></span>
+    <span class="audio-recording-copy"><strong class="audio-recording-title">正在录音</strong><small class="audio-recording-meta">0:00 &middot; 轻声说下此刻</small></span>
+    <button aria-label="停止录音" class="audio-recording-stop" type="button"><span></span></button>
+  `;
+  insertBlockAtSelection(frame);
+}
+
+function insertBlockAtSelection(element: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const paragraph = document.createElement('p');
+  paragraph.append(document.createElement('br'));
+  const fragment = document.createDocumentFragment();
+  fragment.append(element, paragraph);
+  range.deleteContents();
+  range.insertNode(fragment);
+  placeCursorAtEnd(paragraph);
+}
+
+function placeCursorAfterBlock(editor: HTMLDivElement, block: HTMLElement) {
+  let paragraph = block.nextElementSibling as HTMLElement | null;
+  if (paragraph?.tagName !== 'P') {
+    paragraph = document.createElement('p');
+    paragraph.append(document.createElement('br'));
+    block.after(paragraph);
+  }
+  ensureTrailingParagraph(editor);
+  placeCursorAtEnd(paragraph);
+}
+
 function insertMention(name: string) {
   const selection = window.getSelection();
   if (!selection?.rangeCount) return;
@@ -483,7 +657,7 @@ function placeCursorAtStart(element: Node) {
 }
 
 function isEditorVisuallyEmpty(editor: HTMLDivElement): boolean {
-  return !editor.textContent?.trim() && !editor.querySelector('img, table, hr, input');
+  return !editor.textContent?.trim() && !editor.querySelector('img, table, hr, input, .audio-frame');
 }
 
 function textBeforeCaret(container: HTMLElement, selection: Selection): string {
@@ -561,4 +735,33 @@ const EDITOR_CSS = `
   .media-frame.is-media-error img { visibility: hidden; }
   img { display: block; width: 100%; max-height: 520px; border-radius: 4px 22px 4px 22px; background: #d8e8dc; object-fit: cover; }
   .mention { padding: 0.08em 0.22em; border-radius: 5px; background: #d8e8dc; color: #1d6b49; }
+  .audio-frame, .audio-recording-frame { min-height: 72px; display: flex; align-items: center; margin: 1.25em 0; padding: 14px; border-radius: 4px 22px 4px 22px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
+  .audio-frame { background: #d8e8dc; }
+  .audio-recording-frame { background: #f8e7de; }
+  .audio-recording-frame.is-saving { background: #eef0e8; }
+  .audio-recording-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; margin-left: 13px; }
+  .audio-recording-copy strong { color: #8f3d31; font-family: ui-serif, Georgia, "Noto Serif SC", serif; font-size: 15px; }
+  .audio-recording-copy small { margin-top: 4px; color: #a66558; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
+  .recording-dot { width: 12px; height: 12px; border-radius: 50%; background: #b84d3b; box-shadow: 0 0 0 0 rgba(184, 77, 59, 0.3); animation: recording-pulse 1.5s ease-out infinite; }
+  .audio-recording-stop, .audio-play { flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; }
+  .audio-recording-stop { background: #b84d3b; }
+  .audio-recording-stop span { width: 14px; height: 14px; border-radius: 2px; background: #fff8f2; }
+  .audio-play { background: #1d6b49; color: #f4f6ef; font-size: 14px; }
+  .audio-play span { transform: translateX(1px); }
+  .audio-content { min-width: 0; display: flex; flex: 1; flex-direction: column; margin-left: 13px; }
+  .audio-wave { height: 32px; display: flex; align-items: center; gap: 3px; overflow: hidden; }
+  .audio-wave i { flex: 0 0 3px; border-radius: 2px; background: rgba(29, 107, 73, 0.22); }
+  .audio-wave i.played { background: #1d6b49; }
+  .audio-meta { display: flex; justify-content: space-between; margin-top: 3px; color: #656b62; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: 0.04em; }
+  .audio-meta small { font: inherit; }
+  .audio-frame audio { display: none; }
+  .audio-remove { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto; margin-left: 8px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #9b493f; cursor: pointer; }
+  .audio-remove:hover { background: rgba(155, 73, 63, 0.1); }
+  .audio-remove:active { background: rgba(155, 73, 63, 0.16); }
+  .audio-trash { display: block; position: relative; width: 12px; height: 14px; margin: auto; border: 1.5px solid currentColor; border-top: 0; border-radius: 0 0 3px 3px; }
+  .audio-trash::before { position: absolute; top: -5px; left: -3px; width: 16px; border-top: 1.5px solid currentColor; content: ""; }
+  .audio-trash::after { position: absolute; top: -8px; left: 3px; width: 5px; border-top: 1.5px solid currentColor; content: ""; }
+  .audio-frame.is-audio-error .audio-content { opacity: 0.45; }
+  .audio-frame.is-audio-error .audio-play { pointer-events: none; opacity: 0.45; }
+  @keyframes recording-pulse { 70% { box-shadow: 0 0 0 9px rgba(184, 77, 59, 0); } 100% { box-shadow: 0 0 0 0 rgba(184, 77, 59, 0); } }
 `;

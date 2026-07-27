@@ -4,6 +4,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { BACKUP_SCHEMA_VERSION } from '@still-alive/backup';
 import type { BackupManifest } from '@still-alive/backup';
 import type { BackupSnapshot } from './sqlite-repository';
+import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../domain/embedded-media';
 
 const APP_VERSION = '0.1.0';
 
@@ -26,12 +27,12 @@ export interface MaterializedBackup {
 
 export async function createBackupArchive(snapshot: BackupSnapshot): Promise<BackupArchive> {
   const entries: Record<string, Uint8Array> = {};
-  const portableMedia = [];
+  const portableMedia: BackupSnapshot['media'] = [];
 
   const albumByMedia = new Map((snapshot.albumMedia ?? []).map((relation) => [relation.mediaId, (snapshot.albums ?? []).find((album) => album.id === relation.albumId)]));
   for (const item of snapshot.media) {
     const source = new File(item.localPath);
-    if (!source.exists) throw new Error(`本地图片缺失：${item.id}`);
+    if (!source.exists) throw new Error(`本地媒体缺失：${item.id}`);
     const album = albumByMedia.get(item.id);
     const path = album ? `${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/${item.id}${source.extension || '.bin'}` : `media/${item.id}${source.extension || '.bin'}`;
     entries[path] = await source.bytes();
@@ -41,7 +42,11 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
   const portableSnapshot: BackupSnapshot = { ...snapshot, media: portableMedia };
   entries['data.json'] = strToU8(JSON.stringify(portableSnapshot, null, 2));
   for (const post of snapshot.posts) {
-    entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${post.bodyMarkdown}\n`);
+    const portableMarkdown = post.bodyMarkdown.replace(/!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g, (token, id: string, duration: string | undefined) => {
+      const audio = portableMedia.find((item) => item.id === id);
+      return audio ? `[语音记录（${formatAudioDuration(Number(duration ?? 0))}）](../${audio.localPath})` : token;
+    });
+    entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${portableMarkdown}\n`);
   }
 
   const files = [];
@@ -156,6 +161,8 @@ function validateSnapshot(value: BackupSnapshot): void {
   const postIds = new Set(value.posts.map((post) => post.id));
   const personIds = new Set(value.people.map((person) => person.id));
   const mediaIds = new Set(value.media.map((item) => item.id));
+  for (const post of value.posts) validateAudioEmbeds(post.bodyMarkdown, value.media, mediaIds);
+  for (const draft of value.drafts) validateAudioEmbeds(draft.bodyMarkdown, value.media, mediaIds);
   for (const relation of value.postPersons) {
     if (!postIds.has(relation.postId) || !personIds.has(relation.personId)) throw new Error('备份中的人物关联无效');
   }
@@ -205,6 +212,24 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.albums ??= [];
   value.albumMedia ??= [];
   if (Array.isArray(value.people)) for (const person of value.people) person.birthday ??= null;
+  if (Array.isArray(value.posts)) for (const post of value.posts) migrateLegacyAudio(post);
+  if (Array.isArray(value.drafts)) for (const draft of value.drafts) migrateLegacyAudio(draft);
+}
+
+function migrateLegacyAudio(value: { bodyMarkdown: string; audioMediaId?: unknown; audioDurationMs?: unknown }): void {
+  const audioMediaId = typeof value.audioMediaId === 'string' ? value.audioMediaId : null;
+  const audioDurationMs = typeof value.audioDurationMs === 'number' ? value.audioDurationMs : 0;
+  if (audioMediaId && !extractAudioEmbeds(value.bodyMarkdown).some((item) => item.id === audioMediaId)) {
+    value.bodyMarkdown = [value.bodyMarkdown.trim(), createAudioEmbed(audioMediaId, audioDurationMs)].filter(Boolean).join('\n\n');
+  }
+  delete value.audioMediaId;
+  delete value.audioDurationMs;
+}
+
+function validateAudioEmbeds(markdown: string, media: BackupSnapshot['media'], mediaIds: Set<string>): void {
+  for (const audio of extractAudioEmbeds(markdown)) {
+    if (!mediaIds.has(audio.id) || !media.find((item) => item.id === audio.id)?.mimeType.startsWith('audio/')) throw new Error('备份中的语音引用无效');
+  }
 }
 
 async function checksum(bytes: Uint8Array): Promise<string> {
