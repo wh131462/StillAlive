@@ -26,8 +26,6 @@ import { useAppState } from '../src/state/app-state';
 import { persistPickedImage, persistVoiceRecording } from '../src/data/local-media';
 import { extractEmbeddedMediaIds } from '../src/domain/embedded-media';
 
-type PersonPickerMode = 'manage' | 'mention';
-
 export default function EditorScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -45,12 +43,11 @@ export default function EditorScreen() {
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
   const [showMore, setShowMore] = useState(false);
   const [personPickerOpen, setPersonPickerOpen] = useState(false);
-  const [personPickerMode, setPersonPickerMode] = useState<PersonPickerMode>('manage');
   const [newPersonName, setNewPersonName] = useState('');
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('https://');
-  const [draftStatus, setDraftStatus] = useState('本地草稿');
+  const [draftStatus, setDraftStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [audioSaving, setAudioSaving] = useState(false);
   const editingPost = posts.find((item) => item.id === postId);
@@ -58,6 +55,7 @@ export default function EditorScreen() {
   const recorderState = useAudioRecorderState(audioRecorder, 250);
   const targetDay = editingPost?.dayKey ?? validPastDay(requestedDayKey, today);
   const isPastEntry = !postId && targetDay !== today;
+  const headerSubtitle = draftStatus || (postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
 
   useEffect(() => {
     if (!ready || initializedRef.current) return;
@@ -70,7 +68,6 @@ export default function EditorScreen() {
       initializedRef.current = true;
       initialBodyRef.current = post.bodyMarkdown;
       setBody(post.bodyMarkdown);
-      setDraftStatus('编辑已有日记');
       setInitialized(true);
       void getPersonIdsByPost(post.id).then((ids) => {
         initialPersonIdsRef.current = ids;
@@ -231,21 +228,12 @@ export default function EditorScreen() {
     else void startRecording();
   };
 
-  const openPersonPicker = (mode: PersonPickerMode) => {
-    setPersonPickerMode(mode);
-    setPersonPickerOpen(true);
-  };
+  const openPersonPicker = () => setPersonPickerOpen(true);
 
   const selectPerson = (person: { id: string; name: string }) => {
     const alreadySelected = selectedPersonIds.includes(person.id);
-    if (personPickerMode === 'manage') {
-      if (alreadySelected) setSelectedPersonIds((current) => current.filter((id) => id !== person.id));
-      else if (selectedPersonIds.length >= 10) Alert.alert('最多关联 10 个人物', '可以先取消一个人物，再添加新的关联。');
-      else setSelectedPersonIds((current) => [...current, person.id]);
-      return;
-    }
     if (!alreadySelected && selectedPersonIds.length >= 10) {
-      Alert.alert('最多关联 10 个人物', '可以先取消一个人物，再添加新的关联。');
+      Alert.alert('最多提及 10 个人物', '这条记录已经提及了 10 个人物。');
       return;
     }
     if (!alreadySelected) setSelectedPersonIds((current) => [...current, person.id]);
@@ -257,7 +245,7 @@ export default function EditorScreen() {
     const name = newPersonName.trim();
     if (!name) return;
     if (selectedPersonIds.length >= 10) {
-      Alert.alert('最多关联 10 个人物', '可以先取消一个人物，再快速创建。');
+      Alert.alert('最多提及 10 个人物', '这条记录已经提及了 10 个人物。');
       return;
     }
     try {
@@ -345,18 +333,11 @@ export default function EditorScreen() {
             <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{postId ? '编辑记录' : isPastEntry ? '补写记录' : '记一条'}</Text>
-            <Text style={styles.statusText}>{draftStatus}</Text>
+            <Text style={styles.headerTitle}>{postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}</Text>
+            <Text style={styles.statusText}>{headerSubtitle}</Text>
           </View>
           <Pressable accessibilityRole="button" disabled={saving || audioSaving || recorderState.isRecording} onPress={() => void handleSave()} style={[styles.saveButton, (saving || audioSaving || recorderState.isRecording) && styles.saveButtonDisabled]}>
             <Text style={styles.saveText}>{saving ? '保存中' : audioSaving ? '保存语音' : '完成'}</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.contextBar}>
-          <Text style={styles.date}>{targetDay.replaceAll('-', '.')}</Text>
-          <Pressable accessibilityRole="button" onPress={() => openPersonPicker('manage')} style={styles.peopleButton}>
-            <Text style={styles.peopleButtonText}>{selectedPersonIds.length ? `已关联 ${selectedPersonIds.length} 人` : '关联人物'}</Text>
           </Pressable>
         </View>
 
@@ -369,7 +350,7 @@ export default function EditorScreen() {
             media={editorMedia}
             onChange={handleBodyChange}
             onFormatsChange={setActiveFormats}
-            onMention={() => openPersonPicker('mention')}
+            onMention={openPersonPicker}
             onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
             onStopRecording={() => void stopRecording()}
             placeholder={`${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
@@ -406,7 +387,7 @@ export default function EditorScreen() {
           <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.toolbar} contentContainerStyle={styles.toolbarContent}>
             <ToolButton active={activeFormats.includes('bold')} androidIcon="format_bold" icon="bold" label="粗体" onPress={() => sendCommand('bold')} />
             <ToolButton active={activeFormats.includes('bulletList')} androidIcon="format_list_bulleted" icon="list.bullet" label="无序列表" onPress={() => sendCommand('bulletList')} />
-            <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={() => openPersonPicker('mention')} />
+            <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={openPersonPicker} />
             <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={() => void handlePickImages()} />
             <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />
             <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => setShowMore((value) => !value)} />
@@ -419,8 +400,8 @@ export default function EditorScreen() {
               <View style={styles.sheetHandle} />
               <View style={styles.personSheetHeader}>
                 <View>
-                  <Text style={styles.personSheetTitle}>{personPickerMode === 'mention' ? '提到谁？' : '这段记忆里有谁？'}</Text>
-                  <Text style={styles.personCount}>已关联 {selectedPersonIds.length} / 10</Text>
+                  <Text style={styles.personSheetTitle}>提到谁？</Text>
+                  <Text style={styles.personCount}>已提及 {selectedPersonIds.length} / 10</Text>
                 </View>
                 <Pressable accessibilityRole="button" onPress={() => setPersonPickerOpen(false)} style={styles.sheetClose}><Text style={styles.sheetCloseText}>完成</Text></Pressable>
               </View>
@@ -429,7 +410,7 @@ export default function EditorScreen() {
                   <Pressable key={person.id} accessibilityRole="button" onPress={() => selectPerson(person)} style={styles.personRow}>
                     <View style={styles.avatar}><Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text></View>
                     <View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRelation}>{person.relationToMe ?? '还没有填写关系'}</Text></View>
-                    <Text style={styles.personSelect}>{personPickerMode === 'mention' ? '提到' : selectedPersonIds.includes(person.id) ? '✓ 已关联' : '选择'}</Text>
+                    <Text style={styles.personSelect}>提到</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -506,10 +487,6 @@ const styles = StyleSheet.create({
   saveButton: { minWidth: 68, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.life },
   saveButtonDisabled: { opacity: 0.6 },
   saveText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },
-  contextBar: { minHeight: 38, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  date: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
-  peopleButton: { minHeight: 36, justifyContent: 'center' },
-  peopleButtonText: { color: colors.inkFaint, fontSize: typography.size.caption },
   domEditor: { flex: 1, width: '100%', backgroundColor: 'transparent' },
   meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: typography.size.meta },

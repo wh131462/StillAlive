@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { colors, typography } from '@still-alive/tokens';
 
-type TabIconName = 'today' | 'time' | 'people' | 'profile';
+type TabIconName = 'space' | 'calendar' | 'people' | 'profile';
 
 export default function TabsLayout() {
   return (
@@ -17,8 +17,8 @@ export default function TabsLayout() {
         tabBarStyle: { backgroundColor: colors.sheet, borderTopColor: colors.line },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: '今日', tabBarIcon: ({ color }) => <TabIcon color={color} name="today" /> }} />
-      <Tabs.Screen name="time" options={{ title: '时间', tabBarIcon: ({ color }) => <TabIcon color={color} name="time" /> }} />
+      <Tabs.Screen name="index" options={{ title: '空间', tabBarIcon: ({ color }) => <TabIcon color={color} name="space" /> }} />
+      <Tabs.Screen name="time" options={{ title: '日历', tabBarIcon: ({ color }) => <TabIcon color={color} name="calendar" /> }} />
       <Tabs.Screen name="people" options={{ title: '人物', tabBarIcon: ({ color }) => <TabIcon color={color} name="people" /> }} />
       <Tabs.Screen name="data" options={{ title: '我的', tabBarIcon: ({ color }) => <TabIcon color={color} name="profile" /> }} />
     </Tabs>
@@ -26,20 +26,20 @@ export default function TabsLayout() {
 }
 
 function TabIcon({ color, name }: { color: ColorValue; name: TabIconName }) {
-  if (name === 'today') {
+  if (name === 'space') {
     return (
-      <View pointerEvents="none" style={[styles.icon, styles.calendar, { borderColor: color }]}>
-        <View style={[styles.calendarHeader, { backgroundColor: color }]} />
-        <View style={[styles.calendarDot, { backgroundColor: color }]} />
+      <View pointerEvents="none" style={[styles.icon, styles.spaceIcon, { borderColor: color }]}>
+        <View style={[styles.spaceCore, { backgroundColor: color }]} />
+        <View style={[styles.spaceOrbit, { borderColor: color }]} />
       </View>
     );
   }
 
-  if (name === 'time') {
+  if (name === 'calendar') {
     return (
-      <View pointerEvents="none" style={[styles.icon, styles.clock, { borderColor: color }]}>
-        <View style={[styles.clockHour, { backgroundColor: color }]} />
-        <View style={[styles.clockMinute, { backgroundColor: color }]} />
+      <View pointerEvents="none" style={[styles.icon, styles.calendar, { borderColor: color }]}>
+        <View style={[styles.calendarHeader, { backgroundColor: color }]} />
+        <View style={[styles.calendarDot, { backgroundColor: color }]} />
       </View>
     );
   }
@@ -66,12 +66,12 @@ function TabIcon({ color, name }: { color: ColorValue; name: TabIconName }) {
 
 const styles = StyleSheet.create({
   icon: { width: 22, height: 22 },
+  spaceIcon: { alignItems: 'center', justifyContent: 'center' },
+  spaceCore: { width: 7, height: 7, borderRadius: 4 },
+  spaceOrbit: { position: 'absolute', width: 18, height: 18, borderWidth: 1.5, borderRadius: 9 },
   calendar: { borderWidth: 1.7, borderRadius: 5 },
   calendarHeader: { position: 'absolute', top: 5, left: 0, right: 0, height: 1.5 },
   calendarDot: { position: 'absolute', top: 10, left: 5, width: 3, height: 3, borderRadius: 1.5 },
-  clock: { borderWidth: 1.7, borderRadius: 11 },
-  clockHour: { position: 'absolute', top: 5, left: 9.3, width: 1.5, height: 6, borderRadius: 1 },
-  clockMinute: { position: 'absolute', top: 10, left: 10, width: 5, height: 1.5, borderRadius: 1, transform: [{ rotate: '28deg' }], transformOrigin: 'left center' },
   profileHead: { position: 'absolute', top: 1, left: 7, width: 8, height: 8, borderWidth: 1.5, borderRadius: 4 },
   profileBody: { position: 'absolute', left: 3, right: 3, bottom: 1, height: 9, borderWidth: 1.5, borderBottomWidth: 0, borderTopLeftRadius: 9, borderTopRightRadius: 9 },
 });

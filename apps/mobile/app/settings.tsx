@@ -40,7 +40,7 @@ export default function SettingsScreen() {
 
       <Text style={styles.eyebrow}>MEMORIES</Text>
       <View style={styles.group}>
-        <SwitchRow checked={preferences.globalMemoryEnabled} hint="控制那年今日和人物回忆在今日页出现" label="今日回忆" onPress={() => savePreference({ globalMemoryEnabled: !preferences.globalMemoryEnabled })} />
+        <SwitchRow checked={preferences.globalMemoryEnabled} hint="控制那年今日和人物回忆在空间中出现" label="空间回忆" onPress={() => savePreference({ globalMemoryEnabled: !preferences.globalMemoryEnabled })} />
         <View style={styles.separator} />
         <SwitchRow checked={preferences.memoryNotificationsEnabled} hint="在记忆逐渐模糊时，偶尔推荐以前的记录" label="回忆通知" onPress={() => void setMemoryNotificationsEnabled(!preferences.memoryNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
       </View>

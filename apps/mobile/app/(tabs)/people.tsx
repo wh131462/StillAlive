@@ -5,6 +5,7 @@ import { SymbolView } from 'expo-symbols';
 import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
+import { TabPageHeader } from '../../src/components/tab-page-header';
 
 export default function PeopleScreen() {
   const router = useRouter();
@@ -57,14 +58,21 @@ export default function PeopleScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.topLine}>
-          <Text style={styles.label}>PEOPLE IN MY DAYS</Text>
-          <Pressable accessibilityRole="button" onPress={() => setCreating(true)} style={styles.addButton}>
-            <Text style={styles.addButtonText}>＋ 添加</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.title}>有些日子，{`\n`}因为有人而记得。</Text>
-        <Text style={styles.description}>记下与你相遇的人，也收藏彼此共同经历的日子。</Text>
+        <TabPageHeader
+          action={(
+            <Pressable
+              accessibilityLabel="添加人物"
+              accessibilityRole="button"
+              onPress={() => setCreating(true)}
+              style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
+            >
+              <SymbolView name={{ android: 'person_add', ios: 'person.badge.plus', web: 'person_add' }} pointerEvents="none" size={21} tintColor={colors.life} type="hierarchical" />
+            </Pressable>
+          )}
+          eyebrow="PEOPLE"
+          subtitle="有些日子，因为有人而记得。"
+          title="人物"
+        />
 
         {people.length === 0 ? (
           <Pressable accessibilityRole="button" onPress={() => setCreating(true)} style={styles.emptyCard}>
@@ -125,21 +133,17 @@ function formatDay(dayKey: string): string {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
-  addButton: { minHeight: 44, justifyContent: 'center', paddingLeft: spacing.md },
-  addButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
-  title: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 36, lineHeight: 47 },
-  description: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
+  addButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(29, 107, 73, 0.12)', borderRadius: 22, backgroundColor: colors.lifeLight },
+  addButtonPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
   controls: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchInput: { flex: 1, minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 13 },
   sortButton: { minHeight: 46, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight },
   sortButtonText: { color: colors.life, fontSize: 10, fontWeight: '700' },
-  emptyCard: { marginTop: spacing.xxl, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  emptyCard: { marginTop: 0, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
   emptyAction: { marginTop: spacing.lg, color: colors.life, fontSize: 11, fontWeight: '700' },
-  list: { marginTop: spacing.xl, paddingHorizontal: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  list: { marginTop: 0, paddingHorizontal: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
   personRow: { minHeight: 92, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   personRowLast: { borderBottomWidth: 0 },
   personRowPressed: { opacity: 0.58 },

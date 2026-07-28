@@ -1,34 +1,60 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import type { Media, Post } from '@still-alive/types';
+import type { CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
+import { TabPageHeader } from '../../src/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
+import { nextBirthday } from '../../src/domain/person-profile';
 
-export default function TodayScreen() {
+type TimelineItem =
+  | { kind: 'check-in'; checkIn: CheckIn }
+  | { kind: 'post'; post: Post };
+
+interface TimelineSection {
+  title: DayKey;
+  data: TimelineItem[];
+}
+
+interface BirthdayPrompt {
+  daysUntil: number;
+  person: Person;
+}
+
+const AUDIO_WAVE_HEIGHTS = [7, 13, 19, 11, 23, 15, 9, 20, 12, 17, 8, 14];
+
+export default function SpaceScreen() {
   const router = useRouter();
-  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, posts, preferences, ready, shouldShowBackupReminder, today, todayCheckIn, updatePreferences } = useAppState();
+  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, ready, shouldShowBackupReminder, today, todayCheckIn, updatePreferences } = useAppState();
   const [nickname, setNickname] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [checkingIn, setCheckingIn] = useState(false);
+  const [showMemoryTrace, setShowMemoryTrace] = useState(false);
   const todayPosts = posts.filter((post) => post.dayKey === today);
-  const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
   const hasWritten = todayPosts.length > 0;
-  const recordedDayCount = new Set([...checkIns.map((item) => item.dayKey), ...posts.map((post) => post.dayKey)]).size;
   const lastCheckInDay = checkIns[0]?.dayKey;
   const yesterday = toDayKey(new Date(new Date().setDate(new Date().getDate() - 1)));
   const returningAfterBreak = Boolean(lastCheckInDay && lastCheckInDay !== today && lastCheckInDay !== yesterday);
+  const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
+  const profileAvatar = preferences.profileAvatarMediaId ? mediaById.get(preferences.profileAvatarMediaId) ?? null : null;
+  const timelineSections = useMemo(() => buildTimelineSections(posts, checkIns), [checkIns, posts]);
+  const upcomingBirthday = useMemo(() => findUpcomingBirthday(people, today), [people, today]);
   const memoryImageId = homeMemory ? firstMediaId(homeMemory.post.bodyMarkdown) : null;
-  const memoryImage = memoryImageId ? media.find((item) => item.id === memoryImageId) : null;
+  const memoryImage = memoryImageId ? mediaById.get(memoryImageId) : null;
   // 备份提醒优先展示；用户稍后处理后，今日页再轮换回忆卡片，避免次级卡片同时抢占注意力。
   const showBackupReminder = shouldShowBackupReminder;
   const showMemory = Boolean(homeMemory) && !showBackupReminder;
+  const recordedDayKeys = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)];
+  const recordedDays = new Set(recordedDayKeys).size;
+  const latestRecordedDay = [...recordedDayKeys].sort().at(-1);
+  const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
+  const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
 
   useEffect(() => {
     setNickname(preferences.nickname);
@@ -55,88 +81,137 @@ export default function TodayScreen() {
   };
   const birthDateParts: DateParts | null = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? (() => { const [year, month, day] = birthDate.split('-').map(Number); return { year, month, day }; })() : null;
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.brand}>仍在</Text>
-            <Text style={styles.english}>STILL ALIVE</Text>
+  const listHeader = (
+    <View>
+      <TabPageHeader
+        action={<Text style={styles.date}>{formatDisplayDate(new Date())}</Text>}
+        eyebrow="STILL ALIVE · SPACE"
+        subtitle="所有留下的片段，都在这里慢慢生长。"
+        title="空间"
+      />
+
+      {!ready ? <Text style={styles.stateMessage}>正在打开你的本地记录…</Text> : null}
+      {error ? <Text style={styles.errorMessage}>本地记录暂时无法打开：{error}</Text> : null}
+
+      <Pressable
+        accessibilityHint="点击切换卡片内容"
+        accessibilityLabel={showMemoryTrace ? '记忆追踪，点击返回打卡记录' : '打卡记录，点击查看记忆追踪'}
+        accessibilityRole="button"
+        onPress={() => setShowMemoryTrace((current) => !current)}
+        style={({ pressed }) => [styles.checkCard, !showMemoryTrace && todayCheckIn && styles.checkCardDone, showMemoryTrace && styles.memoryTraceCard, pressed && styles.cardPressed]}
+      >
+        <View style={styles.cardMetaRow}>
+          <Text style={[styles.cardMeta, showMemoryTrace && styles.memoryTraceMeta]}>{showMemoryTrace ? 'MEMORY TRACE' : `TODAY ${today.slice(5).replace('-', '.')}`}</Text>
+          <View style={styles.cardPageDots}>
+            <View style={[styles.cardPageDot, !showMemoryTrace && styles.cardPageDotActive, !showMemoryTrace && !todayCheckIn && styles.cardPageDotPending]} />
+            <View style={[styles.cardPageDot, showMemoryTrace && styles.memoryPageDotActive]} />
           </View>
-          <Text style={styles.date}>{formatDisplayDate(new Date())}</Text>
         </View>
-
-        <Text style={styles.kicker}>{recordedDayCount ? `DAY ${recordedDayCount} ${recordedDayCount} 个坐标` : '从今天开始 留下第一个坐标'}</Text>
-        <Text style={styles.title}>{returningAfterBreak ? '欢迎回来。' : preferences.nickname ? `早上好，${preferences.nickname}。` : '早上好。'}{`\n`}{returningAfterBreak ? '今天也可以重新开始。' : '今天，也在这里。'}</Text>
-        {!ready ? <Text style={styles.stateMessage}>正在打开你的本地记录…</Text> : null}
-        {error ? <Text style={styles.errorMessage}>本地记录暂时无法打开：{error}</Text> : null}
-
-        <View style={[styles.checkCard, todayCheckIn && styles.checkCardDone]}>
-          <View style={styles.cardMetaRow}>
-            <Text style={styles.cardMeta}>TODAY {today.slice(5).replace('-', '.')}</Text>
-            <View style={[styles.pulse, todayCheckIn && styles.pulseDone]} />
-          </View>
-          <Text style={styles.cardTitle}>
-            {!todayCheckIn ? '为今天留一个坐标' : hasWritten ? `今天已记下 ${todayPosts.length} 条` : '今天，已经留下了坐标'}
-          </Text>
-          <Text style={styles.cardDescription}>
-            {!todayCheckIn ? '不需要写什么，点一下就好。' : hasWritten ? '以后再回来看看。' : '就这样也很好。或者，留下一点今天。'}
-          </Text>
-          <Pressable accessibilityRole="button" disabled={!ready || Boolean(error) || checkingIn} onPress={handlePrimaryAction} style={({ pressed }) => [styles.primaryButton, todayCheckIn && styles.secondaryButton, (!ready || Boolean(error) || checkingIn) && styles.disabled, pressed && styles.pressed]}>
-            <Text style={[styles.primaryButtonText, todayCheckIn && styles.secondaryButtonText]}>
-              {checkingIn ? '正在留下坐标…' : !todayCheckIn ? '今天也在' : hasWritten ? '再写一句' : '想写一句'}
+        {showMemoryTrace ? (
+          <>
+            <Text style={styles.memoryTraceTitle}>这些日子，正在慢慢长大</Text>
+            <Text style={styles.memoryTraceDescription}>{latestRecordedDay ? `最近一次留下在 ${formatChineseDate(latestRecordedDay)}。` : '从今天开始，留下第一段属于你的时间。'}</Text>
+            <View style={styles.memoryTraceStats}>
+              <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{recordedDays}</Text><Text style={styles.memoryTraceLabel}>记录天数</Text></View>
+              <View style={styles.memoryTraceDivider} />
+              <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{imageCount}</Text><Text style={styles.memoryTraceLabel}>图片</Text></View>
+              <View style={styles.memoryTraceDivider} />
+              <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{voiceCount}</Text><Text style={styles.memoryTraceLabel}>语音</Text></View>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.cardTitle}>
+              {!todayCheckIn
+                ? returningAfterBreak ? '欢迎回来，今天也可以重新开始' : '为今天留一个坐标'
+                : hasWritten ? `今天已记下 ${todayPosts.length} 条` : '今天，已经留下了坐标'}
             </Text>
+            <Text style={styles.cardDescription}>
+              {!todayCheckIn ? '不需要写什么，点一下就好。' : hasWritten ? '还想记下什么，可以继续写。' : '就这样也很好。或者，留下一点今天。'}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!ready || Boolean(error) || checkingIn}
+              onPress={(event) => { event.stopPropagation(); void handlePrimaryAction(); }}
+              style={({ pressed }) => [styles.primaryButton, todayCheckIn && styles.secondaryButton, (!ready || Boolean(error) || checkingIn) && styles.disabled, pressed && styles.pressed]}
+            >
+              <Text style={[styles.primaryButtonText, todayCheckIn && styles.secondaryButtonText]}>
+                {checkingIn ? '正在留下坐标…' : !todayCheckIn ? '今天也在' : '写一条记录'}
+              </Text>
+            </Pressable>
+          </>
+        )}
+      </Pressable>
+
+      {upcomingBirthday ? (
+        <Pressable accessibilityRole="button" onPress={() => router.push(`/person/${upcomingBirthday.person.id}`)} style={({ pressed }) => [styles.birthdayCard, pressed && styles.pressed]}>
+          <View style={styles.birthdayAvatar}><Text style={styles.birthdayAvatarText}>{upcomingBirthday.person.name.slice(0, 1)}</Text></View>
+          <View style={styles.birthdayContent}>
+            <Text style={styles.promptLabel}>生日提示</Text>
+            <Text style={styles.birthdayTitle}>{birthdayPromptTitle(upcomingBirthday)}</Text>
+            <Text style={styles.promptFoot}>去看看关于 {upcomingBirthday.person.name} 的记录　›</Text>
+          </View>
+        </Pressable>
+      ) : null}
+
+      {showMemory && homeMemory ? (
+        <View style={styles.memory}>
+          <View style={styles.memoryHeader}>
+            <Text style={styles.memoryLabel}>{memoryLabel(homeMemory, today)}</Text>
+            <Text style={styles.memoryDate}>{homeMemory.post.dayKey.replaceAll('-', '.')}</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${homeMemory.post.id}`)} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
+            {memoryImage ? <Image accessibilityLabel="回忆图片" resizeMode="cover" source={{ uri: memoryImage.localPath }} style={styles.memoryImage} /> : null}
+            <Text numberOfLines={4} style={styles.memoryText}>{memoryExcerpt(homeMemory.post.bodyMarkdown)}</Text>
+            <Text style={styles.memoryFoot}>{homeMemory.kind === 'person' ? `与 ${homeMemory.person.name} 有关的一段过去` : '那一天留下的坐标'}　›</Text>
           </Pressable>
         </View>
+      ) : null}
 
-        {todayCheckIn && !hasWritten ? <Pressable accessibilityRole="button" onPress={() => router.push('/time')} style={styles.leaveButton}><Text style={styles.leaveText}>先这样，去看看时间</Text></Pressable> : null}
-
-        {todayPosts.length ? (
-          <View style={styles.todaySection}>
-            <View style={styles.todaySectionHeader}>
-              <Text style={styles.todaySectionTitle}>今天的记录</Text>
-              <Text style={styles.todaySectionCount}>{todayPosts.length} NOTES</Text>
-            </View>
-            {todayPosts.map((post, index) => (
-              <TodayPostCard
-                authorName={preferences.nickname || '我'}
-                key={post.id}
-                index={index}
-                mediaById={mediaById}
-                onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
-                onPress={() => router.push(`/post/${post.id}`)}
-                post={post}
-              />
-            ))}
+      {showBackupReminder ? (
+        <View style={styles.backupReminder}>
+          <Text style={styles.backupLabel}>A COPY OF YOUR OWN</Text>
+          <Text style={styles.backupTitle}>已经留下不少内容了。</Text>
+          <Text style={styles.backupText}>可以找一个合适的位置，保存一份属于自己的完整备份。</Text>
+          <View style={styles.backupActions}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/backup')} style={styles.backupPrimary}><Text style={styles.backupPrimaryText}>现在备份</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void dismissBackupReminder()} style={styles.backupLater}><Text style={styles.backupLaterText}>以后再说</Text></Pressable>
           </View>
-        ) : null}
+        </View>
+      ) : null}
 
-        {showMemory && homeMemory ? (
-          <View style={styles.memory}>
-            <View style={styles.memoryHeader}>
-              <Text style={styles.memoryLabel}>{memoryLabel(homeMemory, today)}</Text>
-              <Text style={styles.memoryDate}>{homeMemory.post.dayKey.replaceAll('-', '.')}</Text>
-            </View>
-            <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${homeMemory.post.id}`)} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
-              {memoryImage ? <Image accessibilityLabel="回忆图片" resizeMode="cover" source={{ uri: memoryImage.localPath }} style={styles.memoryImage} /> : null}
-              <Text style={styles.memoryText}>{memoryExcerpt(homeMemory.post.bodyMarkdown)}</Text>
-              <Text style={styles.memoryFoot}>{homeMemory.kind === 'person' ? `与 ${homeMemory.person.name} 有关的一段过去` : '那一天留下的坐标'}　→</Text>
-            </Pressable>
-          </View>
-        ) : null}
+      <View style={styles.timelineHeading}>
+        <View>
+          <Text style={styles.timelineLabel}>MY MOMENTS</Text>
+          <Text style={styles.timelineTitle}>我的动态</Text>
+        </View>
+        <Text style={styles.timelineCount}>{posts.length + checkIns.length} ITEMS</Text>
+      </View>
+    </View>
+  );
 
-        {shouldShowBackupReminder ? (
-          <View style={styles.backupReminder}>
-            <Text style={styles.backupLabel}>A COPY OF YOUR OWN</Text>
-            <Text style={styles.backupTitle}>已经留下不少内容了。</Text>
-            <Text style={styles.backupText}>可以找一个合适的位置，保存一份属于自己的完整备份。</Text>
-            <View style={styles.backupActions}>
-              <Pressable accessibilityRole="button" onPress={() => router.push('/backup')} style={styles.backupPrimary}><Text style={styles.backupPrimaryText}>现在备份</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => void dismissBackupReminder()} style={styles.backupLater}><Text style={styles.backupLaterText}>以后再说</Text></Pressable>
-            </View>
-          </View>
-        ) : null}
-      </ScrollView>
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <SectionList<TimelineItem, TimelineSection>
+        contentContainerStyle={styles.container}
+        keyExtractor={(item) => item.kind === 'post' ? item.post.id : item.checkIn.id}
+        ListEmptyComponent={<Text style={styles.empty}>还没有记录。今天，可以从一个小小的坐标开始。</Text>}
+        ListHeaderComponent={listHeader}
+        renderItem={({ item }) => item.kind === 'post' ? (
+          <PostCard
+            authorName={preferences.nickname || '我'}
+            avatarUri={profileAvatar?.localPath ?? null}
+            mediaById={mediaById}
+            onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
+            onPress={() => router.push(`/post/${item.post.id}`)}
+            post={item.post}
+          />
+        ) : <CheckInRow checkIn={item.checkIn} />}
+        renderSectionHeader={({ section }) => <DayHeader dayKey={section.title} today={today} />}
+        sections={timelineSections}
+        showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
+      />
 
       <Modal animationType="fade" transparent visible={ready && !preferences.onboardingCompleted}>
         <SafeAreaView style={styles.onboardingBackdrop}>
@@ -146,7 +221,7 @@ export default function TodayScreen() {
             <Text style={styles.onboardingText}>无需注册。日记、人物和图片默认只保存在这台设备，可以随时完整导出。</Text>
             <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
             <DatePickerField label="出生日期 可跳过" onChange={({ year, month, day }) => setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)} onClear={() => setBirthDate('')} value={birthDateParts} />
-            <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入今天</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入空间</Text></Pressable>
             <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
           </View>
         </SafeAreaView>
@@ -155,59 +230,182 @@ export default function TodayScreen() {
   );
 }
 
-function TodayPostCard({ authorName, index, mediaById, onImagePress, onPress, post }: { authorName: string; index: number; mediaById: Map<string, Media>; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post }) {
+function DayHeader({ dayKey, today }: { dayKey: DayKey; today: DayKey }) {
+  return (
+    <View style={styles.dayHeader}>
+      <View>
+        <Text style={styles.dayTitle}>{formatDayTitle(dayKey, today)}</Text>
+        <Text style={styles.dayMeta}>{dayKey.replaceAll('-', '.')} · {weekdayLabel(dayKey)}</Text>
+      </View>
+      <View style={styles.dayLine} />
+    </View>
+  );
+}
+
+function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
+  return (
+    <View accessibilityLabel={`${checkIn.dayKey} ${formatTime(checkIn.createdAt)} 留下坐标`} style={styles.checkInRow}>
+      <View style={styles.checkInMarker}><View style={styles.checkInDot}><View style={styles.checkInDotCore} /></View></View>
+      <View style={styles.checkInContent}>
+        <Text style={styles.checkInTitle}>今天也在</Text>
+        <Text style={styles.checkInMeta}>{formatTime(checkIn.createdAt)} · 留下坐标</Text>
+      </View>
+    </View>
+  );
+}
+
+function PostCard({ authorName, avatarUri, mediaById, onImagePress, onPress, post }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post }) {
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const excerpt = markdownToPlainText(post.bodyMarkdown);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
 
   return (
-    <Pressable accessibilityLabel={`打开今天 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.todayNote, index === 0 && styles.todayNoteFirst, pressed && styles.pressed]}>
-      <View style={styles.todayNoteMetaRow}>
-        <View style={styles.todayNoteAvatar}><Text style={styles.todayNoteAvatarText}>{authorName.slice(0, 1)}</Text></View>
-        <View style={styles.todayNoteIdentity}>
-          <Text style={styles.todayNoteAuthor}>{authorName}</Text>
-          <Text style={styles.todayNoteMeta}>{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' 修改过' : ''}</Text>
+    <Pressable accessibilityLabel={`打开 ${post.dayKey} ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.postCard, pressed && styles.feedPressed]}>
+      <ProfileAvatar name={authorName} uri={avatarUri} />
+      <View style={styles.postContent}>
+        <View style={styles.postHeader}>
+          <Text style={styles.postAuthor}>{authorName}</Text>
         </View>
-      </View>
-      <Text numberOfLines={6} style={styles.todayNoteText}>
-        {excerpt || [mediaIds.length ? `${mediaIds.length} 张照片` : '', audioEmbeds.length ? `${audioEmbeds.length} 段语音` : ''].filter(Boolean).join(' · ')}
-      </Text>
-      {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
-      <View style={styles.todayNoteFooter}>
-        <Text style={styles.todayNoteType}>{[images.length ? `${mediaIds.length} 张照片` : '', audioEmbeds.length ? audioEmbeds.length === 1 ? `语音 · ${formatAudioDuration(audioEmbeds[0].durationMs)}` : `${audioEmbeds.length} 段语音` : ''].filter(Boolean).join(' · ') || '文字记录'}</Text>
-        <Text style={styles.todayNoteOpen}>查看全文　›</Text>
+        {excerpt ? <Text numberOfLines={6} style={styles.postText}>{excerpt}</Text> : null}
+        {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
+        {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
+        <View style={styles.postFooter}>
+          <Text style={styles.postTime}>{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' · 修改过' : ''}</Text>
+          <Text numberOfLines={1} style={styles.postType}>{recordTypeLabel(images.length, mediaIds.length, audioEmbeds.map((item) => item.durationMs))}</Text>
+        </View>
       </View>
     </Pressable>
   );
 }
 
+function ProfileAvatar({ name, uri }: { name: string; uri: string | null }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => setFailed(false), [uri]);
+
+  return (
+    <View style={styles.postAvatar}>
+      {uri && !failed
+        ? <Image accessibilityLabel={`${name}的头像`} onError={() => setFailed(true)} resizeMode="cover" source={{ uri }} style={styles.postAvatarImage} />
+        : <Text style={styles.postAvatarText}>{name.slice(0, 1) || '我'}</Text>}
+    </View>
+  );
+}
+
 function PostImageGrid({ images, onPressImage, totalCount }: { images: Media[]; onPressImage(index: number): void; totalCount: number }) {
   if (images.length === 1) {
-    return <Pressable accessibilityLabel="预览日记图片" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPressImage(0); }}><Image accessibilityLabel="日记图片" resizeMode="cover" source={{ uri: images[0].localPath }} style={styles.todaySingleImage} /></Pressable>;
+    return (
+      <Pressable accessibilityLabel="预览记录图片" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPressImage(0); }}>
+        <Image accessibilityLabel="记录图片" resizeMode="contain" source={{ uri: images[0].localPath }} style={[styles.postSingleImage, { aspectRatio: previewAspectRatio(images[0]) }]} />
+      </Pressable>
+    );
   }
   const visibleImages = images.slice(0, 9);
   return (
-    <View style={styles.todayImageGrid}>
+    <View style={styles.postImageGrid}>
       {visibleImages.map((image, index) => (
-        <Pressable accessibilityLabel={`预览日记图片 ${index + 1}`} accessibilityRole="button" key={`${image.id}_${index}`} onPress={(event) => { event.stopPropagation(); onPressImage(index); }} style={styles.todayImageCell}>
-          <Image accessibilityLabel={`日记图片 ${index + 1}`} resizeMode="cover" source={{ uri: image.localPath }} style={styles.todayImage} />
-          {index === visibleImages.length - 1 && totalCount > 9 ? <View style={styles.todayImageMore}><Text style={styles.todayImageMoreText}>+{totalCount - 9}</Text></View> : null}
+        <Pressable accessibilityLabel={`预览记录图片 ${index + 1}`} accessibilityRole="button" key={`${image.id}_${index}`} onPress={(event) => { event.stopPropagation(); onPressImage(index); }} style={styles.postImageCell}>
+          <Image accessibilityLabel={`记录图片 ${index + 1}`} resizeMode="contain" source={{ uri: image.localPath }} style={styles.postImage} />
+          {index === visibleImages.length - 1 && totalCount > visibleImages.length ? <View style={styles.postImageMore}><Text style={styles.postImageMoreText}>+{totalCount - visibleImages.length}</Text></View> : null}
         </Pressable>
       ))}
     </View>
   );
 }
 
+function AudioPreviews({ audioEmbeds, mediaById }: { audioEmbeds: ReturnType<typeof extractAudioEmbeds>; mediaById: Map<string, Media> }) {
+  const visibleAudio = audioEmbeds.slice(0, 2);
+  return (
+    <View style={styles.audioList}>
+      {visibleAudio.map((audio, index) => (
+        <View key={`${audio.id}_${index}`} style={styles.audioPreview}>
+          <View style={styles.audioIcon}><Text style={styles.audioIconText}>♪</Text></View>
+          <View style={styles.audioBody}>
+            <View style={styles.audioWave}>
+              {AUDIO_WAVE_HEIGHTS.map((height, waveIndex) => <View key={waveIndex} style={[styles.audioWaveBar, { height }]} />)}
+            </View>
+            <View style={styles.audioMetaRow}>
+              <Text style={styles.audioLabel}>{mediaById.has(audio.id) ? '语音记录' : '语音文件暂时不可用'}</Text>
+              <Text style={styles.audioDuration}>{formatAudioDuration(audio.durationMs)}</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+      {audioEmbeds.length > visibleAudio.length ? <Text style={styles.audioMore}>还有 {audioEmbeds.length - visibleAudio.length} 段语音，进入详情查看</Text> : null}
+    </View>
+  );
+}
+
+function buildTimelineSections(posts: Post[], checkIns: CheckIn[]): TimelineSection[] {
+  const itemsByDay = new Map<DayKey, TimelineItem[]>();
+  for (const post of posts) itemsByDay.set(post.dayKey, [...(itemsByDay.get(post.dayKey) ?? []), { kind: 'post', post }]);
+  for (const checkIn of checkIns) itemsByDay.set(checkIn.dayKey, [...(itemsByDay.get(checkIn.dayKey) ?? []), { kind: 'check-in', checkIn }]);
+  return [...itemsByDay.entries()]
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([title, items]) => ({
+      title,
+      data: items.sort((left, right) => timelineItemTime(right).localeCompare(timelineItemTime(left))),
+    }));
+}
+
+function timelineItemTime(item: TimelineItem): string {
+  return item.kind === 'post' ? item.post.createdAt : item.checkIn.createdAt;
+}
+
+function findUpcomingBirthday(people: Person[], today: DayKey): BirthdayPrompt | null {
+  const [year, month, day] = today.split('-').map(Number);
+  const start = new Date(year, month - 1, day, 12);
+  const prompts = people.flatMap((person) => {
+    if (!person.birthday) return [];
+    const date = nextBirthday(person.birthday, start);
+    const daysUntil = Math.round((date.getTime() - start.getTime()) / 86_400_000);
+    return daysUntil <= 3 ? [{ daysUntil, person }] : [];
+  });
+  return prompts.sort((left, right) => left.daysUntil - right.daysUntil || left.person.name.localeCompare(right.person.name))[0] ?? null;
+}
+
+function birthdayPromptTitle(prompt: BirthdayPrompt): string {
+  if (prompt.daysUntil === 0) return `今天是 ${prompt.person.name} 的生日`;
+  if (prompt.daysUntil === 1) return `${prompt.person.name} 的生日就在明天`;
+  return `${prompt.person.name} 的生日还有 ${prompt.daysUntil} 天`;
+}
+
+function recordTypeLabel(imageCount: number, totalImageCount: number, audioDurations: number[]): string {
+  return [imageCount ? `${totalImageCount} 张图片` : '', audioDurations.length ? audioDurations.length === 1 ? `语音 ${formatAudioDuration(audioDurations[0] ?? 0)}` : `${audioDurations.length} 段语音` : ''].filter(Boolean).join(' · ') || '文字记录';
+}
+
+function previewAspectRatio(media: Media): number {
+  if (!media.width || !media.height) return 4 / 3;
+  return Math.min(2, Math.max(1.15, media.width / media.height));
+}
+
 function formatDisplayDate(date: Date): string {
-  const month = date.toLocaleDateString('en-US', { month: 'long' }).toUpperCase();
-  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
-  return `${month} ${date.getDate()}\n${weekday}`;
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}\n${weekdayLabel(toDayKey(date))}`;
+}
+
+function formatDayTitle(dayKey: DayKey, today: DayKey): string {
+  if (dayKey === today) return '今天';
+  const [year, month, day] = today.split('-').map(Number);
+  const yesterday = toDayKey(new Date(year, month - 1, day - 1));
+  if (dayKey === yesterday) return '昨天';
+  const [dayYear, dayMonth, dayValue] = dayKey.split('-').map(Number);
+  return dayYear === year ? `${dayMonth} 月 ${dayValue} 日` : `${dayYear} 年 ${dayMonth} 月 ${dayValue} 日`;
+}
+
+function weekdayLabel(dayKey: DayKey): string {
+  const [year, month, day] = dayKey.split('-').map(Number);
+  return `周${['日', '一', '二', '三', '四', '五', '六'][new Date(year, month - 1, day).getDay()]}`;
 }
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function formatChineseDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
 function markdownToPlainText(markdown: string): string {
@@ -237,7 +435,7 @@ function firstMediaId(markdown: string): string | null {
 
 function memoryExcerpt(markdown: string): string {
   const audioEmbeds = extractAudioEmbeds(markdown);
-  return markdownToPlainText(markdown).replace(/\[照片\]/g, '').trim() || (audioEmbeds.length ? `那天留下了 ${audioEmbeds.length} 段语音。` : '那天留下了一张照片。');
+  return markdownToPlainText(markdown).replace(/\[照片\]/g, '').trim() || (audioEmbeds.length ? `那天留下了 ${audioEmbeds.length} 段语音。` : '那天留下了一张图片。');
 }
 
 function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMemory']>, today: string): string {
@@ -249,61 +447,52 @@ function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMem
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xxl },
-  brand: { color: colors.ink, fontFamily: typography.display, fontSize: 22 },
-  english: { marginTop: 2, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.6 },
   date: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, lineHeight: 15, textAlign: 'right' },
-  kicker: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.4 },
-  title: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 40, lineHeight: 51 },
-  stateMessage: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.caption },
-  errorMessage: { marginTop: spacing.md, color: colors.danger, fontSize: typography.size.caption, lineHeight: 18 },
-  checkCard: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life },
+  stateMessage: { marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.caption },
+  errorMessage: { marginBottom: spacing.sm, color: colors.danger, fontSize: typography.size.caption, lineHeight: 18 },
+  checkCard: { minHeight: 208, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life },
   checkCardDone: { backgroundColor: '#2F5E48' },
+  memoryTraceCard: { backgroundColor: colors.lifeLight },
+  cardPressed: { opacity: 0.9 },
   cardMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardMeta: { color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
-  pulse: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.sun },
-  pulseDone: { backgroundColor: colors.lifeLight },
-  cardTitle: { marginTop: spacing.xxl, color: colors.onLife, fontFamily: typography.display, fontSize: 27 },
+  memoryTraceMeta: { color: colors.life },
+  cardPageDots: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  cardPageDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.28)' },
+  cardPageDotActive: { width: 13, backgroundColor: colors.lifeLight },
+  cardPageDotPending: { backgroundColor: colors.sun },
+  memoryPageDotActive: { width: 13, backgroundColor: colors.life },
+  cardTitle: { marginTop: spacing.xl, color: colors.onLife, fontFamily: typography.display, fontSize: 26, lineHeight: 36 },
   cardDescription: { marginTop: spacing.sm, color: colors.onLifeMuted, fontSize: 12, lineHeight: 20 },
   primaryButton: { marginTop: spacing.lg, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sunLight },
   secondaryButton: { backgroundColor: 'rgba(255, 255, 255, 0.12)' },
   primaryButtonText: { color: colors.life, fontWeight: '600', letterSpacing: 1 },
   secondaryButtonText: { color: colors.onLife },
+  memoryTraceTitle: { marginTop: spacing.xl, color: colors.ink, fontFamily: typography.display, fontSize: 23, lineHeight: 32 },
+  memoryTraceDescription: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 11, lineHeight: 19 },
+  memoryTraceStats: { marginTop: spacing.lg, paddingTop: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(29, 107, 73, 0.16)' },
+  memoryTraceStat: { flex: 1, alignItems: 'center' },
+  memoryTraceValue: { color: colors.life, fontFamily: typography.display, fontSize: 22 },
+  memoryTraceLabel: { marginTop: 2, color: colors.inkFaint, fontSize: 8 },
+  memoryTraceDivider: { width: StyleSheet.hairlineWidth, height: 26, backgroundColor: 'rgba(29, 107, 73, 0.16)' },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.5 },
-  todaySection: { marginTop: spacing.xl },
-  todaySectionHeader: { paddingHorizontal: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  todaySectionTitle: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 18 },
-  todaySectionCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
-  todayNote: { marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
-  todayNoteFirst: { marginTop: spacing.md },
-  todayNoteMetaRow: { flexDirection: 'row', alignItems: 'center' },
-  todayNoteAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.life },
-  todayNoteAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 16 },
-  todayNoteIdentity: { flex: 1, marginLeft: spacing.sm },
-  todayNoteAuthor: { color: colors.life, fontSize: 12, fontWeight: '700' },
-  todayNoteMeta: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
-  todayNoteOpen: { color: colors.life, fontSize: typography.size.meta },
-  todaySingleImage: { width: '78%', aspectRatio: 1.15, marginTop: spacing.md, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
-  todayImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  todayImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
-  todayImage: { width: '100%', height: '100%' },
-  todayImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
-  todayImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
-  todayNoteText: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
-  todayNoteFooter: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  todayNoteType: { color: colors.inkFaint, fontSize: typography.size.meta },
-  leaveButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  leaveText: { color: colors.inkFaint, fontSize: 10 },
-  memory: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  birthdayCard: { marginTop: spacing.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  birthdayAvatar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: colors.sunLight },
+  birthdayAvatarText: { color: colors.life, fontFamily: typography.display, fontSize: 20 },
+  birthdayContent: { flex: 1, marginLeft: spacing.md },
+  promptLabel: { color: colors.sun, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
+  birthdayTitle: { marginTop: 5, color: colors.ink, fontFamily: typography.display, fontSize: 17 },
+  promptFoot: { marginTop: 6, color: colors.inkFaint, fontSize: typography.size.meta },
+  memory: { marginTop: spacing.lg },
   memoryHeader: { flexDirection: 'row', justifyContent: 'space-between' },
   memoryLabel: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   memoryDate: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
-  memoryCard: { marginTop: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
-  memoryImage: { width: '100%', height: 180, marginBottom: spacing.md, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
+  memoryCard: { marginTop: spacing.sm, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
+  memoryImage: { width: '100%', height: 180, marginBottom: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   memoryText: { color: colors.ink, fontFamily: typography.display, fontSize: 17, lineHeight: 29 },
   memoryFoot: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 10 },
-  backupReminder: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sunLight },
+  backupReminder: { marginTop: spacing.lg, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sunLight },
   backupLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   backupTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
   backupText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 18 },
@@ -312,6 +501,51 @@ const styles = StyleSheet.create({
   backupPrimaryText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
   backupLater: { minWidth: 88, minHeight: 42, alignItems: 'center', justifyContent: 'center' },
   backupLaterText: { color: colors.inkSoft, fontSize: 10 },
+  timelineHeading: { marginTop: spacing.xxl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  timelineLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.3 },
+  timelineTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 25 },
+  timelineCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1 },
+  dayHeader: { marginTop: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.paper },
+  dayTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
+  dayMeta: { marginTop: 3, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
+  dayLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
+  checkInRow: { minHeight: 58, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  checkInMarker: { width: 42, alignItems: 'center', justifyContent: 'center' },
+  checkInDot: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(29, 107, 73, 0.34)', borderRadius: 7, backgroundColor: colors.lifeLight },
+  checkInDotCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.life },
+  checkInContent: { flex: 1, marginLeft: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  checkInTitle: { color: colors.inkSoft, fontFamily: typography.body, fontSize: 12 },
+  checkInMeta: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  postCard: { paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'flex-start', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  feedPressed: { opacity: 0.68 },
+  postAvatar: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 21, backgroundColor: colors.life },
+  postAvatarImage: { width: '100%', height: '100%' },
+  postAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 17 },
+  postContent: { flex: 1, minWidth: 0, marginLeft: spacing.md },
+  postHeader: { minHeight: 24, flexDirection: 'row', alignItems: 'center' },
+  postAuthor: { color: colors.life, fontFamily: typography.body, fontSize: 14, fontWeight: '700' },
+  postText: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.body, fontSize: 15, lineHeight: 24 },
+  postSingleImage: { width: '92%', marginTop: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
+  postImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
+  postImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.lifeLight },
+  postImage: { width: '100%', height: '100%' },
+  postImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
+  postImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
+  audioList: { marginTop: spacing.md, gap: 6 },
+  audioPreview: { minHeight: 58, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  audioIcon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.life },
+  audioIconText: { color: colors.onLife, fontSize: 15 },
+  audioBody: { flex: 1, marginLeft: spacing.sm },
+  audioWave: { height: 25, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  audioWaveBar: { width: 3, borderRadius: 2, backgroundColor: 'rgba(29, 107, 73, 0.34)' },
+  audioMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  audioLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.7 },
+  audioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  audioMore: { color: colors.inkFaint, fontSize: 9 },
+  postFooter: { marginTop: spacing.md },
+  postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  postType: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
+  empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
   onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.42)' },
   onboardingSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },

@@ -341,8 +341,14 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
     image.onload = () => frame?.classList.remove('is-media-error');
     image.onerror = () => frame?.classList.add('is-media-error');
     const uri = mediaById.get(id);
-    if (uri && image.getAttribute('src') !== uri) image.setAttribute('src', uri);
-    else if (!uri) frame?.classList.add('is-media-error');
+    const source = image.getAttribute('src') ?? '';
+    if (uri) {
+      const shouldRetry = image.complete && image.naturalWidth === 0;
+      frame?.classList.remove('is-media-error');
+      if (source !== uri || shouldRetry) image.setAttribute('src', uri);
+    } else if (source.startsWith(MEDIA_ORIGIN)) {
+      frame?.classList.add('is-media-error');
+    }
   });
   editor.querySelectorAll<HTMLElement>('.audio-frame').forEach((frame) => decorateAudioFrame(frame, mediaById));
   ensureTrailingParagraph(editor);
@@ -728,18 +734,18 @@ const EDITOR_CSS = `
   code { padding: 0.15em 0.36em; border-radius: 5px; background: #e6ece5; color: #1d6b49; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
   pre { overflow-x: auto; margin: 1.2em 0; padding: 15px 16px; border-radius: 14px; background: #252b27; color: #eef0e8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78em; line-height: 1.65; white-space: pre-wrap; }
   pre code { padding: 0; background: transparent; color: inherit; font-size: inherit; }
-  hr { width: 46px; height: 2px; margin: 2em auto; border: 0; background: #d4a84f; }
+  hr { width: 100%; height: 0; margin: 2em 0; border: 0; border-top: 1px solid rgba(32,35,31,0.13); background: transparent; }
   table { display: block; width: 100%; margin: 1.2em 0; overflow-x: auto; border-collapse: collapse; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.78em; }
   th, td { min-width: 110px; padding: 9px 10px; border: 1px solid rgba(32,35,31,0.16); text-align: left; }
   th { background: #eef0e8; font-weight: 700; }
   figure { margin: 1.2em 0; }
-  .media-frame { display: block; position: relative; overflow: hidden; margin: 1.2em 0; border-radius: 4px 22px 4px 22px; cursor: pointer; }
+  .media-frame { display: block; position: relative; overflow: hidden; margin: 1.2em 0; border-radius: 4px; cursor: pointer; }
   .media-frame::after { position: absolute; top: 10px; right: 10px; content: "轻触替换"; padding: 5px 8px; border-radius: 11px; background: rgba(32, 35, 31, 0.58); color: #f4f6ef; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10px; line-height: 1.2; pointer-events: none; }
   .media-frame.is-media-error { min-height: 220px; border: 1px solid rgba(32, 35, 31, 0.13); background: #eef0e8; }
   .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "图片暂时无法显示 轻触替换"; color: #656b62; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
   .media-frame.is-media-error::after { display: none; }
   .media-frame.is-media-error img { visibility: hidden; }
-  img { display: block; width: 100%; max-height: 520px; border-radius: 4px 22px 4px 22px; background: #d8e8dc; object-fit: cover; }
+  img { display: block; width: 100%; max-height: 520px; background: #d8e8dc; object-fit: cover; }
   .mention { padding: 0.08em 0.22em; border-radius: 5px; background: #d8e8dc; color: #1d6b49; }
   .audio-frame, .audio-recording-frame { min-height: 72px; display: flex; align-items: center; margin: 1.25em 0; padding: 14px; border-radius: 4px 22px 4px 22px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
   .audio-frame { background: #d8e8dc; }

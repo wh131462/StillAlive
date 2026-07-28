@@ -59,9 +59,9 @@ const VIEW_CSS = `
   code { padding: 0.15em 0.36em; border-radius: 5px; background: #e6ece5; color: #1d6b49; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
   pre { overflow-x: auto; margin: 1.2em 0; padding: 15px 16px; border-radius: 14px; background: #252b27; color: #eef0e8; font-size: 0.78em; line-height: 1.65; white-space: pre-wrap; }
   pre code { padding: 0; background: transparent; color: inherit; font-size: inherit; }
-  hr { width: 46px; height: 2px; margin: 2em auto; border: 0; background: #d4a84f; }
+  hr { width: 100%; height: 0; margin: 2em 0; border: 0; border-top: 1px solid rgba(32,35,31,0.13); background: transparent; }
   table { display: block; width: 100%; margin: 1.2em 0; overflow-x: auto; border-collapse: collapse; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.78em; }
   th, td { min-width: 105px; padding: 9px 10px; border: 1px solid rgba(32,35,31,0.16); text-align: left; }
   th { background: #eef0e8; }
-  img { display: block; width: 100%; max-height: 560px; margin: 1.1em 0; border-radius: 4px 22px 4px 22px; background: #d8e8dc; object-fit: cover; }
+  img { display: block; width: 100%; max-height: 560px; margin: 1.1em 0; border-radius: 4px; background: #d8e8dc; object-fit: cover; }
 `;

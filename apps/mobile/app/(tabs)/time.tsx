@@ -1,48 +1,25 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { DayKey, Post } from '@still-alive/types';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { CheckIn, DayKey, Post } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../src/state/app-state';
-import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
+import { extractAudioEmbeds } from '../../src/domain/embedded-media';
+import { TabPageHeader } from '../../src/components/tab-page-header';
 
-type ViewMode = 'timeline' | 'calendar';
+type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
-export default function TimeScreen() {
+export default function CalendarScreen() {
   const router = useRouter();
-  const { checkIns, media, posts, preferences, today, todayCheckIn } = useAppState();
-  const [mode, setMode] = useState<ViewMode>('timeline');
+  const { checkIns, posts, today, todayCheckIn } = useAppState();
   const [activeMonth, setActiveMonth] = useState(today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
-  const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
   const checkInDays = useMemo(() => new Set(checkIns.map((item) => item.dayKey)), [checkIns]);
-  const monthKeys = useMemo(() => {
-    const values = new Set([today.slice(0, 7), ...posts.map((post) => post.dayKey.slice(0, 7)), ...checkIns.map((item) => item.dayKey.slice(0, 7))]);
-    return [...values].sort().reverse();
-  }, [checkIns, posts, today]);
-  const monthDays = useMemo(() => groupMonthDays(activeMonth, posts, checkInDays), [activeMonth, checkInDays, posts]);
-  const selectedPosts = posts.filter((post) => post.dayKey === selectedDay);
-  const recordedDays = new Set([...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)]).size;
-  const latestDay = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)].sort().at(-1);
-  const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
-  const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
-
-  const selectMonth = (month: string) => {
-    setActiveMonth(month);
-    const latestDay = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)]
-      .filter((dayKey) => dayKey.startsWith(month) && dayKey <= today)
-      .sort()
-      .at(-1);
-    setSelectedDay(latestDay ?? `${month}-01` as DayKey);
-  };
-
-  const showCalendar = () => {
-    setMode('calendar');
-    if (!selectedDay.startsWith(activeMonth)) selectMonth(activeMonth);
-  };
+  const selectedCheckIn = checkIns.find((item) => item.dayKey === selectedDay);
+  const selectedPosts = posts.filter((post) => post.dayKey === selectedDay).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
   const openEditorForDay = (dayKey: DayKey) => {
     if (dayKey === today && !todayCheckIn) {
@@ -63,121 +40,22 @@ export default function TimeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.topLine}>
-          <Text style={styles.label}>YOUR DAYS</Text>
-          <View style={styles.modeSwitch}>
-            <ModeButton active={mode === 'timeline'} label="时间线" onPress={() => setMode('timeline')} />
-            <ModeButton active={mode === 'calendar'} label="月历" onPress={showCalendar} />
-          </View>
-        </View>
-        <Text style={styles.title}>日子没有消失，{`\n`}只是走到了身后。</Text>
-        <Text style={styles.description}>打卡只是轻轻一点，留下的内容会在这里慢慢形成时间。</Text>
-        <View style={styles.memoryTrace}>
-          <View style={styles.memoryTraceTop}>
-            <View>
-              <Text style={styles.memoryTraceEyebrow}>MEMORY TRACE</Text>
-              <Text style={styles.memoryTraceTitle}>这些日子，正在慢慢长大</Text>
-            </View>
-            <Text style={styles.memoryTraceArrow}>↗</Text>
-          </View>
-          <Text style={styles.memoryTraceText}>{latestDay ? `最近一次留下在 ${formatDate(latestDay)}。` : '从今天开始，留下第一段属于你的时间。'}</Text>
-          <View style={styles.memoryTraceMeta}><Text style={styles.memoryTraceMetaText}>已记录 {recordedDays} 天</Text><View style={styles.memoryTraceDot} /><Text style={styles.memoryTraceMetaText}>{imageCount} 张图片 · {voiceCount} 段语音</Text></View>
-        </View>
-
-        {mode === 'timeline' ? (
-          <>
-            <ScrollView horizontal contentContainerStyle={styles.monthTabs} showsHorizontalScrollIndicator={false}>
-              {monthKeys.map((month) => (
-                <Pressable key={month} accessibilityRole="button" onPress={() => selectMonth(month)} style={[styles.monthTab, activeMonth === month && styles.monthTabActive]}>
-                  <Text style={[styles.monthTabText, activeMonth === month && styles.monthTabTextActive]}>{shortMonth(month)}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <View style={styles.monthRow}><Text style={styles.month}>{monthTitle(activeMonth)}</Text><View style={styles.monthLine} /></View>
-            {monthDays.length === 0 ? (
-              <Text style={styles.empty}>这个月还没有留下坐标。</Text>
-            ) : monthDays.map((group) => (
-              <View key={group.dayKey} style={styles.dayGroup}>
-                <View style={styles.dayColumn}>
-                  <Text style={styles.day}>{group.dayKey.slice(8)}</Text>
-                  <Text style={styles.weekday}>{weekdayLabel(group.dayKey)}</Text>
-                  <View style={[styles.dot, group.posts.length === 0 && styles.dotCheckIn]} />
-                </View>
-                <View style={styles.dayContent}>
-                  {group.posts.length === 0 ? (
-                    <Text style={styles.checkInOnly}>这一天，只留下了一个坐标。</Text>
-                  ) : group.posts.map((post) => (
-                    <TimelinePost authorName={preferences.nickname || '我'} key={post.id} mediaById={mediaById} onPress={() => router.push(`/post/${post.id}`)} post={post} />
-                  ))}
-                </View>
-              </View>
-            ))}
-          </>
-        ) : (
-          <CalendarView
-            activeMonth={activeMonth}
-            checkInDays={checkInDays}
-            onChangeMonth={changeMonth}
-            onOpenPost={(postId) => router.push(`/post/${postId}`)}
-            onSelectDay={setSelectedDay}
-            onWrite={openEditorForDay}
-            posts={posts}
-            selectedDay={selectedDay}
-            selectedPosts={selectedPosts}
-            today={today}
-          />
-        )}
+        <TabPageHeader eyebrow="CALENDAR" subtitle="每一个圆点，都是生活的痕迹。" title="日历" />
+        <CalendarView
+          activeMonth={activeMonth}
+          checkInDays={checkInDays}
+          onChangeMonth={changeMonth}
+          onOpenPost={(postId) => router.push(`/post/${postId}`)}
+          onSelectDay={setSelectedDay}
+          onWrite={openEditorForDay}
+          posts={posts}
+          selectedCheckIn={selectedCheckIn}
+          selectedDay={selectedDay}
+          selectedPosts={selectedPosts}
+          today={today}
+        />
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function ModeButton({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} hitSlop={4} onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
-      <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function TimelinePost({ authorName, mediaById, onPress, post }: { authorName: string; mediaById: Map<string, { localPath: string }>; onPress(): void; post: Post }) {
-  const mediaIds = extractMediaIds(post.bodyMarkdown);
-  const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is { localPath: string } => Boolean(item));
-  const plainText = markdownToPlainText(post.bodyMarkdown);
-  const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.entry, pressed && styles.pressed]}>
-      <View style={styles.entryHeader}>
-        <View style={styles.entryAvatar}><Text style={styles.entryAvatarText}>{authorName.slice(0, 1)}</Text></View>
-        <View style={styles.entryIdentity}>
-          <Text style={styles.entryAuthor}>{authorName}</Text>
-          <Text style={styles.entryMeta}>{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' 修改过' : ''}</Text>
-        </View>
-      </View>
-      {plainText ? <Text numberOfLines={6} style={styles.entryText}>{plainText}</Text> : null}
-      {images.length ? <TimelineImages images={images} totalCount={mediaIds.length} /> : null}
-      <View style={styles.entryFooter}>
-        <Text style={styles.entryType}>{[images.length ? `${mediaIds.length} 张照片` : '', audioEmbeds.length ? audioEmbeds.length === 1 ? `语音 · ${formatAudioDuration(audioEmbeds[0].durationMs)}` : `${audioEmbeds.length} 段语音` : ''].filter(Boolean).join(' · ') || '文字记录'}</Text>
-        <Text style={styles.entryOpen}>查看全文　›</Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function TimelineImages({ images, totalCount }: { images: Array<{ localPath: string }>; totalCount: number }) {
-  if (images.length === 1) {
-    return <Image accessibilityLabel="日记图片" resizeMode="cover" source={{ uri: images[0].localPath }} style={styles.entrySingleImage} />;
-  }
-  const visibleImages = images.slice(0, 9);
-  return (
-    <View style={styles.entryImageGrid}>
-      {visibleImages.map((image, index) => (
-        <View key={`${image.localPath}_${index}`} style={styles.entryImageCell}>
-          <Image accessibilityLabel={`日记图片 ${index + 1}`} resizeMode="cover" source={{ uri: image.localPath }} style={styles.entryGridImage} />
-          {index === visibleImages.length - 1 && totalCount > 9 ? <View style={styles.entryImageMore}><Text style={styles.entryImageMoreText}>+{totalCount - 9}</Text></View> : null}
-        </View>
-      ))}
-    </View>
   );
 }
 
@@ -189,12 +67,13 @@ interface CalendarViewProps {
   onSelectDay(dayKey: DayKey): void;
   onWrite(dayKey: DayKey): void;
   posts: Post[];
+  selectedCheckIn?: CheckIn;
   selectedDay: DayKey;
   selectedPosts: Post[];
   today: DayKey;
 }
 
-function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, posts, selectedDay, selectedPosts, today }: CalendarViewProps) {
+function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, posts, selectedCheckIn, selectedDay, selectedPosts, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
     return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
@@ -205,8 +84,10 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
     return values;
   }, [posts]);
   const selectedLunarDate = lunarDateInfo(selectedDay);
+  const selectedItemCount = selectedPosts.length + Number(Boolean(selectedCheckIn));
   const canNext = activeMonth < today.slice(0, 7);
   const [year, month] = activeMonth.split('-');
+
   return (
     <View style={styles.calendarSection}>
       <View style={styles.calendarHeader}>
@@ -227,6 +108,11 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               const dividers = [columnIndex < 6 && styles.calendarCellColumnDivider, rowIndex < weeks.length - 1 && styles.calendarCellRowDivider];
               if (!dayKey) return <View key={`empty_${rowIndex}_${columnIndex}`} style={[styles.calendarCell, ...dividers, styles.calendarCellEmpty]} />;
               const dayPosts = postsByDay.get(dayKey) ?? [];
+              const itemCount = dayPosts.length + Number(checkInDays.has(dayKey));
+              const markers: CalendarMarkerKind[] = [
+                ...(checkInDays.has(dayKey) ? ['check-in' as const] : []),
+                ...dayPosts.map((post) => postMarkerKind(post.bodyMarkdown)),
+              ].slice(0, 3);
               const future = dayKey > today;
               const selected = dayKey === selectedDay;
               const isToday = dayKey === today;
@@ -234,7 +120,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               return (
                 <Pressable
                   key={dayKey}
-                  accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}`}
+                  accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}${itemCount ? `，有 ${itemCount} 条内容` : ''}`}
                   accessibilityRole="button"
                   disabled={future}
                   onPress={() => onSelectDay(dayKey)}
@@ -245,7 +131,11 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                     {isToday ? <View style={styles.todayMark}><Text style={styles.todayMarkText}>今</Text></View> : null}
                   </View>
                   {lunarDate ? <Text numberOfLines={1} style={[styles.lunarDay, lunarDate.emphasis && styles.lunarFestival, selected && styles.lunarDaySelected]}>{lunarDate.shortLabel}</Text> : null}
-                  {dayPosts.length ? <View style={styles.postMark} /> : checkInDays.has(dayKey) ? <View style={styles.checkInMark} /> : null}
+                  {markers.length ? (
+                    <View style={styles.calendarMarks}>
+                      {markers.map((kind, index) => <View key={`${dayKey}_mark_${index}`} style={[styles.calendarMark, { backgroundColor: markerColor(kind) }]} />)}
+                    </View>
+                  ) : null}
                 </Pressable>
               );
             })}
@@ -254,8 +144,11 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
       </View>
 
       <View style={styles.calendarLegend}>
-        <View style={styles.legendItem}><View style={styles.legendCheckIn} /><Text style={styles.legendText}>坐标</Text></View>
-        <View style={styles.legendItem}><View style={styles.legendPost} /><Text style={styles.legendText}>日记</Text></View>
+        <LegendItem kind="check-in" label="打卡" />
+        <LegendItem kind="text" label="文字" />
+        <LegendItem kind="image" label="图片" />
+        <LegendItem kind="audio" label="录音" />
+        <Text style={styles.legendText}>最多 3 个</Text>
       </View>
 
       <View style={styles.selectedPanel}>
@@ -263,26 +156,44 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           <View style={styles.selectedDateBlock}>
             <Text style={styles.selectedDate}>{selectedDay.replaceAll('-', '.')} {chineseWeekdayLabel(selectedDay)}</Text>
             {selectedLunarDate ? <Text style={styles.selectedLunar}>农历 {selectedLunarDate.fullLabel}{selectedLunarDate.term ? ` ${selectedLunarDate.term}` : ''}</Text> : null}
-            <Text style={styles.selectedHint}>{checkInDays.has(selectedDay) ? '这一天留下了坐标' : selectedPosts.length ? '后来补写的日子' : '这一天还没有内容'}</Text>
+            <Text style={styles.selectedHint}>{selectedItemCount ? `这一天留下了 ${selectedItemCount} 个片段` : '这一天还没有内容'}</Text>
           </View>
           <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable>
         </View>
-        {selectedPosts.map((post) => (
-          <Pressable key={post.id} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedPost, pressed && styles.pressed]}>
-            <Text numberOfLines={3} style={styles.selectedPostText}>{markdownToPlainText(post.bodyMarkdown) || (extractAudioEmbeds(post.bodyMarkdown).length ? `${extractAudioEmbeds(post.bodyMarkdown).length} 段语音` : '一张照片')}</Text>
-            <Text style={styles.selectedPostArrow}>查看 →</Text>
-          </Pressable>
-        ))}
+        {selectedItemCount ? (
+          <View style={styles.selectedList}>
+            {selectedCheckIn ? (
+              <View style={styles.selectedEntry}>
+                <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor('check-in') }]} /></View>
+                <View style={styles.selectedEntryContent}>
+                  <Text style={styles.selectedEntryMeta}>打卡 · {formatTime(selectedCheckIn.createdAt)}</Text>
+                  <Text style={styles.selectedCheckInTitle}>今天也在</Text>
+                </View>
+              </View>
+            ) : null}
+            {selectedPosts.map((post) => {
+              const attachmentLabel = postAttachmentLabel(post.bodyMarkdown);
+              const markerKind = postMarkerKind(post.bodyMarkdown);
+              return (
+                <Pressable key={post.id} accessibilityLabel={`打开 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedEntry, pressed && styles.selectedEntryPressed]}>
+                  <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor(markerKind) }]} /></View>
+                  <View style={styles.selectedEntryContent}>
+                    <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} · {formatTime(post.createdAt)}{attachmentLabel ? ` · ${attachmentLabel}` : ''}</Text>
+                    <Text numberOfLines={3} style={styles.selectedPostText}>{markdownToPlainText(post.bodyMarkdown) || attachmentLabel || '记录了一些内容'}</Text>
+                  </View>
+                  <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
     </View>
   );
 }
 
-function groupMonthDays(month: string, posts: Post[], checkInDays: Set<DayKey>): Array<{ dayKey: DayKey; posts: Post[] }> {
-  const days = new Set<DayKey>();
-  for (const post of posts) if (post.dayKey.startsWith(month)) days.add(post.dayKey);
-  for (const dayKey of checkInDays) if (dayKey.startsWith(month)) days.add(dayKey);
-  return [...days].sort().reverse().map((dayKey) => ({ dayKey, posts: posts.filter((post) => post.dayKey === dayKey) }));
+function LegendItem({ kind, label }: { kind: CalendarMarkerKind; label: string }) {
+  return <View style={styles.legendItem}><View style={[styles.legendMark, { backgroundColor: markerColor(kind) }]} /><Text style={styles.legendText}>{label}</Text></View>;
 }
 
 function calendarCells(month: string): Array<DayKey | null> {
@@ -300,21 +211,6 @@ function shiftMonth(month: string, offset: number): string {
   const [year, value] = month.split('-').map(Number);
   const date = new Date(year, value - 1 + offset, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthTitle(month: string): string {
-  const [year, value] = month.split('-');
-  return `${year} ${Number(value)} 月`;
-}
-
-function shortMonth(month: string): string {
-  const [year, value] = month.split('-');
-  return `${year.slice(2)}.${value}`;
-}
-
-function weekdayLabel(dayKey: DayKey): string {
-  const [year, month, day] = dayKey.split('-').map(Number);
-  return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(year, month - 1, day).getDay()];
 }
 
 function chineseWeekdayLabel(dayKey: DayKey): string {
@@ -348,81 +244,45 @@ function lunarDateInfo(dayKey: DayKey): LunarDateInfo | null {
   }
 }
 
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
-function formatDate(dayKey: string): string {
-  const [year, month, day] = dayKey.split('-');
-  return `${year}年${Number(month)}月${Number(day)}日`;
-}
-
 function markdownToPlainText(markdown: string): string {
   return markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/^#{1,3}\s+/gm, '').replace(/^[-*>]\s+/gm, '').replace(/[*_`]/g, '').trim();
 }
 
-function extractMediaIds(markdown: string): string[] {
-  return [...new Set([...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].map((match) => match[1]))];
+function formatTime(iso: string): string {
+  const value = new Date(iso);
+  return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
+}
+
+function postAttachmentLabel(markdown: string): string {
+  const imageCount = [...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].length;
+  const audioCount = extractAudioEmbeds(markdown).length;
+  return [imageCount ? `${imageCount} 张图片` : '', audioCount ? `${audioCount} 段语音` : ''].filter(Boolean).join(' · ');
+}
+
+function postMarkerKind(markdown: string): CalendarMarkerKind {
+  if (extractAudioEmbeds(markdown).length) return 'audio';
+  if (/!\[[^\]]*\]\(media:\/\/([^)]+)\)/.test(markdown)) return 'image';
+  return 'text';
+}
+
+function markerColor(kind: CalendarMarkerKind): string {
+  if (kind === 'check-in') return colors.inkFaint;
+  if (kind === 'image') return colors.sun;
+  if (kind === 'audio') return '#9B493F';
+  return colors.life;
+}
+
+function markerLabel(kind: CalendarMarkerKind): string {
+  if (kind === 'check-in') return '打卡';
+  if (kind === 'image') return '图片记录';
+  if (kind === 'audio') return '录音记录';
+  return '文字记录';
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  topLine: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
-  title: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 36, lineHeight: 47 },
-  description: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
-  memoryTrace: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeLight },
-  memoryTraceTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  memoryTraceEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 10, letterSpacing: 1.2 },
-  memoryTraceTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
-  memoryTraceArrow: { color: colors.life, fontSize: 20 },
-  memoryTraceText: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 20 },
-  memoryTraceMeta: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center' },
-  memoryTraceMetaText: { color: colors.life, fontSize: 10, fontWeight: '700' },
-  memoryTraceDot: { width: 3, height: 3, marginHorizontal: spacing.sm, borderRadius: 2, backgroundColor: colors.sun },
-  modeSwitch: { width: 138, height: 36, padding: 3, flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.sheet },
-  modeButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
-  modeButtonActive: { backgroundColor: colors.life },
-  modeText: { color: colors.inkFaint, fontSize: typography.size.meta },
-  modeTextActive: { color: colors.onLife, fontWeight: '700' },
-  monthTabs: { gap: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
-  monthTab: { minWidth: 54, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
-  monthTabActive: { borderColor: colors.life, backgroundColor: colors.lifeLight },
-  monthTabText: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
-  monthTabTextActive: { color: colors.life },
-  monthRow: { marginTop: spacing.lg, marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  month: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
-  monthLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
-  empty: { color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
-  dayGroup: { marginBottom: spacing.xl },
-  dayColumn: { minHeight: 36, flexDirection: 'row', alignItems: 'baseline', position: 'relative' },
-  day: { color: colors.ink, fontFamily: typography.display, fontSize: 28 },
-  weekday: { marginLeft: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
-  dot: { width: 7, height: 7, marginLeft: spacing.sm, borderRadius: 4, backgroundColor: colors.life },
-  dotCheckIn: { backgroundColor: colors.sun },
-  dayContent: { gap: spacing.md },
-  checkInOnly: { padding: spacing.md, color: colors.inkFaint, fontFamily: typography.display, fontSize: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  entry: { padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
-  entryHeader: { flexDirection: 'row', alignItems: 'center' },
-  entryAvatar: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.life },
-  entryAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 16 },
-  entryIdentity: { flex: 1, marginLeft: spacing.sm },
-  entryAuthor: { color: colors.life, fontSize: 12, fontWeight: '700' },
-  entryMeta: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
-  entryText: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
-  entrySingleImage: { width: '78%', aspectRatio: 1.15, marginTop: spacing.md, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
-  entryImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  entryImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
-  entryGridImage: { width: '100%', height: '100%' },
-  entryImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
-  entryImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
-  entryFooter: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  entryType: { color: colors.inkFaint, fontSize: typography.size.meta },
-  entryOpen: { color: colors.life, fontSize: typography.size.meta },
-  pressed: { opacity: 0.62 },
-  calendarSection: { marginTop: spacing.xl },
+  calendarSection: { marginTop: 0 },
   calendarHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   calendarYear: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
@@ -450,13 +310,12 @@ const styles = StyleSheet.create({
   lunarDay: { maxWidth: '100%', color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 13 },
   lunarFestival: { color: colors.sun, fontWeight: '700' },
   lunarDaySelected: { color: colors.life },
-  postMark: { position: 'absolute', bottom: 5, width: 12, height: 3, borderRadius: 2, backgroundColor: colors.sun },
-  checkInMark: { position: 'absolute', bottom: 6, width: 3, height: 3, borderRadius: 2, backgroundColor: colors.inkFaint },
-  calendarLegend: { marginTop: spacing.md, flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
+  calendarMarks: { position: 'absolute', bottom: 7, flexDirection: 'row', gap: 3 },
+  calendarMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
+  calendarLegend: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
-  legendCheckIn: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.inkFaint },
-  legendPost: { width: 12, height: 3, borderRadius: 2, backgroundColor: colors.sun },
+  legendMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
   selectedPanel: { marginTop: spacing.lg, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },
   selectedHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectedDateBlock: { flex: 1, paddingRight: spacing.md },
@@ -465,7 +324,14 @@ const styles = StyleSheet.create({
   selectedHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
   writeButton: { minWidth: 76, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.life },
   writeButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
-  selectedPost: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  selectedList: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  selectedEntry: { minHeight: 72, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  selectedEntryPressed: { marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  selectedEntryRail: { width: 20, alignSelf: 'stretch', alignItems: 'flex-start', paddingTop: 7 },
+  selectedEntryDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.life },
+  selectedEntryContent: { flex: 1 },
+  selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
+  selectedCheckInTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
   selectedPostText: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
-  selectedPostArrow: { marginTop: spacing.sm, color: colors.life, fontSize: typography.size.meta },
+  selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
 });

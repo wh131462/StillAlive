@@ -75,7 +75,7 @@ export default function PersonScreen() {
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: person.memoryEnabled }} onPress={() => void setPersonMemoryEnabled(person.id, !person.memoryEnabled)} style={styles.memorySetting}>
               <View style={[styles.memoryIndicator, person.memoryEnabled && styles.memoryIndicatorOn]} />
               <View style={styles.memorySettingText}>
-                <Text style={styles.memorySettingTitle}>偶尔在今日页想起 {person.name}</Text>
+                <Text style={styles.memorySettingTitle}>偶尔在空间里想起 {person.name}</Text>
                 <Text style={styles.memorySettingHint}>{person.memoryEnabled ? '已开启 可以随时关闭' : '已关闭 记录仍会完整保留'}</Text>
               </View>
             </Pressable>
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   memory: { paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   memoryPressed: { opacity: 0.62 },
   date: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
-  memoryImage: { width: '100%', height: 190, marginTop: spacing.md, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
+  memoryImage: { width: '100%', height: 190, marginTop: spacing.md, backgroundColor: colors.lifeLight },
   body: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 28 },
   missing: { marginTop: spacing.xxl, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
   deleteButton: { minHeight: 48, marginTop: spacing.xxl, alignItems: 'center', justifyContent: 'center' },
