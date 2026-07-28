@@ -1,26 +1,34 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { Media } from '@still-alive/types';
 
 export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media> {
   const id = createLocalId('media');
-  const directory = new Directory(Paths.document, 'media');
-  directory.create({ idempotent: true, intermediates: true });
-
   const extension = fileExtension(asset);
-  const source = new File(asset.uri);
-  const destination = new File(directory, `${id}${extension}`);
-  await source.copy(destination);
+  const documentDirectory = LegacyFileSystem.documentDirectory;
+  if (!documentDirectory) throw new Error('应用数据目录不可用');
+  const directoryUri = `${documentDirectory}media`;
+  const destinationUri = `${directoryUri}/${id}${extension}`;
 
-  return {
-    id,
-    localPath: destination.uri,
-    mimeType: asset.mimeType ?? mimeTypeForExtension(extension),
-    width: asset.width || null,
-    height: asset.height || null,
-    checksum: destination.md5 ?? '',
-    createdAt: new Date().toISOString(),
-  };
+  try {
+    await LegacyFileSystem.makeDirectoryAsync(directoryUri, { intermediates: true });
+    await LegacyFileSystem.copyAsync({ from: asset.uri, to: destinationUri });
+    const info = await LegacyFileSystem.getInfoAsync(destinationUri, { md5: true });
+    if (!info.exists || info.isDirectory || info.size <= 0) throw new Error('照片文件为空');
+    return {
+      id,
+      localPath: destinationUri,
+      mimeType: asset.mimeType ?? mimeTypeForExtension(extension),
+      width: asset.width || null,
+      height: asset.height || null,
+      checksum: info.md5 ?? '',
+      createdAt: new Date().toISOString(),
+    };
+  } catch (cause) {
+    await LegacyFileSystem.deleteAsync(destinationUri, { idempotent: true }).catch(() => undefined);
+    throw cause;
+  }
 }
 
 export async function persistVoiceRecording(uri: string): Promise<Media> {
