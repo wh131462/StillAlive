@@ -26,6 +26,9 @@ export default function TodayScreen() {
   const returningAfterBreak = Boolean(lastCheckInDay && lastCheckInDay !== today && lastCheckInDay !== yesterday);
   const memoryImageId = homeMemory ? firstMediaId(homeMemory.post.bodyMarkdown) : null;
   const memoryImage = memoryImageId ? media.find((item) => item.id === memoryImageId) : null;
+  // 备份提醒优先展示；用户稍后处理后，今日页再轮换回忆卡片，避免次级卡片同时抢占注意力。
+  const showBackupReminder = shouldShowBackupReminder;
+  const showMemory = Boolean(homeMemory) && !showBackupReminder;
 
   useEffect(() => {
     setNickname(preferences.nickname);
@@ -108,7 +111,7 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
-        {homeMemory ? (
+        {showMemory && homeMemory ? (
           <View style={styles.memory}>
             <View style={styles.memoryHeader}>
               <Text style={styles.memoryLabel}>{memoryLabel(homeMemory, today)}</Text>
@@ -128,7 +131,7 @@ export default function TodayScreen() {
             <Text style={styles.backupTitle}>已经留下不少内容了。</Text>
             <Text style={styles.backupText}>可以找一个合适的位置，保存一份属于自己的完整备份。</Text>
             <View style={styles.backupActions}>
-              <Pressable accessibilityRole="button" onPress={() => router.push('/data')} style={styles.backupPrimary}><Text style={styles.backupPrimaryText}>现在备份</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => router.push('/backup')} style={styles.backupPrimary}><Text style={styles.backupPrimaryText}>现在备份</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => void dismissBackupReminder()} style={styles.backupLater}><Text style={styles.backupLaterText}>以后再说</Text></Pressable>
             </View>
           </View>
@@ -248,16 +251,16 @@ const styles = StyleSheet.create({
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xxl },
   brand: { color: colors.ink, fontFamily: typography.display, fontSize: 22 },
-  english: { marginTop: 2, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.6 },
-  date: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, lineHeight: 15, textAlign: 'right' },
-  kicker: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.4 },
+  english: { marginTop: 2, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.6 },
+  date: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, lineHeight: 15, textAlign: 'right' },
+  kicker: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.4 },
   title: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 40, lineHeight: 51 },
-  stateMessage: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 11 },
-  errorMessage: { marginTop: spacing.md, color: '#9B443B', fontSize: 11, lineHeight: 18 },
+  stateMessage: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.caption },
+  errorMessage: { marginTop: spacing.md, color: colors.danger, fontSize: typography.size.caption, lineHeight: 18 },
   checkCard: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life },
   checkCardDone: { backgroundColor: '#2F5E48' },
   cardMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardMeta: { color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
+  cardMeta: { color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
   pulse: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.sun },
   pulseDone: { backgroundColor: colors.lifeLight },
   cardTitle: { marginTop: spacing.xxl, color: colors.onLife, fontFamily: typography.display, fontSize: 27 },
@@ -271,7 +274,7 @@ const styles = StyleSheet.create({
   todaySection: { marginTop: spacing.xl },
   todaySectionHeader: { paddingHorizontal: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   todaySectionTitle: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 18 },
-  todaySectionCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.1 },
+  todaySectionCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
   todayNote: { marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
   todayNoteFirst: { marginTop: spacing.md },
   todayNoteMetaRow: { flexDirection: 'row', alignItems: 'center' },
@@ -279,8 +282,8 @@ const styles = StyleSheet.create({
   todayNoteAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 16 },
   todayNoteIdentity: { flex: 1, marginLeft: spacing.sm },
   todayNoteAuthor: { color: colors.life, fontSize: 12, fontWeight: '700' },
-  todayNoteMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
-  todayNoteOpen: { color: colors.life, fontSize: 9 },
+  todayNoteMeta: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
+  todayNoteOpen: { color: colors.life, fontSize: typography.size.meta },
   todaySingleImage: { width: '78%', aspectRatio: 1.15, marginTop: spacing.md, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
   todayImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   todayImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
@@ -289,21 +292,21 @@ const styles = StyleSheet.create({
   todayImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
   todayNoteText: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
   todayNoteFooter: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  todayNoteType: { color: colors.inkFaint, fontSize: 8 },
+  todayNoteType: { color: colors.inkFaint, fontSize: typography.size.meta },
   leaveButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   leaveText: { color: colors.inkFaint, fontSize: 10 },
   memory: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   memoryHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  memoryLabel: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.2 },
-  memoryDate: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
+  memoryLabel: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
+  memoryDate: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   memoryCard: { marginTop: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
   memoryImage: { width: '100%', height: 180, marginBottom: spacing.md, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
   memoryText: { color: colors.ink, fontFamily: typography.display, fontSize: 17, lineHeight: 29 },
   memoryFoot: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 10 },
   backupReminder: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sunLight },
-  backupLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.2 },
+  backupLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   backupTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
-  backupText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 10, lineHeight: 18 },
+  backupText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 18 },
   backupActions: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   backupPrimary: { minWidth: 88, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   backupPrimaryText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
@@ -311,7 +314,7 @@ const styles = StyleSheet.create({
   backupLaterText: { color: colors.inkSoft, fontSize: 10 },
   onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.42)' },
   onboardingSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
-  onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.5 },
+  onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   onboardingTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 28, lineHeight: 39 },
   onboardingText: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 11, lineHeight: 20 },
   onboardingInput: { minHeight: 50, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 14 },
