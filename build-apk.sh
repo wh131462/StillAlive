@@ -26,6 +26,8 @@ JDK17_CANDIDATES=(
   "${JAVA_HOME:-}"
   "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
   "/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+  "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  "/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home"
 )
 
 for JDK_CANDIDATE in "${JDK17_CANDIDATES[@]}"; do
