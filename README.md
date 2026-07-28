@@ -1,6 +1,6 @@
 # 仍在 / Still Alive
 
-本地优先的个人生命记录应用。
+本地优先的个人生命记录应用，仅支持 iOS 和 Android。
 
 核心闭环：每日打卡、Markdown 日记、图片与人物关联、时间回看、完整导出。
 
@@ -21,7 +21,7 @@ docs/           PRD 与 HTML 设计稿
 openspec/       产品变更规格
 ```
 
-MVP 不包含服务端、Web 客户端、微信小程序和 Docker 部署。
+MVP 不包含服务端、Web 客户端、微信小程序和 Docker 部署。Web 不属于支持平台，构建与验收以 iOS/Android 为准。
 
 ## 开发
 

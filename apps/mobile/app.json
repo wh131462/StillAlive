@@ -62,9 +62,6 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "extra": {
       "router": {},
       "eas": {
