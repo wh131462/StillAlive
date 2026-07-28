@@ -25,6 +25,10 @@ export default function TimeScreen() {
   }, [checkIns, posts, today]);
   const monthDays = useMemo(() => groupMonthDays(activeMonth, posts, checkInDays), [activeMonth, checkInDays, posts]);
   const selectedPosts = posts.filter((post) => post.dayKey === selectedDay);
+  const recordedDays = new Set([...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)]).size;
+  const latestDay = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)].sort().at(-1);
+  const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
+  const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
 
   const selectMonth = (month: string) => {
     setActiveMonth(month);
@@ -68,6 +72,17 @@ export default function TimeScreen() {
         </View>
         <Text style={styles.title}>日子没有消失，{`\n`}只是走到了身后。</Text>
         <Text style={styles.description}>打卡只是轻轻一点，留下的内容会在这里慢慢形成时间。</Text>
+        <View style={styles.memoryTrace}>
+          <View style={styles.memoryTraceTop}>
+            <View>
+              <Text style={styles.memoryTraceEyebrow}>MEMORY TRACE</Text>
+              <Text style={styles.memoryTraceTitle}>这些日子，正在慢慢长大</Text>
+            </View>
+            <Text style={styles.memoryTraceArrow}>↗</Text>
+          </View>
+          <Text style={styles.memoryTraceText}>{latestDay ? `最近一次留下在 ${formatDate(latestDay)}。` : '从今天开始，留下第一段属于你的时间。'}</Text>
+          <View style={styles.memoryTraceMeta}><Text style={styles.memoryTraceMetaText}>已记录 {recordedDays} 天</Text><View style={styles.memoryTraceDot} /><Text style={styles.memoryTraceMetaText}>{imageCount} 张图片 · {voiceCount} 段语音</Text></View>
+        </View>
 
         {mode === 'timeline' ? (
           <>
@@ -102,7 +117,6 @@ export default function TimeScreen() {
           <CalendarView
             activeMonth={activeMonth}
             checkInDays={checkInDays}
-            mediaById={mediaById}
             onChangeMonth={changeMonth}
             onOpenPost={(postId) => router.push(`/post/${postId}`)}
             onSelectDay={setSelectedDay}
@@ -170,7 +184,6 @@ function TimelineImages({ images, totalCount }: { images: Array<{ localPath: str
 interface CalendarViewProps {
   activeMonth: string;
   checkInDays: Set<DayKey>;
-  mediaById: Map<string, { localPath: string }>;
   onChangeMonth(offset: number): void;
   onOpenPost(postId: string): void;
   onSelectDay(dayKey: DayKey): void;
@@ -181,7 +194,7 @@ interface CalendarViewProps {
   today: DayKey;
 }
 
-function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOpenPost, onSelectDay, onWrite, posts, selectedDay, selectedPosts, today }: CalendarViewProps) {
+function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, posts, selectedDay, selectedPosts, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
     return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
@@ -214,8 +227,6 @@ function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOp
               const dividers = [columnIndex < 6 && styles.calendarCellColumnDivider, rowIndex < weeks.length - 1 && styles.calendarCellRowDivider];
               if (!dayKey) return <View key={`empty_${rowIndex}_${columnIndex}`} style={[styles.calendarCell, ...dividers, styles.calendarCellEmpty]} />;
               const dayPosts = postsByDay.get(dayKey) ?? [];
-              const imageId = dayPosts.map((post) => firstMediaId(post.bodyMarkdown)).find(Boolean);
-              const image = imageId ? mediaById.get(imageId) : undefined;
               const future = dayKey > today;
               const selected = dayKey === selectedDay;
               const isToday = dayKey === today;
@@ -229,7 +240,6 @@ function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOp
                   onPress={() => onSelectDay(dayKey)}
                   style={[styles.calendarCell, ...dividers, selected && styles.calendarCellSelected, future && styles.calendarCellFuture]}
                 >
-                  {image ? <Image accessibilityLabel="当天图片缩略图" resizeMode="cover" source={{ uri: image.localPath }} style={styles.calendarThumb} /> : null}
                   <View style={styles.calendarDayRow}>
                     <Text style={[styles.calendarDay, isToday && styles.calendarDayToday, selected && styles.calendarDaySelected]}>{Number(dayKey.slice(8))}</Text>
                     {isToday ? <View style={styles.todayMark}><Text style={styles.todayMarkText}>今</Text></View> : null}
@@ -246,7 +256,6 @@ function CalendarView({ activeMonth, checkInDays, mediaById, onChangeMonth, onOp
       <View style={styles.calendarLegend}>
         <View style={styles.legendItem}><View style={styles.legendCheckIn} /><Text style={styles.legendText}>坐标</Text></View>
         <View style={styles.legendItem}><View style={styles.legendPost} /><Text style={styles.legendText}>日记</Text></View>
-        <View style={styles.legendItem}><View style={styles.legendPhoto} /><Text style={styles.legendText}>图片</Text></View>
       </View>
 
       <View style={styles.selectedPanel}>
@@ -344,6 +353,11 @@ function formatTime(iso: string): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatDate(dayKey: string): string {
+  const [year, month, day] = dayKey.split('-');
+  return `${year}年${Number(month)}月${Number(day)}日`;
+}
+
 function markdownToPlainText(markdown: string): string {
   return markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/^#{1,3}\s+/gm, '').replace(/^[-*>]\s+/gm, '').replace(/[*_`]/g, '').trim();
 }
@@ -352,35 +366,40 @@ function extractMediaIds(markdown: string): string[] {
   return [...new Set([...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].map((match) => match[1]))];
 }
 
-function firstMediaId(markdown: string): string | null {
-  return markdown.match(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/)?.[1] ?? null;
-}
-
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   topLine: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.5 },
+  label: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   title: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 36, lineHeight: 47 },
   description: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
+  memoryTrace: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeLight },
+  memoryTraceTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  memoryTraceEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 10, letterSpacing: 1.2 },
+  memoryTraceTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
+  memoryTraceArrow: { color: colors.life, fontSize: 20 },
+  memoryTraceText: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 20 },
+  memoryTraceMeta: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center' },
+  memoryTraceMetaText: { color: colors.life, fontSize: 10, fontWeight: '700' },
+  memoryTraceDot: { width: 3, height: 3, marginHorizontal: spacing.sm, borderRadius: 2, backgroundColor: colors.sun },
   modeSwitch: { width: 138, height: 36, padding: 3, flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.sheet },
   modeButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
   modeButtonActive: { backgroundColor: colors.life },
-  modeText: { color: colors.inkFaint, fontSize: 10 },
+  modeText: { color: colors.inkFaint, fontSize: typography.size.meta },
   modeTextActive: { color: colors.onLife, fontWeight: '700' },
   monthTabs: { gap: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   monthTab: { minWidth: 54, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   monthTabActive: { borderColor: colors.life, backgroundColor: colors.lifeLight },
-  monthTabText: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
+  monthTabText: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   monthTabTextActive: { color: colors.life },
   monthRow: { marginTop: spacing.lg, marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  month: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
+  month: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
   monthLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
   empty: { color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
   dayGroup: { marginBottom: spacing.xl },
   dayColumn: { minHeight: 36, flexDirection: 'row', alignItems: 'baseline', position: 'relative' },
   day: { color: colors.ink, fontFamily: typography.display, fontSize: 28 },
-  weekday: { marginLeft: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  weekday: { marginLeft: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   dot: { width: 7, height: 7, marginLeft: spacing.sm, borderRadius: 4, backgroundColor: colors.life },
   dotCheckIn: { backgroundColor: colors.sun },
   dayContent: { gap: spacing.md },
@@ -391,7 +410,7 @@ const styles = StyleSheet.create({
   entryAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 16 },
   entryIdentity: { flex: 1, marginLeft: spacing.sm },
   entryAuthor: { color: colors.life, fontSize: 12, fontWeight: '700' },
-  entryMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
+  entryMeta: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
   entryText: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
   entrySingleImage: { width: '78%', aspectRatio: 1.15, marginTop: spacing.md, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
   entryImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
@@ -400,19 +419,19 @@ const styles = StyleSheet.create({
   entryImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
   entryImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
   entryFooter: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  entryType: { color: colors.inkFaint, fontSize: 8 },
-  entryOpen: { color: colors.life, fontSize: 9 },
+  entryType: { color: colors.inkFaint, fontSize: typography.size.meta },
+  entryOpen: { color: colors.life, fontSize: typography.size.meta },
   pressed: { opacity: 0.62 },
   calendarSection: { marginTop: spacing.xl },
   calendarHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  calendarYear: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.2 },
+  calendarYear: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
   monthArrows: { flexDirection: 'row', gap: spacing.sm },
   monthArrow: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 19, backgroundColor: colors.sheet },
   monthArrowDisabled: { opacity: 0.2 },
   monthArrowText: { color: colors.life, fontFamily: typography.display, fontSize: 25, lineHeight: 29 },
   weekRow: { flexDirection: 'row', marginTop: spacing.md, paddingBottom: spacing.sm },
-  weekLabel: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.3, textAlign: 'center' },
+  weekLabel: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 0.3, textAlign: 'center' },
   weekLabelWeekend: { color: colors.sun },
   calendarGrid: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
   calendarWeek: { flexDirection: 'row' },
@@ -422,33 +441,31 @@ const styles = StyleSheet.create({
   calendarCellEmpty: { backgroundColor: colors.paper, opacity: 0.46 },
   calendarCellSelected: { backgroundColor: colors.lifeLight },
   calendarCellFuture: { opacity: 0.3 },
-  calendarThumb: { position: 'absolute', width: '100%', height: '100%', opacity: 0.13 },
   calendarDayRow: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: 2 },
   calendarDay: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 16 },
   calendarDayToday: { color: colors.life, fontWeight: '700' },
   calendarDaySelected: { color: colors.life },
   todayMark: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: colors.life },
-  todayMarkText: { color: colors.onLife, fontSize: 7, fontWeight: '700' },
-  lunarDay: { maxWidth: '100%', color: colors.inkFaint, fontSize: 8, lineHeight: 13 },
+  todayMarkText: { color: colors.onLife, fontSize: typography.size.meta, fontWeight: '700' },
+  lunarDay: { maxWidth: '100%', color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 13 },
   lunarFestival: { color: colors.sun, fontWeight: '700' },
   lunarDaySelected: { color: colors.life },
   postMark: { position: 'absolute', bottom: 5, width: 12, height: 3, borderRadius: 2, backgroundColor: colors.sun },
   checkInMark: { position: 'absolute', bottom: 6, width: 3, height: 3, borderRadius: 2, backgroundColor: colors.inkFaint },
   calendarLegend: { marginTop: spacing.md, flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendText: { color: colors.inkFaint, fontSize: 8 },
+  legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
   legendCheckIn: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.inkFaint },
   legendPost: { width: 12, height: 3, borderRadius: 2, backgroundColor: colors.sun },
-  legendPhoto: { width: 12, height: 9, borderRadius: 2, backgroundColor: colors.lifeLight },
   selectedPanel: { marginTop: spacing.lg, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },
   selectedHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectedDateBlock: { flex: 1, paddingRight: spacing.md },
   selectedDate: { color: colors.life, fontFamily: typography.mono, fontSize: 10, letterSpacing: 1.1 },
   selectedLunar: { marginTop: 6, color: colors.ink, fontFamily: typography.display, fontSize: 15 },
-  selectedHint: { marginTop: 5, color: colors.inkFaint, fontSize: 9 },
+  selectedHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
   writeButton: { minWidth: 76, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.life },
   writeButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
   selectedPost: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   selectedPostText: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
-  selectedPostArrow: { marginTop: spacing.sm, color: colors.life, fontSize: 9 },
+  selectedPostArrow: { marginTop: spacing.sm, color: colors.life, fontSize: typography.size.meta },
 });

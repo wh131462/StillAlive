@@ -13,8 +13,6 @@ export default function DataScreen() {
   const avatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const customTags = preferences.profileCustomTagIds.map((id) => tagDefinitions.find((tag) => tag.id === id)?.name).filter((name): name is string => Boolean(name));
   const tags = [preferences.profileMbti, ...customTags].filter(Boolean).slice(0, 4);
-  const recordedDays = new Set([...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)]).size;
-  const latestDay = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)].sort().at(-1);
   const selfAlbums = albums.filter((album) => album.personId === null);
   const selfAlbumIds = new Set(selfAlbums.map((album) => album.id));
   const selfPhotos = albumMedia.filter((item) => selfAlbumIds.has(item.albumId));
@@ -51,17 +49,6 @@ export default function DataScreen() {
         <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
       </Pressable>
 
-      <Pressable accessibilityLabel="查看记忆轨迹" accessibilityRole="button" onPress={() => router.push('/time')} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
-        <View style={styles.memoryCardTop}>
-          <View>
-            <Text style={styles.memoryEyebrow}>MEMORY TRACE</Text>
-            <Text style={styles.memoryTitle}>这些日子，正在慢慢长大</Text>
-          </View>
-          <SymbolView name={{ android: 'arrow_outward', ios: 'arrow.up.right', web: 'arrow_outward' }} pointerEvents="none" size={18} tintColor={colors.life} type="hierarchical" />
-        </View>
-        <Text style={styles.memoryText}>{latestDay ? `最近一次留下在 ${formatDate(latestDay)}。` : '从今天开始，留下第一段属于你的时间。'}</Text>
-        <View style={styles.memoryMeta}><Text style={styles.memoryMetaText}>已记录 {recordedDays} 天</Text><View style={styles.memoryDot} /><Text style={styles.memoryMetaText}>{imageCount} 张图片 · {voiceCount} 段语音</Text></View>
-      </Pressable>
     </ScrollView>
   </SafeAreaView>;
 }
@@ -71,23 +58,15 @@ function Stat({ label, value }: { label: string; value: number }) { return <View
 function formatDate(value: string) { const [year, month, day] = value.split('-'); return `${year}年${Number(month)}月${Number(day)}日`; }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl }, titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }, eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.5 }, title: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 36 }, settingsButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.sheet },
-  profileCard: { marginTop: spacing.lg, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.38)', borderRadius: 38, backgroundColor: colors.paper }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md }, name: { color: colors.onLife, fontFamily: typography.display, fontSize: 22 }, profileMeta: { marginTop: 5, color: colors.onLifeMuted, fontSize: 9 }, tags: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: 5 }, tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.13)' }, tagText: { color: colors.onLife, fontSize: 8 }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.sheet },
-  sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.2 }, stats: { minHeight: 82, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet }, stat: { flex: 1, alignItems: 'center' }, statValue: { color: colors.ink, fontFamily: typography.display, fontSize: 23 }, statLabel: { marginTop: 3, color: colors.inkFaint, fontSize: 8 }, statDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.line },
+  safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl }, titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }, eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 }, title: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 36 }, settingsButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.sheet },
+  profileCard: { marginTop: spacing.lg, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.38)', borderRadius: 38, backgroundColor: colors.paper }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md }, name: { color: colors.onLife, fontFamily: typography.display, fontSize: 22 }, profileMeta: { marginTop: 5, color: colors.onLifeMuted, fontSize: typography.size.meta }, tags: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: 5 }, tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.13)' }, tagText: { color: colors.onLife, fontSize: typography.size.meta }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.sheet },
+  sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 }, stats: { minHeight: 82, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet }, stat: { flex: 1, alignItems: 'center' }, statValue: { color: colors.ink, fontFamily: typography.display, fontSize: 23 }, statLabel: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta }, statDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.line },
   albumCard: { minHeight: 92, marginTop: spacing.xl, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
   albumCover: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.lifeLight },
   albumCoverImage: { width: '100%', height: '100%' },
   albumCopy: { flex: 1, marginLeft: spacing.md },
-  albumEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 7, letterSpacing: 1.1 },
+  albumEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
   albumTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 18 },
-  albumMeta: { marginTop: 4, color: colors.inkFaint, fontSize: 8 },
-  memoryCard: { marginTop: spacing.xl, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeLight },
-  memoryCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  memoryEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.2 },
-  memoryTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
-  memoryText: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 11, lineHeight: 19 },
-  memoryMeta: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center' },
-  memoryMetaText: { color: colors.life, fontSize: 9, fontWeight: '700' },
-  memoryDot: { width: 3, height: 3, marginHorizontal: spacing.sm, borderRadius: 2, backgroundColor: colors.sun },
+  albumMeta: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },
   pressed: { opacity: 0.72 },
 });
