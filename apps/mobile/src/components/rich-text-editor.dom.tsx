@@ -355,13 +355,16 @@ function createAudioFrame(audio: EditorAudio): HTMLElement {
   frame.dataset.audioId = audio.id;
   frame.dataset.durationMs = String(Math.max(0, Math.round(audio.durationMs)));
   frame.innerHTML = `
-    <button aria-label="播放语音" class="audio-play" type="button"><span aria-hidden="true">&#9654;</span></button>
+    <button aria-label="播放语音" class="audio-play" type="button"><span aria-hidden="true" class="audio-play-icon"></span></button>
     <span class="audio-content">
       <span aria-hidden="true" class="audio-wave">${WAVE_HEIGHTS.map((height) => `<i style="height:${height}px"></i>`).join('')}</span>
       <span class="audio-meta"><small>语音记录</small><small class="audio-duration">${formatAudioDuration(audio.durationMs)}</small></span>
     </span>
     <button aria-label="删除语音" class="audio-remove" type="button">
-      <span aria-hidden="true" class="audio-trash"></span>
+      <svg aria-hidden="true" class="audio-trash" viewBox="0 0 20 20" fill="none">
+        <path d="M5.5 6.5v8.1c0 .77.62 1.4 1.4 1.4h6.2c.78 0 1.4-.63 1.4-1.4V6.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.45" />
+        <path d="M4 5.5h12M8 5.5V4.2c0-.39.31-.7.7-.7h2.6c.39 0 .7.31.7.7v1.3M8.2 8.5v4.8M11.8 8.5v4.8" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.45" />
+      </svg>
     </button>
     <audio preload="metadata"></audio>
   `;
@@ -398,10 +401,13 @@ function updateAudioFrame(frame: HTMLElement, audio: HTMLAudioElement) {
   const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : fallbackDuration;
   const progress = duration > 0 ? Math.min(1, audio.currentTime / duration) : 0;
   frame.classList.toggle('is-playing', !audio.paused);
-  const button = frame.querySelector<HTMLElement>('.audio-play span');
+  const button = frame.querySelector<HTMLElement>('.audio-play');
   const label = frame.querySelector<HTMLElement>('.audio-meta small');
   const durationLabel = frame.querySelector<HTMLElement>('.audio-duration');
-  if (button) button.textContent = audio.paused ? '▶' : 'Ⅱ';
+  if (button) {
+    button.classList.toggle('is-playing', !audio.paused);
+    button.setAttribute('aria-label', audio.paused ? '播放语音' : '暂停语音');
+  }
   if (label) label.textContent = audio.paused ? '语音记录' : '正在播放';
   if (durationLabel) durationLabel.textContent = formatAudioDuration(duration * 1000);
   frame.querySelectorAll<HTMLElement>('.audio-wave i').forEach((bar, index) => bar.classList.toggle('played', index / WAVE_HEIGHTS.length <= progress));
@@ -743,11 +749,17 @@ const EDITOR_CSS = `
   .audio-recording-copy strong { color: #8f3d31; font-family: ui-serif, Georgia, "Noto Serif SC", serif; font-size: 15px; }
   .audio-recording-copy small { margin-top: 4px; color: #a66558; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
   .recording-dot { width: 12px; height: 12px; border-radius: 50%; background: #b84d3b; box-shadow: 0 0 0 0 rgba(184, 77, 59, 0.3); animation: recording-pulse 1.5s ease-out infinite; }
-  .audio-recording-stop, .audio-play { flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; }
+  .audio-recording-stop, .audio-play { flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease; }
   .audio-recording-stop { background: #b84d3b; }
   .audio-recording-stop span { width: 14px; height: 14px; border-radius: 2px; background: #fff8f2; }
-  .audio-play { background: #1d6b49; color: #f4f6ef; font-size: 14px; }
-  .audio-play span { transform: translateX(1px); }
+  .audio-play { background: #1d6b49; color: #f4f6ef; box-shadow: 0 5px 12px rgba(29, 107, 73, 0.18); }
+  .audio-play:hover { background: #185c3e; box-shadow: 0 7px 16px rgba(29, 107, 73, 0.24); transform: translateY(-1px); }
+  .audio-play:active { transform: translateY(0) scale(0.96); }
+  .audio-play-icon { display: block; width: 0; height: 0; margin-left: 2px; border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-left: 10px solid currentColor; }
+  .audio-play.is-playing .audio-play-icon { position: relative; width: 12px; height: 14px; margin-left: 0; border: 0; }
+  .audio-play.is-playing .audio-play-icon::before, .audio-play.is-playing .audio-play-icon::after { position: absolute; top: 0; width: 4px; height: 14px; border-radius: 2px; background: currentColor; content: ""; }
+  .audio-play.is-playing .audio-play-icon::before { left: 0; }
+  .audio-play.is-playing .audio-play-icon::after { right: 0; }
   .audio-content { min-width: 0; display: flex; flex: 1; flex-direction: column; margin-left: 13px; }
   .audio-wave { height: 32px; display: flex; align-items: center; gap: 3px; overflow: hidden; }
   .audio-wave i { flex: 0 0 3px; border-radius: 2px; background: rgba(29, 107, 73, 0.22); }
@@ -755,12 +767,10 @@ const EDITOR_CSS = `
   .audio-meta { display: flex; justify-content: space-between; margin-top: 3px; color: #656b62; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: 0.04em; }
   .audio-meta small { font: inherit; }
   .audio-frame audio { display: none; }
-  .audio-remove { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto; margin-left: 8px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #9b493f; cursor: pointer; }
-  .audio-remove:hover { background: rgba(155, 73, 63, 0.1); }
-  .audio-remove:active { background: rgba(155, 73, 63, 0.16); }
-  .audio-trash { display: block; position: relative; width: 12px; height: 14px; margin: auto; border: 1.5px solid currentColor; border-top: 0; border-radius: 0 0 3px 3px; }
-  .audio-trash::before { position: absolute; top: -5px; left: -3px; width: 16px; border-top: 1.5px solid currentColor; content: ""; }
-  .audio-trash::after { position: absolute; top: -8px; left: 3px; width: 5px; border-top: 1.5px solid currentColor; content: ""; }
+  .audio-remove { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; margin-left: 8px; padding: 0; border: 1px solid rgba(155, 73, 63, 0.18); border-radius: 50%; background: rgba(255, 248, 242, 0.46); color: #9b493f; cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
+  .audio-remove:hover { border-color: rgba(155, 73, 63, 0.34); background: rgba(155, 73, 63, 0.1); transform: translateY(-1px); }
+  .audio-remove:active { background: rgba(155, 73, 63, 0.16); transform: scale(0.94); }
+  .audio-trash { display: block; width: 18px; height: 18px; }
   .audio-frame.is-audio-error .audio-content { opacity: 0.45; }
   .audio-frame.is-audio-error .audio-play { pointer-events: none; opacity: 0.45; }
   @keyframes recording-pulse { 70% { box-shadow: 0 0 0 9px rgba(184, 77, 59, 0); } 100% { box-shadow: 0 0 0 0 rgba(184, 77, 59, 0); } }

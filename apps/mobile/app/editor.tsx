@@ -44,7 +44,6 @@ export default function EditorScreen() {
   const [command, setCommand] = useState<EditorCommand | null>(null);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
   const [showMore, setShowMore] = useState(false);
-  const [showBlocks, setShowBlocks] = useState(false);
   const [personPickerOpen, setPersonPickerOpen] = useState(false);
   const [personPickerMode, setPersonPickerMode] = useState<PersonPickerMode>('manage');
   const [newPersonName, setNewPersonName] = useState('');
@@ -346,7 +345,7 @@ export default function EditorScreen() {
             <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{postId ? '编辑长文' : isPastEntry ? '补写长文' : '写长文'}</Text>
+            <Text style={styles.headerTitle}>{postId ? '编辑记录' : isPastEntry ? '补写记录' : '记一条'}</Text>
             <Text style={styles.statusText}>{draftStatus}</Text>
           </View>
           <Pressable accessibilityRole="button" disabled={saving || audioSaving || recorderState.isRecording} onPress={() => void handleSave()} style={[styles.saveButton, (saving || audioSaving || recorderState.isRecording) && styles.saveButtonDisabled]}>
@@ -383,22 +382,14 @@ export default function EditorScreen() {
         </View>
 
         <View style={styles.toolbarStage}>
-          {showBlocks ? (
-            <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.moreBar} contentContainerStyle={styles.expandedToolbarContent}>
-              <ToolButton androidIcon="format_paragraph" icon="paragraphsign" label="正文" onPress={() => sendCommand('paragraph')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={24} label="标题 1" onPress={() => sendCommand('heading1')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={22} label="标题 2" onPress={() => sendCommand('heading2')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={20} label="标题 3" onPress={() => sendCommand('heading3')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={18} label="标题 4" onPress={() => sendCommand('heading4')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={16} label="标题 5" onPress={() => sendCommand('heading5')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={14} label="标题 6" onPress={() => sendCommand('heading6')} />
-            </ScrollView>
-          ) : null}
-
           {showMore ? (
             <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.moreBar} contentContainerStyle={styles.expandedToolbarContent}>
               <ToolButton androidIcon="undo" icon="arrow.uturn.backward" label="撤销" onPress={() => sendCommand('undo')} />
               <ToolButton androidIcon="redo" icon="arrow.uturn.forward" label="重做" onPress={() => sendCommand('redo')} />
+              <ToolButton androidIcon="format_paragraph" icon="paragraphsign" label="正文" onPress={() => sendCommand('paragraph')} />
+              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={22} label="标题 1" onPress={() => sendCommand('heading1')} />
+              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={19} label="标题 2" onPress={() => sendCommand('heading2')} />
+              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={17} label="标题 3" onPress={() => sendCommand('heading3')} />
               <ToolButton active={activeFormats.includes('italic')} androidIcon="format_italic" icon="italic" label="斜体" onPress={() => sendCommand('italic')} />
               <ToolButton active={activeFormats.includes('strikethrough')} androidIcon="format_strikethrough" icon="strikethrough" label="删除线" onPress={() => sendCommand('strikethrough')} />
               <ToolButton active={activeFormats.includes('inlineCode')} androidIcon="code" icon="chevron.left.forwardslash.chevron.right" label="行内代码" onPress={() => sendCommand('inlineCode')} />
@@ -413,13 +404,12 @@ export default function EditorScreen() {
           ) : null}
 
           <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.toolbar} contentContainerStyle={styles.toolbarContent}>
-            <ToolButton active={showBlocks} androidIcon="text_format" icon="textformat" label="文字样式" onPress={() => { setShowBlocks((value) => !value); setShowMore(false); }} />
             <ToolButton active={activeFormats.includes('bold')} androidIcon="format_bold" icon="bold" label="粗体" onPress={() => sendCommand('bold')} />
             <ToolButton active={activeFormats.includes('bulletList')} androidIcon="format_list_bulleted" icon="list.bullet" label="无序列表" onPress={() => sendCommand('bulletList')} />
             <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={() => openPersonPicker('mention')} />
             <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={() => void handlePickImages()} />
             <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />
-            <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => { setShowMore((value) => !value); setShowBlocks(false); }} />
+            <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => setShowMore((value) => !value)} />
           </ScrollView>
         </View>
 
@@ -512,17 +502,17 @@ const styles = StyleSheet.create({
   headerButton: { width: 54, minHeight: 48, justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
-  statusText: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
+  statusText: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
   saveButton: { minWidth: 68, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.life },
   saveButtonDisabled: { opacity: 0.6 },
   saveText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },
   contextBar: { minHeight: 38, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  date: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
+  date: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
   peopleButton: { minHeight: 36, justifyContent: 'center' },
-  peopleButtonText: { color: colors.inkFaint, fontSize: 9 },
+  peopleButtonText: { color: colors.inkFaint, fontSize: typography.size.caption },
   domEditor: { flex: 1, width: '100%', backgroundColor: 'transparent' },
   meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
-  metaText: { color: colors.inkFaint, fontSize: 8 },
+  metaText: { color: colors.inkFaint, fontSize: typography.size.meta },
   toolbarStage: { paddingHorizontal: spacing.md, paddingTop: 5, paddingBottom: spacing.sm, gap: 8, backgroundColor: colors.sheet },
   toolbar: { height: 58, flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: 29, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
   toolbarContent: { minWidth: '100%', paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 2 },
@@ -536,7 +526,7 @@ const styles = StyleSheet.create({
   sheetHandle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },
   personSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   personSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 24 },
-  personCount: { marginTop: 4, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  personCount: { marginTop: 4, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   sheetClose: { minWidth: 52, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   sheetCloseText: { color: colors.life, fontSize: 12, fontWeight: '700' },
   personList: { flexGrow: 0 },
@@ -545,8 +535,8 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 17 },
   personInfo: { flex: 1, marginLeft: spacing.md },
   personName: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
-  personRelation: { marginTop: 3, color: colors.inkFaint, fontSize: 9 },
-  personSelect: { color: colors.life, fontSize: 10 },
+  personRelation: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
+  personSelect: { color: colors.life, fontSize: typography.size.meta },
   quickCreate: { minHeight: 58, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
   personInput: { flex: 1, minHeight: 48, color: colors.ink, fontSize: 14 },
   createButton: { minWidth: 48, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
