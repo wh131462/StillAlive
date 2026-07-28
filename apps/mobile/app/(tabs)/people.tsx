@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
@@ -8,9 +8,38 @@ import { useAppState } from '../../src/state/app-state';
 
 export default function PeopleScreen() {
   const router = useRouter();
-  const { createPerson, media, people } = useAppState();
+  const { createPerson, getPostsByPerson, media, people, posts } = useAppState();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
+  const [query, setQuery] = useState('');
+  const [sortByName, setSortByName] = useState(false);
+  const [summaries, setSummaries] = useState<Record<string, { count: number; latestDay: string | null }>>({});
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all(people.map(async (person) => {
+      const relatedPosts = await getPostsByPerson(person.id);
+      return [person.id, { count: relatedPosts.length, latestDay: relatedPosts[0]?.dayKey ?? null }] as const;
+    })).then((entries) => {
+      if (!active) return;
+      setSummaries(Object.fromEntries(entries));
+    }).catch(() => {
+      if (active) setSummaries({});
+    });
+    return () => { active = false; };
+  }, [getPostsByPerson, people, posts]);
+
+  const visiblePeople = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return people
+      .filter((person) => !normalizedQuery || [person.name, person.relationToMe ?? '', person.impression ?? ''].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
+      .sort((a, b) => {
+        if (sortByName) return a.name.localeCompare(b.name, 'zh-CN');
+        const latestA = summaries[a.id]?.latestDay ?? '';
+        const latestB = summaries[b.id]?.latestDay ?? '';
+        return latestB.localeCompare(latestA) || a.name.localeCompare(b.name, 'zh-CN');
+      });
+  }, [people, query, sortByName, summaries]);
 
   const handleCreate = async () => {
     const value = name.trim();
@@ -44,10 +73,16 @@ export default function PeopleScreen() {
             <Text style={styles.emptyAction}>添加第一个人物 →</Text>
           </Pressable>
         ) : (
-          <View style={styles.list}>
-            {people.map((person, index) => {
+          <>
+            <View style={styles.controls}>
+              <TextInput accessibilityLabel="搜索人物" onChangeText={setQuery} placeholder="搜索人物、关系或印象" placeholderTextColor={colors.inkFaint} style={styles.searchInput} value={query} />
+              <Pressable accessibilityRole="button" accessibilityLabel={sortByName ? '按最近关联排序' : '按名称排序'} onPress={() => setSortByName((value) => !value)} style={styles.sortButton}><Text style={styles.sortButtonText}>{sortByName ? '按名称' : '最近关联'}</Text></Pressable>
+            </View>
+            {visiblePeople.length ? <View style={styles.list}>
+            {visiblePeople.map((person, index) => {
               const avatar = person.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
-              return <Pressable key={person.id} accessibilityLabel={`查看${person.name}的人物详情`} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, index === people.length - 1 && styles.personRowLast, pressed && styles.personRowPressed]}>
+              const summary = summaries[person.id];
+              return <Pressable key={person.id} accessibilityLabel={`查看${person.name}的人物详情`} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, index === visiblePeople.length - 1 && styles.personRowLast, pressed && styles.personRowPressed]}>
                 <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
                 <View style={styles.personInfo}>
                   <View style={styles.personTitleRow}>
@@ -55,11 +90,13 @@ export default function PeopleScreen() {
                     {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
                   </View>
                   <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>
+                  <Text style={styles.personStats}>{summary?.count ?? 0} 条共同记录 · {summary?.latestDay ? `最近 ${formatDay(summary.latestDay)}` : '还没有共同记录'}</Text>
                 </View>
                 <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
               </Pressable>;
             })}
-          </View>
+            </View> : <View style={styles.noResults}><Text style={styles.noResultsText}>没有找到匹配的人物。</Text></View>}
+          </>
         )}
       </ScrollView>
 
@@ -80,15 +117,24 @@ export default function PeopleScreen() {
   );
 }
 
+function formatDay(dayKey: string): string {
+  const [, month, day] = dayKey.split('-');
+  return `${Number(month)}月${Number(day)}日`;
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   topLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.5 },
+  label: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   addButton: { minHeight: 44, justifyContent: 'center', paddingLeft: spacing.md },
   addButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   title: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 36, lineHeight: 47 },
   description: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
+  controls: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  searchInput: { flex: 1, minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 13 },
+  sortButton: { minHeight: 46, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  sortButtonText: { color: colors.life, fontSize: 10, fontWeight: '700' },
   emptyCard: { marginTop: spacing.xxl, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
@@ -103,8 +149,11 @@ const styles = StyleSheet.create({
   personInfo: { flex: 1, marginLeft: spacing.md },
   personTitleRow: { flexDirection: 'row', alignItems: 'center' },
   personName: { maxWidth: '64%', color: colors.ink, fontFamily: typography.display, fontSize: 17 },
-  personRelation: { maxWidth: '34%', marginLeft: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden', borderRadius: 9, backgroundColor: colors.lifeLight, color: colors.life, fontSize: 8 },
-  personMeta: { marginTop: 5, marginRight: spacing.md, color: colors.inkFaint, fontSize: 10, lineHeight: 16 },
+  personRelation: { maxWidth: '34%', marginLeft: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden', borderRadius: 9, backgroundColor: colors.lifeLight, color: colors.life, fontSize: typography.size.meta },
+  personMeta: { marginTop: 5, marginRight: spacing.md, color: colors.inkFaint, fontSize: 11, lineHeight: 17 },
+  personStats: { marginTop: 5, color: colors.life, fontFamily: typography.mono, fontSize: 10 },
+  noResults: { marginTop: spacing.lg, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  noResultsText: { color: colors.inkSoft, fontSize: 12 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.28)' },
   sheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   handle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },
