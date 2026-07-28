@@ -3,10 +3,14 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { colors, typography } from '@still-alive/tokens';
+import { useAppState } from '../../src/state/app-state';
+import { applyColorTheme } from '../../src/theme/app-theme';
 
 type TabIconName = 'space' | 'calendar' | 'people' | 'profile';
 
 export default function TabsLayout() {
+  const { preferences } = useAppState();
+  applyColorTheme(preferences.appearanceTheme);
   return (
     <Tabs
       screenOptions={{

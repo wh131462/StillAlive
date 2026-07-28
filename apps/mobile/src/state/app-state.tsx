@@ -14,10 +14,17 @@ import { cancelBirthdayNotifications, reconcileBirthdayNotifications } from '../
 import { cancelMemoryNotifications, reconcileMemoryNotifications } from '../domain/memory-notifications';
 import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter, initializeBirthdayNotificationChannel, initializeMemoryNotificationChannel } from '../data/expo-birthday-notifications';
 import { extractEmbeddedMediaIds, extractImageMediaIds } from '../domain/embedded-media';
+import { deletePasswordVaultStorage } from '../data/password-vault-storage';
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   onboardingCompleted: false,
   nickname: '',
+  profileBio: '',
+  profileSignature: '',
+  profileGender: null,
+  appearanceTheme: 'moss',
+  selfNameStyle: 'fresh',
+  friendNameStyle: 'journal',
   birthDate: '',
   profileAvatarMediaId: null,
   profileMbti: '',
@@ -63,7 +70,7 @@ interface AppStateValue {
   replaceMedia(mediaId: string, replacement: Media): Promise<void>;
   discardMedia(media: Media): Promise<void>;
   createPerson(name: string): Promise<Person>;
-  updatePerson(personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
+  updatePerson(personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
   deletePerson(personId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
   createTag(name: string, groupId?: string | null): Promise<TagDefinition>;
@@ -308,6 +315,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       id: `person_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       name: name.trim(),
       avatarMediaId: null,
+      gender: null,
       relationToMe: null,
       impression: null,
       birthday: null,
@@ -326,7 +334,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (!enabled) setHomeMemory((current) => current?.kind === 'person' && current.person.id === personId ? null : current);
   }, [repository]);
 
-  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
+  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
     if (!changes.name.trim()) throw new Error('人物名字不能为空');
     if ((changes.impression?.length ?? 0) > 100) throw new Error('一句话印象最多 100 字');
     const existing = people.find((person) => person.id === personId);
@@ -655,7 +663,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const storedMedia = media;
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
-    await repository.deleteAllData();
+    const failures: unknown[] = [];
+    let vaultDeleted = false;
+    try {
+      await deletePasswordVaultStorage();
+      vaultDeleted = true;
+    } catch (cause) {
+      failures.push(cause);
+    }
+    let dataDeleted = false;
+    try {
+      await repository.deleteAllData();
+      dataDeleted = true;
+    } catch (cause) {
+      failures.push(cause);
+    }
+    if (!dataDeleted) throw new Error(vaultDeleted ? '密码本已删除，但日记数据删除失败，请重试' : '密码本和日记数据删除失败，请重试');
     setTodayCheckIn(null);
     setCheckIns([]);
     setPosts([]);
@@ -687,6 +710,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch {
       // 已删除数据库引用；系统暂时占用的缓存目录可由系统后续回收。
     }
+    if (failures.length) throw new Error('日记数据已删除，但密码本清理失败，请重试删除全部本地数据');
   }, [media, repository]);
 
   const shouldShowBackupReminder = useMemo(() => {

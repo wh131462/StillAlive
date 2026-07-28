@@ -10,15 +10,20 @@ import type { Media } from '@still-alive/types';
 import { useAppState } from '../src/state/app-state';
 import { persistPickedImage } from '../src/data/local-media';
 import { DatePickerField } from '../src/components/date-time-picker';
+import { GenderPickerField } from '../src/components/gender-picker';
 import { MbtiPickerField } from '../src/components/mbti-picker';
 import type { DateParts } from '../src/components/date-time-picker';
 import { constellationForBirthday, zodiacForBirthday } from '../src/domain/person-profile';
+import { createThemedStyles } from '../src/theme/app-theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { createTag, discardMedia, media, preferences, saveMedia, tagDefinitions, tagGroups, tagSystemSettings, updatePreferences } = useAppState();
   const currentAvatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const [nickname, setNickname] = useState(preferences.nickname);
+  const [bio, setBio] = useState(preferences.profileBio);
+  const [signature, setSignature] = useState(preferences.profileSignature);
+  const [gender, setGender] = useState(preferences.profileGender);
   const [birthDate, setBirthDate] = useState(preferences.birthDate);
   const [mbti, setMbti] = useState(preferences.profileMbti);
   const [customTagIds, setCustomTagIds] = useState(preferences.profileCustomTagIds);
@@ -30,7 +35,7 @@ export default function ProfileScreen() {
   const birthDateParts: DateParts | null = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? (() => { const [year, month, day] = birthDate.split('-').map(Number); return { year, month, day }; })() : null;
   const derivedTags = useMemo(() => {
     if (!birthDateParts) return [];
-    const birthday = { calendar: 'solar' as const, ...birthDateParts, isLeapMonth: false };
+    const birthday = { calendar: 'solar' as const, ...birthDateParts, isLeapMonth: false, reminderMode: 'solar' as const };
     try { return [constellationForBirthday(birthday), zodiacForBirthday(birthday)]; } catch { return []; }
   }, [birthDateParts]);
 
@@ -49,7 +54,7 @@ export default function ProfileScreen() {
       let avatarMediaId = preferences.profileAvatarMediaId;
       if (pickedAsset) { importedMedia = await persistPickedImage(pickedAsset); await saveMedia(importedMedia); avatarMediaId = importedMedia.id; }
       const previousAvatar = preferences.profileAvatarMediaId;
-      await updatePreferences({ nickname: nickname.trim(), birthDate, profileAvatarMediaId: avatarMediaId, profileMbti: mbti, profileCustomTagIds: customTagIds });
+      await updatePreferences({ nickname: nickname.trim(), profileBio: bio.trim(), profileSignature: signature.trim(), profileGender: gender, birthDate, profileAvatarMediaId: avatarMediaId, profileMbti: mbti, profileCustomTagIds: customTagIds });
       if (previousAvatar && previousAvatar !== avatarMediaId) {
         const previous = media.find((item) => item.id === previousAvatar);
         if (previous) await discardMedia(previous);
@@ -67,6 +72,9 @@ export default function ProfileScreen() {
       <Pressable accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => void chooseAvatar()} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image onError={() => setAvatarFailed(true)} source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{nickname.trim().slice(0, 1) || '我'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={15} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
 
       <Field label="昵称" maxLength={30} onChangeText={setNickname} placeholder="怎么称呼你" value={nickname} />
+      <Field label="个性签名" onChangeText={setSignature} placeholder="写一句此刻想说的话" value={signature} />
+      <Field label="简介" multiline onChangeText={setBio} placeholder="写几句话介绍自己" value={bio} />
+      <GenderPickerField onChange={setGender} value={gender} />
       <DatePickerField label="出生日期" onChange={({ year, month, day }) => setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)} onClear={() => setBirthDate('')} value={birthDateParts} />
       {birthDateParts && derivedTags.length ? <View style={styles.derived}><Text style={styles.derivedLabel}>根据生日</Text><View style={styles.chips}>{derivedTags.map((tag) => <View key={tag} style={styles.derivedChip}><Text style={styles.derivedChipText}>{tag}</Text></View>)}</View></View> : null}
 
@@ -77,10 +85,10 @@ export default function ProfileScreen() {
   </KeyboardAvoidingView></SafeAreaView>;
 }
 
-function Field({ label, ...props }: { label: string } & React.ComponentProps<typeof TextInput>) { return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput {...props} placeholderTextColor={colors.inkFaint} style={styles.input} /></View>; }
+function Field({ label, ...props }: { label: string } & React.ComponentProps<typeof TextInput>) { return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput {...props} placeholderTextColor={colors.inkFaint} style={[styles.input, props.multiline && styles.inputMultiline]} textAlignVertical={props.multiline ? 'top' : 'center'} /></View>; }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, saveButton: { width: 64, minHeight: 44, justifyContent: 'center' }, saveText: { color: colors.life, fontSize: 11, fontWeight: '700', textAlign: 'right' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   avatarButton: { alignItems: 'center' }, avatarPressed: { opacity: 0.72 }, avatar: { width: 104, height: 104, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.sheet, borderRadius: 52, backgroundColor: colors.life }, avatarImage: { width: '100%', height: '100%', borderRadius: 52 }, avatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 38 }, cameraBadge: { position: 'absolute', right: 1, bottom: 1, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.paper, borderRadius: 16, backgroundColor: colors.life },
-  field: { marginTop: spacing.lg }, fieldLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 }, input: { minHeight: 52, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 15 }, derived: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.lifeLight }, derivedLabel: { marginBottom: spacing.sm, color: colors.life, fontSize: 9, fontWeight: '700' }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { minHeight: 34, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.sheet }, chipActive: { backgroundColor: colors.life }, chipText: { color: colors.inkSoft, fontSize: 10 }, chipTextActive: { color: colors.onLife }, derivedChip: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 15, backgroundColor: colors.paper }, derivedChipText: { color: colors.life, fontSize: 10 }, inlineCreate: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm }, inlineInput: { flex: 1, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink }, inlineButton: { width: 64, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life }, inlineButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' }, disabled: { opacity: 0.4 }, note: { marginTop: spacing.xl, color: colors.inkFaint, fontSize: 9, lineHeight: 17, textAlign: 'center' },
-});
+  field: { marginTop: spacing.lg }, fieldLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 }, input: { minHeight: 52, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 15 }, inputMultiline: { minHeight: 108, paddingTop: spacing.md, lineHeight: 23 }, derived: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.lifeLight }, derivedLabel: { marginBottom: spacing.sm, color: colors.life, fontSize: 9, fontWeight: '700' }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { minHeight: 34, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.sheet }, chipActive: { backgroundColor: colors.life }, chipText: { color: colors.inkSoft, fontSize: 10 }, chipTextActive: { color: colors.onLife }, derivedChip: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 15, backgroundColor: colors.paper }, derivedChipText: { color: colors.life, fontSize: 10 }, inlineCreate: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm }, inlineInput: { flex: 1, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink }, inlineButton: { width: 64, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life }, inlineButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' }, disabled: { opacity: 0.4 }, note: { marginTop: spacing.xl, color: colors.inkFaint, fontSize: 9, lineHeight: 17, textAlign: 'center' },
+}));

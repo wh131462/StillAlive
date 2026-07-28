@@ -3,9 +3,11 @@ import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
 import type { NotificationResponse } from 'expo-notifications';
 import { useEffect } from 'react';
-import { AppStateProvider } from '../src/state/app-state';
+import { colors } from '@still-alive/tokens';
+import { AppStateProvider, useAppState } from '../src/state/app-state';
 import { migrateDatabase } from '../src/data/sqlite-repository';
 import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/data/expo-birthday-notifications';
+import { applyColorTheme } from '../src/theme/app-theme';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -27,9 +29,19 @@ export default function RootLayout() {
   return (
     <SQLiteProvider databaseName="still-alive.db" onInit={migrateDatabase}>
       <AppStateProvider>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }} />
+        <ThemedNavigator />
       </AppStateProvider>
     </SQLiteProvider>
+  );
+}
+
+function ThemedNavigator() {
+  const { preferences } = useAppState();
+  applyColorTheme(preferences.appearanceTheme);
+  return (
+    <>
+      <StatusBar style={preferences.appearanceTheme === 'midnight' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ contentStyle: { backgroundColor: colors.paper }, headerShown: false }} />
+    </>
   );
 }

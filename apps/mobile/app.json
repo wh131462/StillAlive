@@ -17,6 +17,13 @@
       "expo-router",
       "expo-sqlite",
       [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "允许“仍在”使用面容 ID 快捷解锁本机密码本。",
+          "configureAndroidBackup": true
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",

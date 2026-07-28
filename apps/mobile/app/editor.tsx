@@ -23,6 +23,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import RichTextEditor from '../src/components/rich-text-editor.dom';
 import type { EditorCommand, EditorCommandType, EditorMediaSource } from '../src/components/rich-text-editor.types';
 import { useAppState } from '../src/state/app-state';
+import { createThemedStyles, editorTheme } from '../src/theme/app-theme';
 import { persistPickedImage, persistVoiceRecording } from '../src/data/local-media';
 import { extractEmbeddedMediaIds } from '../src/domain/embedded-media';
 
@@ -355,6 +356,7 @@ export default function EditorScreen() {
             onStopRecording={() => void stopRecording()}
             placeholder={`${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
             recordingDurationMs={recorderState.isRecording ? recorderState.durationMillis : null}
+            theme={editorTheme()}
           />
         ) : <View style={styles.domEditor} />}
 
@@ -476,7 +478,7 @@ function markdownTextLength(markdown: string): number {
     .length;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.sheet },
   header: { minHeight: 62, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
@@ -491,14 +493,14 @@ const styles = StyleSheet.create({
   meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: typography.size.meta },
   toolbarStage: { paddingHorizontal: spacing.md, paddingTop: 5, paddingBottom: spacing.sm, gap: 8, backgroundColor: colors.sheet },
-  toolbar: { height: 58, flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: 29, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
+  toolbar: { height: 58, flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 29, backgroundColor: colors.toolbar, shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
   toolbarContent: { minWidth: '100%', paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 2 },
-  moreBar: { flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.08)', borderRadius: 23, backgroundColor: '#FCFCF8', shadowColor: colors.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 12, elevation: 6 },
+  moreBar: { flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 23, backgroundColor: colors.toolbar, shadowColor: colors.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 12, elevation: 6 },
   expandedToolbarContent: { gap: 4, paddingHorizontal: 7, paddingVertical: 6 },
   toolButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
   toolButtonActive: { backgroundColor: colors.lifeLight },
   toolButtonPressed: { backgroundColor: colors.paper, transform: [{ scale: 0.92 }] },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.28)' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },
   personSheet: { maxHeight: '72%', paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   sheetHandle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },
   personSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
@@ -518,7 +520,7 @@ const styles = StyleSheet.create({
   personInput: { flex: 1, minHeight: 48, color: colors.ink, fontSize: 14 },
   createButton: { minWidth: 48, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   createButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
-  centeredBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, backgroundColor: 'rgba(32, 35, 31, 0.34)' },
+  centeredBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, backgroundColor: colors.backdropStrong },
   linkCard: { width: '100%', maxWidth: 420, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   linkTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 22 },
   linkHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 10, lineHeight: 16 },
@@ -527,4 +529,4 @@ const styles = StyleSheet.create({
   linkAction: { minWidth: 62, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   linkCancel: { color: colors.inkSoft, fontSize: 11 },
   linkConfirm: { color: colors.life, fontSize: 11, fontWeight: '700' },
-});
+}));

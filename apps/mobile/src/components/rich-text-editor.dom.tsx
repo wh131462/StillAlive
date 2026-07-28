@@ -6,7 +6,7 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import type { DOMProps } from 'expo/dom';
-import type { EditorAudio, EditorCommand, EditorImage, EditorMediaSource } from './rich-text-editor.types';
+import type { EditorAudio, EditorCommand, EditorImage, EditorMediaSource, EditorTheme } from './rich-text-editor.types';
 import { createAudioEmbed, formatAudioDuration } from '../domain/embedded-media';
 
 interface RichTextEditorProps {
@@ -16,6 +16,7 @@ interface RichTextEditorProps {
   audioSaving: boolean;
   media: EditorMediaSource[];
   recordingDurationMs: number | null;
+  theme: EditorTheme;
   onChange(markdown: string): void;
   onFormatsChange(formats: string[]): void;
   onMention(): void;
@@ -34,6 +35,7 @@ export default function RichTextEditor({
   audioSaving,
   media,
   recordingDurationMs,
+  theme,
   onChange,
   onFormatsChange,
   onMention,
@@ -233,7 +235,7 @@ export default function RichTextEditor({
 
   return (
     <>
-      <style>{EDITOR_CSS}</style>
+      <style>{editorCss(theme)}</style>
       <main className="editor-shell">
         <div
           ref={editorRef}
@@ -709,57 +711,57 @@ function emitFormats(editor: HTMLDivElement, onFormatsChange: (formats: string[]
   onFormatsChange(formats);
 }
 
-const EDITOR_CSS = `
-  :root { color-scheme: light; font-family: ui-serif, Georgia, "Noto Serif SC", serif; }
+const editorCss = (theme: EditorTheme) => `
+  :root { color-scheme: ${theme.colorScheme}; font-family: ui-serif, Georgia, "Noto Serif SC", serif; }
   * { box-sizing: border-box; }
   html, body, #root { min-height: 100%; margin: 0; background: transparent; }
-  body { overflow-y: auto; color: #20231f; -webkit-font-smoothing: antialiased; }
+  body { overflow-y: auto; color: ${theme.ink}; -webkit-font-smoothing: antialiased; }
   .editor-shell { width: 100%; min-height: 100%; padding: 10px 22px 44px; }
-  .editor { position: relative; width: 100%; min-height: calc(100vh - 54px); outline: none; font-size: 19px; line-height: 1.85; caret-color: #1d6b49; }
-  .editor:empty::before { position: absolute; inset: 0 auto auto 0; content: attr(data-placeholder); color: #979d93; line-height: inherit; white-space: pre-line; pointer-events: none; }
+  .editor { position: relative; width: 100%; min-height: calc(100vh - 54px); outline: none; font-size: 19px; line-height: 1.85; caret-color: ${theme.life}; }
+  .editor:empty::before { position: absolute; inset: 0 auto auto 0; content: attr(data-placeholder); color: ${theme.inkFaint}; line-height: inherit; white-space: pre-line; pointer-events: none; }
   p { margin: 0 0 0.85em; }
   h1, h2, h3, h4, h5, h6 { margin: 1.15em 0 0.55em; line-height: 1.3; letter-spacing: -0.02em; }
   h1:first-child, h2:first-child, h3:first-child { margin-top: 0; }
   h1 { font-size: 2em; } h2 { font-size: 1.62em; } h3 { font-size: 1.34em; }
-  h4 { font-size: 1.16em; } h5 { font-size: 1em; } h6 { color: #656b62; font-size: 0.9em; letter-spacing: 0.04em; }
-  strong { font-weight: 760; } em { font-style: italic; } del { color: #7d837a; }
-  a { color: #1d6b49; text-decoration-color: #a9c9b5; text-underline-offset: 3px; }
-  blockquote { margin: 1.2em 0; padding: 0.15em 0 0.15em 16px; border-left: 3px solid #d4a84f; color: #656b62; }
+  h4 { font-size: 1.16em; } h5 { font-size: 1em; } h6 { color: ${theme.inkSoft}; font-size: 0.9em; letter-spacing: 0.04em; }
+  strong { font-weight: 760; } em { font-style: italic; } del { color: ${theme.inkFaint}; }
+  a { color: ${theme.life}; text-decoration-color: ${theme.lifeLine}; text-underline-offset: 3px; }
+  blockquote { margin: 1.2em 0; padding: 0.15em 0 0.15em 16px; border-left: 3px solid ${theme.sun}; color: ${theme.inkSoft}; }
   blockquote p:last-child { margin-bottom: 0; }
   ul, ol { margin: 0.7em 0 1em; padding-left: 1.45em; }
   li { margin: 0.34em 0; padding-left: 0.2em; }
   .task-list { padding-left: 0.25em; list-style: none; }
   .task-list-item { list-style: none; }
-  input[type="checkbox"] { width: 18px; height: 18px; margin: 0 9px 0 0; vertical-align: -3px; accent-color: #1d6b49; }
-  code { padding: 0.15em 0.36em; border-radius: 5px; background: #e6ece5; color: #1d6b49; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
-  pre { overflow-x: auto; margin: 1.2em 0; padding: 15px 16px; border-radius: 14px; background: #252b27; color: #eef0e8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78em; line-height: 1.65; white-space: pre-wrap; }
+  input[type="checkbox"] { width: 18px; height: 18px; margin: 0 9px 0 0; vertical-align: -3px; accent-color: ${theme.life}; }
+  code { padding: 0.15em 0.36em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
+  pre { overflow-x: auto; margin: 1.2em 0; padding: 15px 16px; border-radius: 14px; background: ${theme.codeBackground}; color: ${theme.codeForeground}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78em; line-height: 1.65; white-space: pre-wrap; }
   pre code { padding: 0; background: transparent; color: inherit; font-size: inherit; }
-  hr { width: 100%; height: 0; margin: 2em 0; border: 0; border-top: 1px solid rgba(32,35,31,0.13); background: transparent; }
+  hr { width: 100%; height: 0; margin: 2em 0; border: 0; border-top: 1px solid ${theme.line}; background: transparent; }
   table { display: block; width: 100%; margin: 1.2em 0; overflow-x: auto; border-collapse: collapse; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.78em; }
-  th, td { min-width: 110px; padding: 9px 10px; border: 1px solid rgba(32,35,31,0.16); text-align: left; }
-  th { background: #eef0e8; font-weight: 700; }
+  th, td { min-width: 110px; padding: 9px 10px; border: 1px solid ${theme.line}; text-align: left; }
+  th { background: ${theme.paper}; font-weight: 700; }
   figure { margin: 1.2em 0; }
   .media-frame { display: block; position: relative; overflow: hidden; margin: 1.2em 0; border-radius: 4px; cursor: pointer; }
-  .media-frame::after { position: absolute; top: 10px; right: 10px; content: "轻触替换"; padding: 5px 8px; border-radius: 11px; background: rgba(32, 35, 31, 0.58); color: #f4f6ef; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10px; line-height: 1.2; pointer-events: none; }
-  .media-frame.is-media-error { min-height: 220px; border: 1px solid rgba(32, 35, 31, 0.13); background: #eef0e8; }
-  .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "图片暂时无法显示 轻触替换"; color: #656b62; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
+  .media-frame::after { position: absolute; top: 10px; right: 10px; content: "轻触替换"; padding: 5px 8px; border-radius: 11px; background: ${theme.overlay}; color: ${theme.codeForeground}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10px; line-height: 1.2; pointer-events: none; }
+  .media-frame.is-media-error { min-height: 220px; border: 1px solid ${theme.line}; background: ${theme.paper}; }
+  .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "图片暂时无法显示 轻触替换"; color: ${theme.inkSoft}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
   .media-frame.is-media-error::after { display: none; }
   .media-frame.is-media-error img { visibility: hidden; }
-  img { display: block; width: 100%; max-height: 520px; background: #d8e8dc; object-fit: cover; }
-  .mention { padding: 0.08em 0.22em; border-radius: 5px; background: #d8e8dc; color: #1d6b49; }
+  img { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
+  .mention { padding: 0.08em 0.22em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; }
   .audio-frame, .audio-recording-frame { min-height: 72px; display: flex; align-items: center; margin: 1.25em 0; padding: 14px; border-radius: 4px 22px 4px 22px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
-  .audio-frame { background: #d8e8dc; }
-  .audio-recording-frame { background: #f8e7de; }
-  .audio-recording-frame.is-saving { background: #eef0e8; }
+  .audio-frame { background: ${theme.lifeLight}; }
+  .audio-recording-frame { background: ${theme.dangerLight}; }
+  .audio-recording-frame.is-saving { background: ${theme.paper}; }
   .audio-recording-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; margin-left: 13px; }
-  .audio-recording-copy strong { color: #8f3d31; font-family: ui-serif, Georgia, "Noto Serif SC", serif; font-size: 15px; }
-  .audio-recording-copy small { margin-top: 4px; color: #a66558; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
-  .recording-dot { width: 12px; height: 12px; border-radius: 50%; background: #b84d3b; box-shadow: 0 0 0 0 rgba(184, 77, 59, 0.3); animation: recording-pulse 1.5s ease-out infinite; }
+  .audio-recording-copy strong { color: ${theme.danger}; font-family: ui-serif, Georgia, "Noto Serif SC", serif; font-size: 15px; }
+  .audio-recording-copy small { margin-top: 4px; color: ${theme.danger}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; }
+  .recording-dot { width: 12px; height: 12px; border-radius: 50%; background: ${theme.danger}; box-shadow: 0 0 0 0 ${theme.dangerLine}; animation: recording-pulse 1.5s ease-out infinite; }
   .audio-recording-stop, .audio-play { flex: 0 0 auto; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease; }
-  .audio-recording-stop { background: #b84d3b; }
-  .audio-recording-stop span { width: 14px; height: 14px; border-radius: 2px; background: #fff8f2; }
-  .audio-play { background: #1d6b49; color: #f4f6ef; box-shadow: 0 5px 12px rgba(29, 107, 73, 0.18); }
-  .audio-play:hover { background: #185c3e; box-shadow: 0 7px 16px rgba(29, 107, 73, 0.24); transform: translateY(-1px); }
+  .audio-recording-stop { background: ${theme.danger}; }
+  .audio-recording-stop span { width: 14px; height: 14px; border-radius: 2px; background: ${theme.codeForeground}; }
+  .audio-play { background: ${theme.life}; color: ${theme.onLife}; box-shadow: 0 5px 12px ${theme.lifeLine}; }
+  .audio-play:hover { background: ${theme.lifeDeep}; box-shadow: 0 7px 16px ${theme.lifeLine}; transform: translateY(-1px); }
   .audio-play:active { transform: translateY(0) scale(0.96); }
   .audio-play-icon { display: block; width: 0; height: 0; margin-left: 2px; border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-left: 10px solid currentColor; }
   .audio-play.is-playing .audio-play-icon { position: relative; width: 12px; height: 14px; margin-left: 0; border: 0; }
@@ -768,14 +770,14 @@ const EDITOR_CSS = `
   .audio-play.is-playing .audio-play-icon::after { right: 0; }
   .audio-content { min-width: 0; display: flex; flex: 1; flex-direction: column; margin-left: 13px; }
   .audio-wave { height: 32px; display: flex; align-items: center; gap: 3px; overflow: hidden; }
-  .audio-wave i { flex: 0 0 3px; border-radius: 2px; background: rgba(29, 107, 73, 0.22); }
-  .audio-wave i.played { background: #1d6b49; }
-  .audio-meta { display: flex; justify-content: space-between; margin-top: 3px; color: #656b62; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: 0.04em; }
+  .audio-wave i { flex: 0 0 3px; border-radius: 2px; background: ${theme.lifeLine}; }
+  .audio-wave i.played { background: ${theme.life}; }
+  .audio-meta { display: flex; justify-content: space-between; margin-top: 3px; color: ${theme.inkSoft}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: 0.04em; }
   .audio-meta small { font: inherit; }
   .audio-frame audio { display: none; }
-  .audio-remove { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; margin-left: 8px; padding: 0; border: 1px solid rgba(155, 73, 63, 0.18); border-radius: 50%; background: rgba(255, 248, 242, 0.46); color: #9b493f; cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
-  .audio-remove:hover { border-color: rgba(155, 73, 63, 0.34); background: rgba(155, 73, 63, 0.1); transform: translateY(-1px); }
-  .audio-remove:active { background: rgba(155, 73, 63, 0.16); transform: scale(0.94); }
+  .audio-remove { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; margin-left: 8px; padding: 0; border: 1px solid ${theme.dangerLine}; border-radius: 50%; background: ${theme.dangerLight}; color: ${theme.danger}; cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, background 160ms ease; }
+  .audio-remove:hover { border-color: ${theme.danger}; background: ${theme.dangerLight}; transform: translateY(-1px); }
+  .audio-remove:active { background: ${theme.dangerLight}; transform: scale(0.94); }
   .audio-trash { display: block; width: 18px; height: 18px; }
   .audio-frame.is-audio-error .audio-content { opacity: 0.45; }
   .audio-frame.is-audio-error .audio-play { pointer-events: none; opacity: 0.45; }

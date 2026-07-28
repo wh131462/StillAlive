@@ -9,6 +9,7 @@ import MarkdownView from '../../src/components/markdown-view.dom';
 import VoicePlayer from '../../src/components/voice-player';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { useAppState } from '../../src/state/app-state';
+import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 export default function PostDetailScreen() {
   const router = useRouter();
@@ -104,6 +105,7 @@ function PostBody({ markdown, mediaById, onImagePress }: { markdown: string; med
           dom={{ matchContents: true, scrollEnabled: false, style: styles.markdownView }}
           markdown={segment.value.trim()}
           media={[]}
+          theme={editorTheme()}
         />
       );
     }
@@ -193,7 +195,7 @@ function formatTime(iso: string): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.sheet },
   header: { minHeight: 54, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -217,4 +219,4 @@ const styles = StyleSheet.create({
   skeletonTime: { width: 126, height: 8, marginTop: spacing.lg, marginLeft: 'auto' },
   loadingText: { marginTop: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 12 },
   missing: { margin: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
-});
+}));

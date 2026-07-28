@@ -5,7 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
+import { formatGender } from '../../src/components/gender-picker';
+import { StyledName } from '../../src/components/styled-name';
 import { TabPageHeader } from '../../src/components/tab-page-header';
+import { createThemedStyles } from '../../src/theme/app-theme';
 
 export default function DataScreen() {
   const router = useRouter();
@@ -23,6 +26,8 @@ export default function DataScreen() {
   const albumCover = media.find((item) => item.id === firstPhotoId);
   const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
   const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
+  const age = currentAge(preferences.birthDate);
+  const profileValues = [age === null ? null : `${age} 岁`, preferences.profileGender ? formatGender(preferences.profileGender) : null, preferences.birthDate ? formatDate(preferences.birthDate) : null].filter((value): value is string => Boolean(value));
 
   useEffect(() => setAvatarFailed(false), [avatarUri]);
 
@@ -36,8 +41,9 @@ export default function DataScreen() {
       />
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={({ pressed }) => [styles.profileCard, pressed && styles.pressed]}>
+        <View pointerEvents="none" style={styles.profileCardAccent} />
         <View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="我的头像" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{preferences.nickname.trim().slice(0, 1) || '我'}</Text>}</View>
-        <View style={styles.profileCopy}><Text style={styles.name}>{preferences.nickname || '未设置昵称'}</Text>{preferences.birthDate ? <Text style={styles.profileMeta}>出生日期 {formatDate(preferences.birthDate)}</Text> : <Text style={styles.profileMeta}>完善头像、生日和个人标签</Text>}{tags.length ? <View style={styles.tags}>{tags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View> : null}</View>
+        <View style={styles.profileCopy}><StyledName numberOfLines={1} style={styles.name} value={preferences.nickname || '未设置昵称'} variant={preferences.selfNameStyle} />{preferences.profileBio ? <Text numberOfLines={2} style={styles.profileBio}>{preferences.profileBio}</Text> : null}{profileValues.length ? <View style={styles.profileDetails}><Text style={styles.profileMeta}>{profileValues.join(' ')}</Text></View> : null}{tags.length ? <View style={styles.tags}>{tags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View> : null}</View>
         <View style={styles.editIcon}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={18} tintColor={colors.life} type="hierarchical" /></View>
       </Pressable>
 
@@ -58,6 +64,18 @@ export default function DataScreen() {
         <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
       </Pressable>
 
+      <Pressable accessibilityLabel="打开密码本" accessibilityRole="button" onPress={() => router.push('/vault')} style={({ pressed }) => [styles.vaultCard, pressed && styles.pressed]}>
+        <View pointerEvents="none" style={styles.vaultLogo}>
+          <View style={styles.vaultLogoShadow} />
+          <View style={styles.vaultLogoFace}>
+            <SymbolView name={{ android: 'menu_book', ios: 'book.closed.fill', web: 'menu_book' }} size={25} tintColor={colors.lifeDeep} type="hierarchical" />
+            <View style={styles.vaultLogoBadge}><SymbolView name={{ android: 'lock', ios: 'lock.fill', web: 'lock' }} size={10} tintColor={colors.onLife} type="hierarchical" /></View>
+          </View>
+        </View>
+        <View style={styles.vaultCopy}><Text style={styles.vaultTitle}>密码本</Text><Text numberOfLines={1} style={styles.vaultMeta}>独立主密码保护 · 只保存在本机</Text></View>
+        <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
+      </Pressable>
+
     </ScrollView>
   </SafeAreaView>;
 }
@@ -66,16 +84,32 @@ function Stat({ label, value }: { label: string; value: number }) { return <View
 
 function formatDate(value: string) { const [year, month, day] = value.split('-'); return `${year}年${Number(month)}月${Number(day)}日`; }
 
-const styles = StyleSheet.create({
+function currentAge(value: string, today = new Date()): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const birthday = new Date(year, month - 1, day);
+  if (birthday.getFullYear() !== year || birthday.getMonth() !== month - 1 || birthday.getDate() !== day || birthday.getTime() > today.getTime()) return null;
+  return today.getFullYear() - year - (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day) ? 1 : 0);
+}
+
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl }, settingsButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.sheet },
-  profileCard: { marginTop: 0, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.38)', borderRadius: 38, backgroundColor: colors.paper }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md }, name: { color: colors.onLife, fontFamily: typography.display, fontSize: 22 }, profileMeta: { marginTop: 5, color: colors.onLifeMuted, fontSize: typography.size.meta }, tags: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: 5 }, tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.13)' }, tagText: { color: colors.onLife, fontSize: typography.size.meta }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.sheet },
+  profileCard: { marginTop: 0, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet }, profileCardAccent: { position: 'absolute', top: 0, right: spacing.lg, width: 58, height: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: colors.lifeLine, borderRadius: 38, backgroundColor: colors.lifeLight }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md, paddingRight: spacing.xl }, name: { fontFamily: typography.display, fontSize: 22 }, profileBio: { marginTop: 5, color: colors.inkSoft, fontFamily: typography.display, fontSize: typography.size.caption, lineHeight: 17 }, profileDetails: { marginTop: spacing.sm }, profileMeta: { color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 16 }, tags: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: 5 }, tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: colors.lifeLight }, tagText: { color: colors.life, fontSize: typography.size.meta }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.lifeLight },
   sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 }, stats: { minHeight: 82, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet }, stat: { flex: 1, alignItems: 'center' }, statValue: { color: colors.ink, fontFamily: typography.display, fontSize: 23 }, statLabel: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta }, statDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.line },
-  albumCard: { minHeight: 92, marginTop: spacing.xl, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  albumCard: { minHeight: 92, marginTop: spacing.xl, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet },
   albumCover: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.lifeLight },
   albumCoverImage: { width: '100%', height: '100%' },
   albumCopy: { flex: 1, marginLeft: spacing.md },
   albumEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
   albumTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 18 },
   albumMeta: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },
+  vaultCard: { minHeight: 84, marginTop: spacing.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  vaultLogo: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center' },
+  vaultLogoShadow: { position: 'absolute', width: 48, height: 48, borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.lifeLine, transform: [{ rotate: '5deg' }] },
+  vaultLogoFace: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.sun, borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sunLight, transform: [{ rotate: '-3deg' }] },
+  vaultLogoBadge: { position: 'absolute', right: -5, bottom: -5, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.sheet, borderRadius: 11, backgroundColor: colors.lifeDeep, transform: [{ rotate: '3deg' }] },
+  vaultCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
+  vaultTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
+  vaultMeta: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
   pressed: { opacity: 0.72 },
-});
+}));

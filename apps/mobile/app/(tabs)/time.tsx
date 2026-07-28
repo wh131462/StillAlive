@@ -9,6 +9,7 @@ import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../src/state/app-state';
 import { extractAudioEmbeds } from '../../src/domain/embedded-media';
 import { TabPageHeader } from '../../src/components/tab-page-header';
+import { createThemedStyles } from '../../src/theme/app-theme';
 
 type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
@@ -268,7 +269,7 @@ function postMarkerKind(markdown: string): CalendarMarkerKind {
 function markerColor(kind: CalendarMarkerKind): string {
   if (kind === 'check-in') return colors.inkFaint;
   if (kind === 'image') return colors.sun;
-  if (kind === 'audio') return '#9B493F';
+  if (kind === 'audio') return colors.danger;
   return colors.life;
 }
 
@@ -279,7 +280,7 @@ function markerLabel(kind: CalendarMarkerKind): string {
   return '文字记录';
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   calendarSection: { marginTop: 0 },
@@ -334,4 +335,4 @@ const styles = StyleSheet.create({
   selectedCheckInTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
   selectedPostText: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
   selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
-});
+}));

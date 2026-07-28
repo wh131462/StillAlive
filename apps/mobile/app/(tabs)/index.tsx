@@ -5,13 +5,16 @@ import { Alert, Image, Modal, Pressable, SectionList, StyleSheet, Text, TextInpu
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
+import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
+import { StyledName } from '../../src/components/styled-name';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
 import { nextBirthday } from '../../src/domain/person-profile';
+import { createThemedStyles } from '../../src/theme/app-theme';
 
 type TimelineItem =
   | { kind: 'check-in'; checkIn: CheckIn }
@@ -100,6 +103,7 @@ export default function SpaceScreen() {
         onPress={() => setShowMemoryTrace((current) => !current)}
         style={({ pressed }) => [styles.checkCard, !showMemoryTrace && todayCheckIn && styles.checkCardDone, showMemoryTrace && styles.memoryTraceCard, pressed && styles.cardPressed]}
       >
+        <View pointerEvents="none" style={[styles.checkCardAccent, !showMemoryTrace && !todayCheckIn && styles.checkCardPendingAccent]} />
         <View style={styles.cardMetaRow}>
           <Text style={[styles.cardMeta, showMemoryTrace && styles.memoryTraceMeta]}>{showMemoryTrace ? 'MEMORY TRACE' : `TODAY ${today.slice(5).replace('-', '.')}`}</Text>
           <View style={styles.cardPageDots}>
@@ -108,7 +112,7 @@ export default function SpaceScreen() {
           </View>
         </View>
         {showMemoryTrace ? (
-          <>
+          <View style={styles.cardBody}>
             <Text style={styles.memoryTraceTitle}>这些日子，正在慢慢长大</Text>
             <Text style={styles.memoryTraceDescription}>{latestRecordedDay ? `最近一次留下在 ${formatChineseDate(latestRecordedDay)}。` : '从今天开始，留下第一段属于你的时间。'}</Text>
             <View style={styles.memoryTraceStats}>
@@ -118,9 +122,9 @@ export default function SpaceScreen() {
               <View style={styles.memoryTraceDivider} />
               <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{voiceCount}</Text><Text style={styles.memoryTraceLabel}>语音</Text></View>
             </View>
-          </>
+          </View>
         ) : (
-          <>
+          <View style={styles.cardBody}>
             <Text style={styles.cardTitle}>
               {!todayCheckIn
                 ? returningAfterBreak ? '欢迎回来，今天也可以重新开始' : '为今天留一个坐标'
@@ -139,7 +143,7 @@ export default function SpaceScreen() {
                 {checkingIn ? '正在留下坐标…' : !todayCheckIn ? '今天也在' : '写一条记录'}
               </Text>
             </Pressable>
-          </>
+          </View>
         )}
       </Pressable>
 
@@ -205,6 +209,8 @@ export default function SpaceScreen() {
             onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
             onPress={() => router.push(`/post/${item.post.id}`)}
             post={item.post}
+            signature={preferences.profileSignature}
+            nameStyle={preferences.selfNameStyle}
           />
         ) : <CheckInRow checkIn={item.checkIn} />}
         renderSectionHeader={({ section }) => <DayHeader dayKey={section.title} today={today} />}
@@ -254,7 +260,7 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
   );
 }
 
-function PostCard({ authorName, avatarUri, mediaById, onImagePress, onPress, post }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post }) {
+function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, onPress, post, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; signature: string }) {
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const excerpt = markdownToPlainText(post.bodyMarkdown);
@@ -265,7 +271,8 @@ function PostCard({ authorName, avatarUri, mediaById, onImagePress, onPress, pos
       <ProfileAvatar name={authorName} uri={avatarUri} />
       <View style={styles.postContent}>
         <View style={styles.postHeader}>
-          <Text style={styles.postAuthor}>{authorName}</Text>
+          <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
+          {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
         {excerpt ? <Text numberOfLines={6} style={styles.postText}>{excerpt}</Text> : null}
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
@@ -444,37 +451,40 @@ function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMem
   return years === 1 ? '一年前的今天' : `${years} 年前的今天`;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   date: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, lineHeight: 15, textAlign: 'right' },
   stateMessage: { marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.caption },
   errorMessage: { marginBottom: spacing.sm, color: colors.danger, fontSize: typography.size.caption, lineHeight: 18 },
-  checkCard: { minHeight: 208, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life },
-  checkCardDone: { backgroundColor: '#2F5E48' },
-  memoryTraceCard: { backgroundColor: colors.lifeLight },
+  checkCard: { height: 256, padding: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },
+  checkCardDone: { borderColor: colors.lifeLine },
+  memoryTraceCard: { borderColor: colors.lifeLine },
+  checkCardAccent: { position: 'absolute', top: 0, right: spacing.lg, width: 72, height: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colors.life },
+  checkCardPendingAccent: { backgroundColor: colors.sun },
   cardPressed: { opacity: 0.9 },
   cardMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardMeta: { color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
+  cardMeta: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
   memoryTraceMeta: { color: colors.life },
   cardPageDots: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  cardPageDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.28)' },
-  cardPageDotActive: { width: 13, backgroundColor: colors.lifeLight },
+  cardPageDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.line },
+  cardPageDotActive: { width: 13, backgroundColor: colors.life },
   cardPageDotPending: { backgroundColor: colors.sun },
   memoryPageDotActive: { width: 13, backgroundColor: colors.life },
-  cardTitle: { marginTop: spacing.xl, color: colors.onLife, fontFamily: typography.display, fontSize: 26, lineHeight: 36 },
-  cardDescription: { marginTop: spacing.sm, color: colors.onLifeMuted, fontSize: 12, lineHeight: 20 },
-  primaryButton: { marginTop: spacing.lg, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sunLight },
-  secondaryButton: { backgroundColor: 'rgba(255, 255, 255, 0.12)' },
-  primaryButtonText: { color: colors.life, fontWeight: '600', letterSpacing: 1 },
-  secondaryButtonText: { color: colors.onLife },
+  cardBody: { flex: 1 },
+  cardTitle: { marginTop: spacing.xl, color: colors.ink, fontFamily: typography.display, fontSize: 26, lineHeight: 36 },
+  cardDescription: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 20 },
+  primaryButton: { minHeight: 48, marginTop: 'auto', alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.life },
+  secondaryButton: { backgroundColor: colors.lifeLight },
+  primaryButtonText: { color: colors.onLife, fontWeight: '600', letterSpacing: 1 },
+  secondaryButtonText: { color: colors.life },
   memoryTraceTitle: { marginTop: spacing.xl, color: colors.ink, fontFamily: typography.display, fontSize: 23, lineHeight: 32 },
   memoryTraceDescription: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 11, lineHeight: 19 },
-  memoryTraceStats: { marginTop: spacing.lg, paddingTop: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(29, 107, 73, 0.16)' },
+  memoryTraceStats: { marginTop: 'auto', paddingTop: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lifeLine },
   memoryTraceStat: { flex: 1, alignItems: 'center' },
   memoryTraceValue: { color: colors.life, fontFamily: typography.display, fontSize: 22 },
   memoryTraceLabel: { marginTop: 2, color: colors.inkFaint, fontSize: 8 },
-  memoryTraceDivider: { width: StyleSheet.hairlineWidth, height: 26, backgroundColor: 'rgba(29, 107, 73, 0.16)' },
+  memoryTraceDivider: { width: StyleSheet.hairlineWidth, height: 26, backgroundColor: colors.lifeLine },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.5 },
   birthdayCard: { marginTop: spacing.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.lg, backgroundColor: colors.sheet },
@@ -511,7 +521,7 @@ const styles = StyleSheet.create({
   dayLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
   checkInRow: { minHeight: 58, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   checkInMarker: { width: 42, alignItems: 'center', justifyContent: 'center' },
-  checkInDot: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(29, 107, 73, 0.34)', borderRadius: 7, backgroundColor: colors.lifeLight },
+  checkInDot: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: 7, backgroundColor: colors.lifeLight },
   checkInDotCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.life },
   checkInContent: { flex: 1, marginLeft: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   checkInTitle: { color: colors.inkSoft, fontFamily: typography.body, fontSize: 12 },
@@ -522,14 +532,15 @@ const styles = StyleSheet.create({
   postAvatarImage: { width: '100%', height: '100%' },
   postAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 17 },
   postContent: { flex: 1, minWidth: 0, marginLeft: spacing.md },
-  postHeader: { minHeight: 24, flexDirection: 'row', alignItems: 'center' },
+  postHeader: { minHeight: 24, alignItems: 'flex-start', justifyContent: 'center' },
   postAuthor: { color: colors.life, fontFamily: typography.body, fontSize: 14, fontWeight: '700' },
+  postSignature: { maxWidth: '100%', marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
   postText: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.body, fontSize: 15, lineHeight: 24 },
   postSingleImage: { width: '92%', marginTop: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   postImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   postImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.lifeLight },
   postImage: { width: '100%', height: '100%' },
-  postImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32, 35, 31, 0.48)' },
+  postImageMore: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay },
   postImageMoreText: { color: colors.onLife, fontFamily: typography.mono, fontSize: 15, fontWeight: '700' },
   audioList: { marginTop: spacing.md, gap: 6 },
   audioPreview: { minHeight: 58, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
@@ -537,7 +548,7 @@ const styles = StyleSheet.create({
   audioIconText: { color: colors.onLife, fontSize: 15 },
   audioBody: { flex: 1, marginLeft: spacing.sm },
   audioWave: { height: 25, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  audioWaveBar: { width: 3, borderRadius: 2, backgroundColor: 'rgba(29, 107, 73, 0.34)' },
+  audioWaveBar: { width: 3, borderRadius: 2, backgroundColor: colors.lifeLine },
   audioMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   audioLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.7 },
   audioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
@@ -546,7 +557,7 @@ const styles = StyleSheet.create({
   postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
   postType: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
-  onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.42)' },
+  onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
   onboardingSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   onboardingTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 28, lineHeight: 39 },
@@ -556,4 +567,4 @@ const styles = StyleSheet.create({
   onboardingButtonText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
   onboardingSkip: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   onboardingSkipText: { color: colors.inkFaint, fontSize: 10 },
-});
+}));

@@ -6,13 +6,15 @@ import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
 import { TabPageHeader } from '../../src/components/tab-page-header';
+import { createThemedStyles, nameTextStyle } from '../../src/theme/app-theme';
 
 export default function PeopleScreen() {
   const router = useRouter();
-  const { createPerson, getPostsByPerson, media, people, posts } = useAppState();
+  const { createPerson, getPostsByPerson, media, people, posts, preferences } = useAppState();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [sortByName, setSortByName] = useState(false);
   const [summaries, setSummaries] = useState<Record<string, { count: number; latestDay: string | null }>>({});
 
@@ -83,8 +85,40 @@ export default function PeopleScreen() {
         ) : (
           <>
             <View style={styles.controls}>
-              <TextInput accessibilityLabel="搜索人物" onChangeText={setQuery} placeholder="搜索人物、关系或印象" placeholderTextColor={colors.inkFaint} style={styles.searchInput} value={query} />
-              <Pressable accessibilityRole="button" accessibilityLabel={sortByName ? '按最近关联排序' : '按名称排序'} onPress={() => setSortByName((value) => !value)} style={styles.sortButton}><Text style={styles.sortButtonText}>{sortByName ? '按名称' : '最近关联'}</Text></Pressable>
+              <View style={[styles.searchField, searchFocused && styles.searchFieldFocused]}>
+                <SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} pointerEvents="none" size={18} tintColor={searchFocused ? colors.life : colors.inkFaint} type="hierarchical" />
+                <TextInput
+                  accessibilityLabel="搜索人物、关系或印象"
+                  autoCorrect={false}
+                  onBlur={() => setSearchFocused(false)}
+                  onChangeText={setQuery}
+                  onFocus={() => setSearchFocused(true)}
+                  placeholder="搜索人物、关系或印象"
+                  placeholderTextColor={colors.inkFaint}
+                  returnKeyType="search"
+                  style={styles.searchInput}
+                  value={query}
+                />
+                {query ? (
+                  <Pressable accessibilityLabel="清除搜索" accessibilityRole="button" hitSlop={8} onPress={() => setQuery('')} style={({ pressed }) => [styles.clearButton, pressed && styles.clearButtonPressed]}>
+                    <SymbolView name={{ android: 'close', ios: 'xmark.circle.fill', web: 'close' }} pointerEvents="none" size={17} tintColor={colors.inkFaint} type="hierarchical" />
+                  </Pressable>
+                ) : null}
+              </View>
+              <View style={styles.controlsMeta}>
+                <Text accessibilityLiveRegion="polite" style={styles.resultCount}>{query.trim() ? `${visiblePeople.length} 个结果` : `共 ${people.length} 人`}</Text>
+                <View style={styles.sortGroup}>
+                  <Text style={styles.sortLabel}>排序</Text>
+                  <View accessibilityLabel="人物排序方式" style={styles.sortControl}>
+                    <Pressable accessibilityRole="button" accessibilityState={{ selected: !sortByName }} onPress={() => setSortByName(false)} style={[styles.sortOption, !sortByName && styles.sortOptionActive]}>
+                      <Text style={[styles.sortOptionText, !sortByName && styles.sortOptionTextActive]}>最近</Text>
+                    </Pressable>
+                    <Pressable accessibilityRole="button" accessibilityState={{ selected: sortByName }} onPress={() => setSortByName(true)} style={[styles.sortOption, sortByName && styles.sortOptionActive]}>
+                      <Text style={[styles.sortOptionText, sortByName && styles.sortOptionTextActive]}>名称</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
             </View>
             {visiblePeople.length ? <View style={styles.list}>
             {visiblePeople.map((person, index) => {
@@ -94,7 +128,7 @@ export default function PeopleScreen() {
                 <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
                 <View style={styles.personInfo}>
                   <View style={styles.personTitleRow}>
-                    <Text numberOfLines={1} style={styles.personName}>{person.name}</Text>
+                    <Text numberOfLines={1} style={[styles.personName, nameTextStyle(preferences.friendNameStyle)]}>{person.name}</Text>
                     {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
                   </View>
                   <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>
@@ -130,20 +164,31 @@ function formatDay(dayKey: string): string {
   return `${Number(month)}月${Number(day)}日`;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  addButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(29, 107, 73, 0.12)', borderRadius: 22, backgroundColor: colors.lifeLight },
+  addButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 22, backgroundColor: colors.lifeLight },
   addButtonPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
-  controls: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  searchInput: { flex: 1, minHeight: 46, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 13 },
-  sortButton: { minHeight: 46, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight },
-  sortButtonText: { color: colors.life, fontSize: 10, fontWeight: '700' },
+  controls: { marginBottom: spacing.md },
+  searchField: { height: 50, paddingLeft: spacing.md, paddingRight: 6, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.sheet },
+  searchFieldFocused: { borderColor: colors.life },
+  searchInput: { flex: 1, height: '100%', paddingHorizontal: spacing.sm, paddingVertical: 0, color: colors.ink, fontSize: 13 },
+  clearButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18 },
+  clearButtonPressed: { backgroundColor: colors.lifeLight },
+  controlsMeta: { minHeight: 44, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  resultCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 0.5 },
+  sortGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sortLabel: { color: colors.inkFaint, fontSize: typography.size.meta },
+  sortControl: { width: 126, height: 36, padding: 3, flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.sheet },
+  sortOption: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
+  sortOptionActive: { backgroundColor: colors.life },
+  sortOptionText: { color: colors.inkFaint, fontSize: typography.size.meta },
+  sortOptionTextActive: { color: colors.onLife, fontWeight: '700' },
   emptyCard: { marginTop: 0, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
   emptyAction: { marginTop: spacing.lg, color: colors.life, fontSize: 11, fontWeight: '700' },
-  list: { marginTop: 0, paddingHorizontal: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(32, 35, 31, 0.09)', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  list: { marginTop: 0, paddingHorizontal: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet },
   personRow: { minHeight: 92, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   personRowLast: { borderBottomWidth: 0 },
   personRowPressed: { opacity: 0.58 },
@@ -156,9 +201,9 @@ const styles = StyleSheet.create({
   personRelation: { maxWidth: '34%', marginLeft: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden', borderRadius: 9, backgroundColor: colors.lifeLight, color: colors.life, fontSize: typography.size.meta },
   personMeta: { marginTop: 5, marginRight: spacing.md, color: colors.inkFaint, fontSize: 11, lineHeight: 17 },
   personStats: { marginTop: 5, color: colors.life, fontFamily: typography.mono, fontSize: 10 },
-  noResults: { marginTop: spacing.lg, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  noResults: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   noResultsText: { color: colors.inkSoft, fontSize: 12 },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(32, 35, 31, 0.28)' },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },
   sheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   handle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },
   sheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 25 },
@@ -168,4 +213,4 @@ const styles = StyleSheet.create({
   confirmButtonDisabled: { opacity: 0.35 },
   confirmButtonPressed: { opacity: 0.82 },
   confirmButtonText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },
-});
+}));

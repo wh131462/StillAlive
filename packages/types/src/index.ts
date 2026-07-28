@@ -1,6 +1,10 @@
 export type DayKey = `${number}-${number}-${number}`;
 export type BirthdayCalendar = 'solar' | 'lunar';
+export type BirthdayReminderMode = BirthdayCalendar | 'both';
 export type BuiltInTagSystem = 'mbti' | 'constellation' | 'zodiac' | 'custom';
+export type Gender = 'female' | 'male' | 'other';
+export type AppThemeId = 'moss' | 'sand' | 'midnight';
+export type NameStyleId = 'fresh' | 'journal' | 'sunlit' | 'colorful' | 'iridescent';
 
 export interface Birthday {
   calendar: BirthdayCalendar;
@@ -8,6 +12,7 @@ export interface Birthday {
   month: number;
   day: number;
   isLeapMonth: boolean;
+  reminderMode: BirthdayReminderMode;
 }
 
 export interface CheckIn {
@@ -28,6 +33,7 @@ export interface Person {
   id: string;
   name: string;
   avatarMediaId: string | null;
+  gender: Gender | null;
   relationToMe: string | null;
   impression: string | null;
   birthday: Birthday | null;

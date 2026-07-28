@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from '@still-alive/storage';
-import type { AlbumMedia, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayNotificationSchedule, BirthdayReminderMode, CheckIn, DayKey, Draft, Gender, Media, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../domain/memory-notifications';
 
 interface CheckInRow {
@@ -28,6 +28,7 @@ interface PersonRow {
   id: string;
   name: string;
   avatar_media_id: string | null;
+  gender: Gender | null;
   relation_to_me: string | null;
   impression: string | null;
   birthday_calendar: 'solar' | 'lunar' | null;
@@ -35,6 +36,7 @@ interface PersonRow {
   birthday_month: number | null;
   birthday_day: number | null;
   birthday_is_leap_month: number;
+  birthday_reminder_mode: BirthdayReminderMode | null;
   memory_enabled: number;
   created_at: string;
   updated_at: string;
@@ -69,6 +71,12 @@ export interface BackupSnapshot {
 export interface AppPreferences {
   onboardingCompleted: boolean;
   nickname: string;
+  profileBio: string;
+  profileSignature: string;
+  profileGender: Gender | null;
+  appearanceTheme: AppThemeId;
+  selfNameStyle: NameStyleId;
+  friendNameStyle: NameStyleId;
   birthDate: string;
   profileAvatarMediaId: string | null;
   profileMbti: string;
@@ -312,6 +320,21 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   if (currentVersion < 11) {
     await migrateLegacyAudioColumns(db);
     await db.execAsync('PRAGMA user_version = 11;');
+  }
+
+  if (currentVersion < 12) {
+    await addColumnIfMissing(db, 'persons', 'birthday_reminder_mode', 'TEXT');
+    await db.execAsync(`
+      UPDATE persons
+      SET birthday_reminder_mode = birthday_calendar
+      WHERE birthday_calendar IS NOT NULL AND birthday_reminder_mode IS NULL;
+      PRAGMA user_version = 12;
+    `);
+  }
+
+  if (currentVersion < 13) {
+    await addColumnIfMissing(db, 'persons', 'gender', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 13;');
   }
 }
 
@@ -602,8 +625,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPeople(): Promise<Person[]> {
     const rows = await this.db.getAllAsync<PersonRow>(
-      `SELECT id, name, avatar_media_id, relation_to_me, impression,
-              birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month,
+      `SELECT id, name, avatar_media_id, gender, relation_to_me, impression,
+              birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode,
               memory_enabled, created_at, updated_at
        FROM persons ORDER BY updated_at DESC`,
     );
@@ -612,11 +635,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async createPerson(person: Person): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO persons (id, name, avatar_media_id, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, memory_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, memory_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       person.id,
       person.name,
       person.avatarMediaId,
+      person.gender,
       person.relationToMe,
       person.impression,
       person.birthday?.calendar ?? null,
@@ -624,6 +648,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.month ?? null,
       person.birthday?.day ?? null,
       person.birthday?.isLeapMonth ? 1 : 0,
+      person.birthday?.reminderMode ?? null,
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
@@ -633,12 +658,13 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async updatePerson(person: Person): Promise<void> {
     await this.db.runAsync(
       `UPDATE persons
-       SET name = ?, avatar_media_id = ?, relation_to_me = ?, impression = ?,
-           birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?,
+       SET name = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?,
+           birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?,
            memory_enabled = ?, updated_at = ?
        WHERE id = ?`,
       person.name,
       person.avatarMediaId,
+      person.gender,
       person.relationToMe,
       person.impression,
       person.birthday?.calendar ?? null,
@@ -646,6 +672,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.month ?? null,
       person.birthday?.day ?? null,
       person.birthday?.isLeapMonth ? 1 : 0,
+      person.birthday?.reminderMode ?? null,
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
@@ -874,6 +901,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     return {
       onboardingCompleted: values.onboardingCompleted === 'true',
       nickname: values.nickname ?? '',
+      profileBio: values.profileBio ?? '',
+      profileSignature: values.profileSignature ?? '',
+      profileGender: parseGender(values.profileGender),
+      appearanceTheme: parseAppTheme(values.appearanceTheme),
+      selfNameStyle: parseNameStyle(values.selfNameStyle, 'fresh'),
+      friendNameStyle: parseNameStyle(values.friendNameStyle, 'journal'),
       birthDate: values.birthDate ?? '',
       profileAvatarMediaId: values.profileAvatarMediaId || null,
       profileMbti: values.profileMbti ?? '',
@@ -952,8 +985,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(
-          'INSERT INTO persons (id, name, avatar_media_id, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          person.id, person.name, person.avatarMediaId, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
+          'INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          person.id, person.name, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.reminderMode ?? null, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
         );
       }
       for (const item of snapshot.media) {
@@ -1020,11 +1053,24 @@ function parseStringList(value: string | undefined): string[] {
   }
 }
 
+function parseGender(value: string | undefined): Gender | null {
+  return value === 'female' || value === 'male' || value === 'other' ? value : null;
+}
+
+function parseAppTheme(value: string | undefined): AppThemeId {
+  return value === 'sand' || value === 'midnight' ? value : 'moss';
+}
+
+function parseNameStyle(value: string | undefined, fallback: NameStyleId): NameStyleId {
+  return value === 'fresh' || value === 'journal' || value === 'sunlit' || value === 'colorful' || value === 'iridescent' ? value : fallback;
+}
+
 function mapPerson(row: PersonRow): Person {
   return {
     id: row.id,
     name: row.name,
     avatarMediaId: row.avatar_media_id,
+    gender: parseGender(row.gender ?? undefined),
     relationToMe: row.relation_to_me,
     impression: row.impression,
     birthday: row.birthday_calendar && row.birthday_year && row.birthday_month && row.birthday_day ? {
@@ -1033,11 +1079,16 @@ function mapPerson(row: PersonRow): Person {
       month: row.birthday_month,
       day: row.birthday_day,
       isLeapMonth: row.birthday_is_leap_month === 1,
+      reminderMode: validBirthdayReminderMode(row.birthday_reminder_mode) ? row.birthday_reminder_mode : row.birthday_calendar,
     } : null,
     memoryEnabled: row.memory_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function validBirthdayReminderMode(value: BirthdayReminderMode | null): value is BirthdayReminderMode {
+  return value === 'solar' || value === 'lunar' || value === 'both';
 }
 
 function mapMedia(row: MediaRow): Media {

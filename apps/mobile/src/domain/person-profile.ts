@@ -1,13 +1,14 @@
 import { LunarDay, LunarMonth, LunarYear, SolarDay } from 'tyme4ts';
-import type { Birthday, DayKey } from '@still-alive/types';
+import type { Birthday, BirthdayCalendar, DayKey } from '@still-alive/types';
 
 export const MBTI_TYPES = ['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP', 'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'] as const;
 
 export function validateBirthday(birthday: Birthday, today = new Date()): void {
   if (!Number.isInteger(birthday.year) || birthday.year < 1900 || birthday.year > today.getFullYear()) throw new Error('生日年份无效');
+  if (!['solar', 'lunar', 'both'].includes(birthday.reminderMode)) throw new Error('生日提醒方式无效');
   try {
     if (birthday.calendar === 'solar') {
-      if (birthday.isLeapMonth) throw new Error('阳历生日不能设置闰月');
+      if (birthday.isLeapMonth) throw new Error('公历生日不能设置闰月');
       const day = SolarDay.fromYmd(birthday.year, birthday.month, birthday.day);
       if (localDate(day.getYear(), day.getMonth(), day.getDay()).getTime() > startOfDay(today).getTime()) throw new Error('生日不能晚于今天');
       return;
@@ -51,6 +52,31 @@ export function nextBirthday(birthday: Birthday, now = new Date()): Date {
   return current.getTime() >= today.getTime() ? current : birthdayInSolarYear(birthday, today.getFullYear() + 1);
 }
 
+export function birthdayForCalendar(birthday: Birthday, calendar: BirthdayCalendar): Birthday {
+  if (birthday.calendar === calendar) return birthday;
+  const solarDate = birthdaySolarDate(birthday);
+  if (calendar === 'solar') {
+    return {
+      calendar,
+      year: solarDate.getFullYear(),
+      month: solarDate.getMonth() + 1,
+      day: solarDate.getDate(),
+      isLeapMonth: false,
+      reminderMode: birthday.reminderMode,
+    };
+  }
+  const lunar = SolarDay.fromYmd(solarDate.getFullYear(), solarDate.getMonth() + 1, solarDate.getDate()).getLunarDay();
+  const monthWithLeap = lunar.getLunarMonth().getMonthWithLeap();
+  return {
+    calendar,
+    year: lunar.getYear(),
+    month: Math.abs(monthWithLeap),
+    day: lunar.getDay(),
+    isLeapMonth: monthWithLeap < 0,
+    reminderMode: birthday.reminderMode,
+  };
+}
+
 export function constellationForBirthday(birthday: Birthday): string {
   const solar = birthdaySolarDate(birthday);
   return SolarDay.fromYmd(solar.getFullYear(), solar.getMonth() + 1, solar.getDate()).getConstellation().toString();
@@ -62,7 +88,7 @@ export function zodiacForBirthday(birthday: Birthday): string {
 }
 
 export function formatBirthday(birthday: Birthday): string {
-  if (birthday.calendar === 'solar') return `阳历 ${birthday.year}-${pad(birthday.month)}-${pad(birthday.day)}`;
+  if (birthday.calendar === 'solar') return `公历 ${birthday.year}-${pad(birthday.month)}-${pad(birthday.day)}`;
   return `农历 ${birthday.year}年${birthday.isLeapMonth ? '闰' : ''}${birthday.month}月${birthday.day}日`;
 }
 

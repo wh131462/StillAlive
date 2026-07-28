@@ -48,3 +48,25 @@ export interface EditorMediaSource {
   id: string;
   uri: string;
 }
+
+export interface EditorTheme {
+  colorScheme: 'light' | 'dark';
+  paper: string;
+  sheet: string;
+  ink: string;
+  inkSoft: string;
+  inkFaint: string;
+  line: string;
+  life: string;
+  lifeDeep: string;
+  lifeLight: string;
+  lifeLine: string;
+  sun: string;
+  onLife: string;
+  danger: string;
+  dangerLight: string;
+  dangerLine: string;
+  overlay: string;
+  codeBackground: string;
+  codeForeground: string;
+}

@@ -4,8 +4,11 @@ import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../src/state/app-state';
 import { TimePickerField } from '../src/components/date-time-picker';
+import { StyledName } from '../src/components/styled-name';
+import { NAME_STYLE_OPTIONS, THEME_OPTIONS, createThemedStyles } from '../src/theme/app-theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -13,7 +16,7 @@ export default function SettingsScreen() {
 
   const savePreference = (changes: Parameters<typeof updatePreferences>[0]) => void updatePreferences(changes).catch((cause: unknown) => Alert.alert('设置失败', errorMessage(cause)));
   const confirmDeleteAll = () => {
-    Alert.alert('删除这台设备上的全部内容？', '日记、草稿、人物、图片和设置都会被真实删除。之前导出的备份文件不会被删除。', [
+    Alert.alert('删除这台设备上的全部内容？', '日记、草稿、人物、图片、密码本和设置都会被真实删除。之前导出的备份文件不会被删除。', [
       { text: '取消', style: 'cancel' },
       { text: '继续', onPress: () => Alert.alert('最后确认', '这个操作无法撤销。确定清空“仍在”的全部本地数据吗？', [
         { text: '保留数据', style: 'cancel' },
@@ -28,6 +31,28 @@ export default function SettingsScreen() {
       <Text style={styles.headerTitle}>设置</Text><View style={styles.headerButton} />
     </View>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Text style={styles.eyebrow}>APPEARANCE</Text>
+      <View style={styles.appearanceGroup}>
+        <View style={styles.appearanceSection}>
+          <Text style={styles.appearanceTitle}>主题</Text>
+          <Text style={styles.appearanceHint}>切换后立即应用到整个应用</Text>
+          <View style={styles.themeOptions}>
+            {THEME_OPTIONS.map((option) => {
+              const selected = preferences.appearanceTheme === option.id;
+              return <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => savePreference({ appearanceTheme: option.id })} style={[styles.themeOption, selected && styles.themeOptionSelected]}>
+                <View style={[styles.themePreview, { backgroundColor: option.colors.paper }]}><View style={[styles.themePreviewSheet, { backgroundColor: option.colors.sheet }]}><View style={[styles.themePreviewAccent, { backgroundColor: option.colors.life }]} /></View></View>
+                <Text style={[styles.themeLabel, selected && styles.themeLabelSelected]}>{option.label}</Text>
+                <Text style={styles.themeHint}>{option.hint}</Text>
+              </Pressable>;
+            })}
+          </View>
+        </View>
+        <View style={styles.separator} />
+        <NameStylePicker includePersonalOnly label="个人名字" onChange={(value) => savePreference({ selfNameStyle: value })} sample={preferences.nickname || '我的名字'} value={preferences.selfNameStyle} />
+        <View style={styles.separator} />
+        <NameStylePicker label="朋友名字" onChange={(value) => savePreference({ friendNameStyle: value })} sample="朋友名字" value={preferences.friendNameStyle} />
+      </View>
+
       <Text style={styles.eyebrow}>ORGANIZE</Text>
       <View style={styles.group}>
         <Entry icon="tag" androidIcon="label" label="标签管理" hint="标签集合、排序与自定义标签" onPress={() => router.push('/tag-management')} />
@@ -50,7 +75,7 @@ export default function SettingsScreen() {
       <View style={styles.group}>
         <SwitchRow checked={preferences.birthdayNotificationsEnabled} hint="提前 3 天和生日当天提醒" label="人物生日提醒" onPress={() => void setBirthdayNotificationsEnabled(!preferences.birthdayNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
       </View>
-      {preferences.birthdayNotificationsEnabled ? <><TimePickerField hour={preferences.birthdayReminderHour} label="提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /><Text style={styles.notificationRule}>按设备当前时区安排未来 12 个月的提醒：生日提前 3 天一次、生日当天一次。通知只包含人物名称和生日提示。</Text></> : null}
+      {preferences.birthdayNotificationsEnabled ? <><TimePickerField hour={preferences.birthdayReminderHour} label="提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /><Text style={styles.notificationRule}>按人物设置的公历、农历或双历，使用设备当前时区安排未来 12 个月的提醒：生日提前 3 天一次、生日当天一次。</Text></> : null}
       <Text style={styles.permissionState}>系统权限 {notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text>
       {notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
       {preferences.birthdayNotificationError ? <><Pressable onPress={() => void retryBirthdayNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试通知调度</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
@@ -58,7 +83,7 @@ export default function SettingsScreen() {
 
       <Text style={styles.eyebrow}>PRIVACY</Text>
       <View style={styles.privacyCard}><Text style={styles.privacyTitle}>数据只保存在这台设备</Text><Text style={styles.privacyText}>没有账号、后台同步或第三方行为追踪。只有主动导出时，内容才会通过系统分享面板离开应用。</Text><Text style={styles.location}>当前设备 应用私有目录</Text></View>
-      <Pressable accessibilityRole="button" onPress={confirmDeleteAll} style={styles.deleteButton}><Text style={styles.deleteTitle}>删除全部本地数据</Text><Text style={styles.deleteHint}>不会删除已经保存到其他位置的备份</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={confirmDeleteAll} style={styles.deleteButton}><Text style={styles.deleteTitle}>删除全部本地数据</Text><Text style={styles.deleteHint}>包括密码本；不会删除已经保存到其他位置的备份</Text></Pressable>
       <Text style={styles.version}>仍在 Still Alive 0.1.0</Text>
     </ScrollView>
   </SafeAreaView>;
@@ -72,14 +97,32 @@ function SwitchRow({ checked, label, hint, onPress }: { checked: boolean; label:
   return <Pressable accessibilityRole="switch" accessibilityState={{ checked }} onPress={onPress} style={styles.switchRow}><View style={styles.entryCopy}><Text style={styles.entryTitle}>{label}</Text><Text style={styles.entryHint}>{hint}</Text></View><View style={[styles.switchTrack, checked && styles.switchTrackOn]}><View style={[styles.switchThumb, checked && styles.switchThumbOn]} /></View></Pressable>;
 }
 
+function NameStylePicker({ includePersonalOnly = false, label, onChange, sample, value }: { includePersonalOnly?: boolean; label: string; onChange(value: NameStyleId): void; sample: string; value: NameStyleId }) {
+  const options = NAME_STYLE_OPTIONS.filter((option) => includePersonalOnly || !option.personalOnly);
+  return <View style={styles.nameStyleSection}>
+    <Text style={styles.appearanceTitle}>{label}</Text>
+    <ScrollView horizontal contentContainerStyle={styles.nameStyleOptions} showsHorizontalScrollIndicator={false}>
+      {options.map((option) => {
+        const selected = value === option.id;
+        return <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => onChange(option.id)} style={[styles.nameStyleOption, selected && styles.nameStyleOptionSelected]}>
+          <StyledName numberOfLines={1} style={styles.nameStylePreview} value={sample} variant={option.id} />
+          <Text style={[styles.nameStyleLabel, selected && styles.nameStyleLabelSelected]}>{option.label}</Text>
+        </Pressable>;
+      })}
+    </ScrollView>
+  </View>;
+}
+
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, eyebrow: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
+  appearanceGroup: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, appearanceSection: { padding: spacing.md }, appearanceTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' }, appearanceHint: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta }, themeOptions: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm }, themeOption: { flex: 1, minWidth: 0, padding: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md }, themeOptionSelected: { borderColor: colors.life, backgroundColor: colors.lifeLight }, themePreview: { height: 48, padding: 6, justifyContent: 'flex-end', overflow: 'hidden', borderRadius: radius.sm }, themePreviewSheet: { height: 25, padding: 5, justifyContent: 'flex-end', borderTopRightRadius: 9, borderBottomLeftRadius: 9 }, themePreviewAccent: { width: '58%', height: 5, borderRadius: 3 }, themeLabel: { marginTop: 7, color: colors.inkSoft, fontSize: 11, fontWeight: '600' }, themeLabelSelected: { color: colors.life }, themeHint: { marginTop: 2, color: colors.inkFaint, fontSize: 8 },
+  nameStyleSection: { padding: spacing.md }, nameStyleOptions: { marginTop: spacing.md, gap: spacing.sm }, nameStyleOption: { width: 96, minHeight: 70, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper }, nameStyleOptionSelected: { borderColor: colors.life, backgroundColor: colors.lifeLight }, nameStylePreview: { maxWidth: '100%', fontSize: 14 }, nameStyleLabel: { marginTop: 7, color: colors.inkFaint, fontSize: 9 }, nameStyleLabelSelected: { color: colors.life, fontWeight: '700' },
   group: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.line }, entry: { minHeight: 72, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, entryCopy: { flex: 1 }, entryTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' }, entryHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, switchTrack: { width: 44, height: 26, marginLeft: spacing.md, padding: 2, borderRadius: 13, backgroundColor: colors.line }, switchTrackOn: { backgroundColor: colors.life }, switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper }, switchThumbOn: { alignSelf: 'flex-end' },
   notificationRule: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 18 }, permissionState: { marginTop: spacing.md, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta }, inlineButton: { minHeight: 44, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet }, inlineButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' }, error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 17 },
   privacyCard: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet }, privacyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17 }, privacyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 19 }, location: { marginTop: spacing.md, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   deleteButton: { minHeight: 72, marginTop: spacing.xl, padding: spacing.md, justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md }, deleteTitle: { color: colors.danger, fontSize: typography.size.caption, fontWeight: '700' }, deleteHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta }, version: { marginTop: spacing.xxl, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, textAlign: 'center' }, pressed: { opacity: 0.7 },
-});
+}));

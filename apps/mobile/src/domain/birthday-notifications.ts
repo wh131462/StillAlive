@@ -1,10 +1,11 @@
-import type { BirthdayNotificationSchedule, Person } from '@still-alive/types';
-import { nextBirthday, toLocalDayKey } from './person-profile';
+import type { BirthdayCalendar, BirthdayNotificationSchedule, Person } from '@still-alive/types';
+import { birthdayForCalendar, nextBirthday, toLocalDayKey } from './person-profile';
 
 export interface PlannedBirthdayNotification {
   key: string;
   personId: string;
   personName: string;
+  calendar: BirthdayCalendar;
   eventType: 'advance' | 'today';
   birthdayDayKey: ReturnType<typeof toLocalDayKey>;
   triggerAt: Date;
@@ -25,18 +26,28 @@ export interface BirthdayScheduleStore {
 export function planBirthdayNotifications(people: Person[], hour: number, minute: number, now = new Date()): PlannedBirthdayNotification[] {
   const horizon = new Date(now);
   horizon.setFullYear(horizon.getFullYear() + 1);
-  const result: PlannedBirthdayNotification[] = [];
+  const result = new Map<string, PlannedBirthdayNotification>();
   for (const person of people) {
     if (!person.birthday) continue;
-    const birthday = nextBirthday(person.birthday, now);
-    const todayTrigger = atTime(birthday, hour, minute);
-    const advanceTrigger = new Date(todayTrigger);
-    advanceTrigger.setDate(advanceTrigger.getDate() - 3);
-    const dayKey = toLocalDayKey(birthday);
-    if (advanceTrigger.getTime() > now.getTime() && advanceTrigger.getTime() <= horizon.getTime()) result.push(planned(person, 'advance', dayKey, advanceTrigger));
-    if (todayTrigger.getTime() > now.getTime() && todayTrigger.getTime() <= horizon.getTime()) result.push(planned(person, 'today', dayKey, todayTrigger));
+    const reminderMode = person.birthday.reminderMode ?? person.birthday.calendar;
+    const calendars: BirthdayCalendar[] = reminderMode === 'both' ? ['solar', 'lunar'] : [reminderMode];
+    for (const calendar of calendars) {
+      const birthday = nextBirthday(birthdayForCalendar(person.birthday, calendar), now);
+      const todayTrigger = atTime(birthday, hour, minute);
+      const advanceTrigger = new Date(todayTrigger);
+      advanceTrigger.setDate(advanceTrigger.getDate() - 3);
+      const dayKey = toLocalDayKey(birthday);
+      if (advanceTrigger.getTime() > now.getTime() && advanceTrigger.getTime() <= horizon.getTime()) {
+        const item = planned(person, calendar, 'advance', dayKey, advanceTrigger);
+        result.set(item.key, item);
+      }
+      if (todayTrigger.getTime() > now.getTime() && todayTrigger.getTime() <= horizon.getTime()) {
+        const item = planned(person, calendar, 'today', dayKey, todayTrigger);
+        result.set(item.key, item);
+      }
+    }
   }
-  return result.sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime());
+  return [...result.values()].sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime());
 }
 
 export async function reconcileBirthdayNotifications(store: BirthdayScheduleStore, adapter: BirthdayNotificationAdapter, people: Person[], enabled: boolean, hour: number, minute: number, requestPermission = false): Promise<void> {
@@ -76,8 +87,8 @@ export async function cancelBirthdayNotifications(store: BirthdayScheduleStore, 
   await store.replaceBirthdayNotificationSchedules(personId ? existing.filter((item) => item.personId !== personId) : []);
 }
 
-function planned(person: Person, eventType: 'advance' | 'today', birthdayDayKey: ReturnType<typeof toLocalDayKey>, triggerAt: Date): PlannedBirthdayNotification {
-  return { key: scheduleKey(person.id, eventType, birthdayDayKey, triggerAt), personId: person.id, personName: person.name, eventType, birthdayDayKey, triggerAt };
+function planned(person: Person, calendar: BirthdayCalendar, eventType: 'advance' | 'today', birthdayDayKey: ReturnType<typeof toLocalDayKey>, triggerAt: Date): PlannedBirthdayNotification {
+  return { key: scheduleKey(person.id, eventType, birthdayDayKey, triggerAt), personId: person.id, personName: person.name, calendar, eventType, birthdayDayKey, triggerAt };
 }
 
 function scheduleKey(personId: string, eventType: string, birthdayDayKey: string, triggerAt: Date): string {

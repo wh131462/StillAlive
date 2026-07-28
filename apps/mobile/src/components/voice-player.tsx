@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { SymbolView } from 'expo-symbols';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { createThemedStyles } from '../theme/app-theme';
 
 const WAVE_HEIGHTS = [10, 16, 24, 15, 30, 19, 12, 27, 17, 32, 21, 14, 25, 18, 11, 22, 29, 16];
 
@@ -45,15 +46,15 @@ export function formatDuration(durationMs: number | null): string {
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   card: { minHeight: 74, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
   pressed: { opacity: 0.72 },
   playButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.life },
   content: { flex: 1, marginLeft: spacing.md },
   wave: { height: 34, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  waveBar: { width: 3, borderRadius: 2, backgroundColor: 'rgba(29, 107, 73, 0.22)' },
+  waveBar: { width: 3, borderRadius: 2, backgroundColor: colors.lifeLine },
   waveBarPlayed: { backgroundColor: colors.life },
   meta: { marginTop: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.8 },
   duration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
-});
+}));

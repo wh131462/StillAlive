@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { createThemedStyles } from '../theme/app-theme';
 
 export interface DateParts { year: number; month: number; day: number }
 
@@ -109,9 +110,9 @@ function WheelColumn({ accessibilityLabel, items, selected, suffix, padValue = f
 function range(start: number, end: number): number[] { return Array.from({ length: end - start + 1 }, (_, index) => start + index); }
 function pad(value: number): string { return String(value).padStart(2, '0'); }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   field: { minHeight: 68, marginTop: spacing.lg, paddingHorizontal: spacing.md, justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet }, label: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 }, fieldValueRow: { marginTop: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, value: { color: colors.ink, fontSize: 15 }, placeholder: { color: colors.inkFaint }, fieldAction: { color: colors.life, fontSize: 10, fontWeight: '700' },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(35,31,27,0.28)' }, sheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.paper }, handle: { width: 36, height: 4, marginBottom: spacing.sm, alignSelf: 'center', borderRadius: 2, backgroundColor: colors.line }, header: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerAction: { width: 56, minHeight: 44, justifyContent: 'center' }, title: { color: colors.ink, fontFamily: typography.display, fontSize: 18 }, cancel: { color: colors.inkSoft, fontSize: 11 }, confirm: { color: colors.life, fontSize: 11, fontWeight: '700', textAlign: 'right' },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop }, sheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.paper }, handle: { width: 36, height: 4, marginBottom: spacing.sm, alignSelf: 'center', borderRadius: 2, backgroundColor: colors.line }, header: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerAction: { width: 56, minHeight: 44, justifyContent: 'center' }, title: { color: colors.ink, fontFamily: typography.display, fontSize: 18 }, cancel: { color: colors.inkSoft, fontSize: 11 }, confirm: { color: colors.life, fontSize: 11, fontWeight: '700', textAlign: 'right' },
   picker: { height: ITEM_HEIGHT * VISIBLE_ITEMS, marginTop: spacing.md, flexDirection: 'row', overflow: 'hidden' }, timePicker: { paddingHorizontal: 44 }, selection: { position: 'absolute', top: ITEM_HEIGHT * 2, right: 0, left: 0, height: ITEM_HEIGHT, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.sm, backgroundColor: colors.sheet }, wheel: { flex: 1 }, wheelContent: { paddingVertical: ITEM_HEIGHT * 2 }, wheelItem: { height: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center' }, wheelText: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 15 }, wheelTextSelected: { color: colors.ink, fontSize: 17, fontWeight: '700' }, wheelSuffix: { color: colors.inkFaint, fontSize: 9, fontWeight: '400' },
-  shortcuts: { marginTop: spacing.md, flexDirection: 'row', justifyContent: 'center', gap: spacing.md }, shortcut: { minHeight: 42, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.sheet }, shortcutText: { color: colors.life, fontSize: 10, fontWeight: '700' }, clearText: { color: '#9B493F', fontSize: 10 },
-});
+  shortcuts: { marginTop: spacing.md, flexDirection: 'row', justifyContent: 'center', gap: spacing.md }, shortcut: { minHeight: 42, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.sheet }, shortcutText: { color: colors.life, fontSize: 10, fontWeight: '700' }, clearText: { color: colors.danger, fontSize: 10 },
+}));

@@ -5,8 +5,14 @@ import { BACKUP_SCHEMA_VERSION } from '@still-alive/backup';
 import type { BackupManifest } from '@still-alive/backup';
 import type { BackupSnapshot } from './sqlite-repository';
 import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../domain/embedded-media';
+import { unlockPasswordVault } from './password-vault-crypto';
+import { parsePasswordVaultBytes, passwordVaultExists, readPasswordVaultBytes, readPasswordVaultEnvelope, replacePasswordVaultEnvelope } from './password-vault-storage';
+import { logPasswordVaultDiagnostic, passwordVaultErrorKind } from './password-vault-logging';
 
 const APP_VERSION = '0.1.0';
+const MAX_BACKUP_ARCHIVE_BYTES = 128 * 1024 * 1024;
+const MAX_BACKUP_EXPANDED_BYTES = 256 * 1024 * 1024;
+const MAX_BACKUP_ENTRY_COUNT = 20_000;
 
 export interface BackupArchive {
   uri: string;
@@ -17,6 +23,7 @@ export interface ParsedBackup {
   exportedAt: string;
   snapshot: BackupSnapshot;
   entries: Record<string, Uint8Array>;
+  vaultEnvelope: Uint8Array | null;
 }
 
 export interface MaterializedBackup {
@@ -41,6 +48,11 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
 
   const portableSnapshot: BackupSnapshot = { ...snapshot, media: portableMedia };
   entries['data.json'] = strToU8(JSON.stringify(portableSnapshot, null, 2));
+  const vaultEnvelope = await readPasswordVaultBytes();
+  if (vaultEnvelope) {
+    logPasswordVaultDiagnostic('backup.export.include-vault', { bytes: vaultEnvelope.byteLength });
+    entries['vault.enc'] = vaultEnvelope;
+  }
   for (const post of snapshot.posts) {
     const portableMarkdown = post.bodyMarkdown.replace(/!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g, (token, id: string, duration: string | undefined) => {
       const audio = portableMedia.find((item) => item.id === id);
@@ -67,7 +79,13 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
 }
 
 export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
-  const entries = unzipSync(await new File(uri).bytes());
+  logPasswordVaultDiagnostic('backup.parse.start');
+  const archive = new File(uri);
+  if (!archive.exists || archive.size > MAX_BACKUP_ARCHIVE_BYTES) throw new Error('备份文件过大，无法安全读取');
+  const archiveBytes = await archive.bytes();
+  if (archiveBytes.byteLength > MAX_BACKUP_ARCHIVE_BYTES) throw new Error('备份文件过大，无法安全读取');
+  const entries = unzipBackupArchive(archiveBytes);
+  logPasswordVaultDiagnostic('backup.parse.unzipped', { archiveBytes: archiveBytes.byteLength, entries: Object.keys(entries).length });
   const manifestBytes = entries['manifest.json'];
   const dataBytes = entries['data.json'];
   if (!manifestBytes || !dataBytes) throw new Error('备份缺少 manifest.json 或 data.json');
@@ -88,7 +106,63 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
   const snapshot = JSON.parse(strFromU8(dataBytes)) as BackupSnapshot;
   migrateSnapshot(snapshot);
   validateSnapshot(snapshot);
-  return { exportedAt: manifest.exportedAt, snapshot, entries };
+  const vaultEnvelope = entries['vault.enc'] ?? null;
+  if (vaultEnvelope) {
+    if (!manifestPaths.has('vault.enc')) throw new Error('备份中的密码本未列入清单');
+    parsePasswordVaultBytes(vaultEnvelope);
+  }
+  return { exportedAt: manifest.exportedAt, snapshot, entries, vaultEnvelope };
+}
+
+function unzipBackupArchive(bytes: Uint8Array): Record<string, Uint8Array> {
+  let entryCount = 0;
+  let expandedBytes = 0;
+  const paths = new Set<string>();
+  return unzipSync(bytes, {
+    filter: ({ name, originalSize }) => {
+      entryCount += 1;
+      if (entryCount > MAX_BACKUP_ENTRY_COUNT) throw new Error('备份包含过多文件，无法安全读取');
+      if (!isSafeRelativePath(name) || paths.has(name)) throw new Error(`备份文件路径无效：${name}`);
+      if (!Number.isSafeInteger(originalSize) || originalSize < 0) throw new Error('备份文件大小无效');
+      paths.add(name);
+      expandedBytes += originalSize;
+      if (!Number.isSafeInteger(expandedBytes) || expandedBytes > MAX_BACKUP_EXPANDED_BYTES) throw new Error('备份解压后过大，无法安全读取');
+      return true;
+    },
+  });
+}
+
+export function backupContainsPasswordVault(parsed: ParsedBackup): boolean {
+  return parsed.vaultEnvelope !== null;
+}
+
+export function localPasswordVaultExists(): boolean {
+  return passwordVaultExists();
+}
+
+export async function restorePasswordVaultFromBackup(parsed: ParsedBackup, backupMasterPassword: string, currentMasterPassword: string | null): Promise<void> {
+  logPasswordVaultDiagnostic('backup.restore-vault.start', { hasCurrentVault: passwordVaultExists() });
+  const bytes = parsed.vaultEnvelope;
+  if (!bytes) throw new Error('这个备份不包含密码本');
+  const backupEnvelope = parsePasswordVaultBytes(bytes);
+  const backupSession = await unlockPasswordVault(backupEnvelope, backupMasterPassword);
+  try {
+    if (passwordVaultExists()) {
+      if (currentMasterPassword === null) throw new Error('请输入当前密码本的主密码');
+      const currentSession = await unlockPasswordVault(await readPasswordVaultEnvelope(), currentMasterPassword);
+      currentSession.dek.fill(0);
+    }
+    await replacePasswordVaultEnvelope(bytes, async (saved) => {
+      const verified = await unlockPasswordVault(saved, backupMasterPassword);
+      verified.dek.fill(0);
+    });
+    logPasswordVaultDiagnostic('backup.restore-vault.success');
+  } catch (cause) {
+    logPasswordVaultDiagnostic('backup.restore-vault.failed', { error: passwordVaultErrorKind(cause) });
+    throw cause;
+  } finally {
+    backupSession.dek.fill(0);
+  }
 }
 
 export function materializeBackupMedia(parsed: ParsedBackup): MaterializedBackup {
@@ -166,7 +240,11 @@ function validateSnapshot(value: BackupSnapshot): void {
   for (const relation of value.postPersons) {
     if (!postIds.has(relation.postId) || !personIds.has(relation.personId)) throw new Error('备份中的人物关联无效');
   }
-  for (const person of value.people) if (person.avatarMediaId && !mediaIds.has(person.avatarMediaId)) throw new Error('备份中的人物头像关联无效');
+  for (const person of value.people) {
+    if (person.avatarMediaId && !mediaIds.has(person.avatarMediaId)) throw new Error('备份中的人物头像关联无效');
+    if (person.gender && !['female', 'male', 'other'].includes(person.gender)) throw new Error('备份中的人物性别无效');
+    if (person.birthday && !['solar', 'lunar', 'both'].includes(person.birthday.reminderMode)) throw new Error('备份中的生日提醒方式无效');
+  }
   if (!value.settings || typeof value.settings !== 'object' || Array.isArray(value.settings)) value.settings = {};
   for (const setting of Object.values(value.settings)) if (typeof setting !== 'string') throw new Error('备份中的设置数据无效');
 
@@ -211,7 +289,11 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.personTags ??= [];
   value.albums ??= [];
   value.albumMedia ??= [];
-  if (Array.isArray(value.people)) for (const person of value.people) person.birthday ??= null;
+  if (Array.isArray(value.people)) for (const person of value.people) {
+    person.gender ??= null;
+    person.birthday ??= null;
+    if (person.birthday) person.birthday.reminderMode ??= person.birthday.calendar;
+  }
   if (Array.isArray(value.posts)) for (const post of value.posts) migrateLegacyAudio(post);
   if (Array.isArray(value.drafts)) for (const draft of value.drafts) migrateLegacyAudio(draft);
 }

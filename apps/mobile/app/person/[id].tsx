@@ -6,13 +6,15 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import type { Post } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
+import { formatGender } from '../../src/components/gender-picker';
 import { extractAudioEmbeds } from '../../src/domain/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from '../../src/domain/person-profile';
+import { createThemedStyles, nameTextStyle } from '../../src/theme/app-theme';
 
 export default function PersonScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { albums, deletePerson, getPostsByPerson, media, people, personTags, posts: allPosts, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
+  const { albums, deletePerson, getPostsByPerson, media, people, personTags, posts: allPosts, preferences, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
@@ -65,20 +67,57 @@ export default function PersonScreen() {
 
         {person ? (
           <>
-            <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
-            <Text style={styles.name}>{person.name}</Text>
-            <Text style={styles.relation}>{person.relationToMe ?? '暂时不定义关系'}</Text>
-            {person.impression ? <Text style={styles.impression}>{person.impression}</Text> : null}
-            {person.birthday ? <View style={styles.profileMeta}><Text style={styles.profileMetaTitle}>{formatBirthday(person.birthday)}</Text><Text style={styles.profileMetaHint}>下一次 {toLocalDayKey(nextBirthday(person.birthday))}</Text></View> : <Text style={styles.emptyMeta}>还没有记录生日</Text>}
-            {labels.length ? <View style={styles.tags}>{labels.map((label) => <View key={label} style={styles.tag}><Text style={styles.tagText}>{label}</Text></View>)}</View> : <Text style={styles.emptyMeta}>还没有人物标签</Text>}
-            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/albums', params: { personId: person.id } })} style={styles.albumEntry}><View><Text style={styles.albumTitle}>人物相册</Text><Text style={styles.albumHint}>按文件夹整理只属于 {person.name} 的照片</Text></View><Text style={styles.albumCount}>{albums.filter((album) => album.personId === person.id).length} 个 ›</Text></Pressable>
-            <Pressable accessibilityRole="switch" accessibilityState={{ checked: person.memoryEnabled }} onPress={() => void setPersonMemoryEnabled(person.id, !person.memoryEnabled)} style={styles.memorySetting}>
-              <View style={[styles.memoryIndicator, person.memoryEnabled && styles.memoryIndicatorOn]} />
-              <View style={styles.memorySettingText}>
-                <Text style={styles.memorySettingTitle}>偶尔在空间里想起 {person.name}</Text>
-                <Text style={styles.memorySettingHint}>{person.memoryEnabled ? '已开启 可以随时关闭' : '已关闭 记录仍会完整保留'}</Text>
+            <View style={styles.identityCard}>
+              <View style={styles.identityRow}>
+                <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
+                <View style={styles.identityCopy}>
+                  <Text numberOfLines={2} style={[styles.name, nameTextStyle(preferences.friendNameStyle)]}>{person.name}</Text>
+                  <View style={styles.relationPill}><Text numberOfLines={1} style={styles.relation}>{person.relationToMe ?? '暂时不定义关系'}</Text></View>
+                </View>
               </View>
-            </Pressable>
+              <View style={styles.impressionBlock}>
+                <Text style={styles.impressionLabel}>关于 ta 的印象</Text>
+                <Text style={[styles.impression, !person.impression && styles.impressionEmpty]}>{person.impression ?? '还没有留下印象'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>人物资料</Text></View>
+            <View style={styles.profileCard}>
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>性别</Text>
+                <View style={styles.profileValue}><Text style={person.gender ? styles.profileMetaTitle : styles.profileEmpty}>{formatGender(person.gender)}</Text></View>
+              </View>
+              <View style={styles.profileDivider} />
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>生日</Text>
+                <View style={styles.profileValue}>
+                  {person.birthday ? <><Text style={styles.profileMetaTitle}>{formatBirthday(person.birthday)}</Text><Text style={styles.profileMetaHint}>下一次 {toLocalDayKey(nextBirthday(person.birthday))}</Text></> : <Text style={styles.profileEmpty}>还没有记录生日</Text>}
+                </View>
+              </View>
+              <View style={styles.profileDivider} />
+              <View style={[styles.profileRow, styles.tagRow]}>
+                <Text style={styles.profileLabel}>标签</Text>
+                <View style={styles.profileValue}>
+                  {labels.length ? <View style={styles.tags}>{labels.map((label) => <View key={label} style={styles.tag}><Text style={styles.tagText}>{label}</Text></View>)}</View> : <Text style={styles.profileEmpty}>还没有人物标签</Text>}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>收藏与回忆</Text></View>
+            <View style={styles.featureCard}>
+              <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/albums', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
+                <View style={styles.featureCopy}><Text style={styles.featureTitle}>人物相册</Text><Text style={styles.featureHint}>按文件夹整理只属于 {person.name} 的照片</Text></View>
+                <View style={styles.featureMeta}><Text style={styles.albumCount}>{albums.filter((album) => album.personId === person.id).length} 个</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
+              </Pressable>
+              <View style={styles.featureDivider} />
+              <Pressable accessibilityRole="switch" accessibilityState={{ checked: person.memoryEnabled }} onPress={() => void setPersonMemoryEnabled(person.id, !person.memoryEnabled)} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
+                <View style={styles.featureCopy}>
+                  <Text style={styles.featureTitle}>空间回忆</Text>
+                  <Text style={styles.featureHint}>{person.memoryEnabled ? `会偶尔在空间里想起 ${person.name}` : '已关闭，记录仍会完整保留'}</Text>
+                </View>
+                <View style={[styles.memorySwitch, person.memoryEnabled && styles.memorySwitchOn]}><View style={[styles.memoryThumb, person.memoryEnabled && styles.memoryThumbOn]} /></View>
+              </Pressable>
+            </View>
 
             <View style={styles.sectionLine}><Text style={styles.sectionTitle}>共同留下的日子</Text><Text style={styles.count}>{posts.length} 条</Text></View>
             {posts.length === 0 ? (
@@ -115,36 +154,53 @@ function firstMediaId(markdown: string): string | null {
   return markdown.match(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/)?.[1] ?? null;
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   header: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  avatar: { width: 76, height: 76, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 38, backgroundColor: colors.life },
+  identityCard: { marginTop: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  identityRow: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 38, backgroundColor: colors.life },
   avatarImage: { width: '100%', height: '100%' },
   avatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 31 },
-  name: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 38 },
-  relation: { marginTop: spacing.xs, color: colors.life, fontSize: 11 },
-  impression: { marginTop: spacing.md, color: colors.inkSoft, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
-  profileMeta: { marginTop: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet },
+  identityCopy: { flex: 1, marginLeft: spacing.lg, alignItems: 'flex-start' },
+  name: { color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 38 },
+  relationPill: { maxWidth: '100%', marginTop: spacing.sm, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: colors.lifeLight },
+  relation: { color: colors.life, fontSize: 10 },
+  impressionBlock: { marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  impressionLabel: { color: colors.inkFaint, fontSize: typography.size.meta },
+  impression: { marginTop: spacing.sm, color: colors.inkSoft, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
+  impressionEmpty: { color: colors.inkFaint, fontFamily: typography.body, fontSize: 11 },
+  sectionHeading: { marginTop: spacing.xl, marginBottom: spacing.sm },
+  sectionEyebrow: { color: colors.inkFaint, fontSize: typography.size.meta, letterSpacing: 1.1 },
+  profileCard: { paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  profileRow: { minHeight: 70, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  tagRow: { alignItems: 'flex-start' },
+  profileLabel: { width: 58, paddingTop: 1, color: colors.inkFaint, fontSize: 11 },
+  profileValue: { flex: 1 },
   profileMetaTitle: { color: colors.ink, fontSize: 12 },
   profileMetaHint: { marginTop: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
-  emptyMeta: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 9 },
-  tags: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  profileEmpty: { color: colors.inkFaint, fontSize: 10 },
+  profileDivider: { marginLeft: 58, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   tag: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 15, backgroundColor: colors.lifeLight },
   tagText: { color: colors.life, fontSize: 9 },
-  albumEntry: { minHeight: 76, marginTop: spacing.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
-  albumTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
-  albumHint: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
+  featureCard: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  featureRow: { minHeight: 76, paddingHorizontal: spacing.md, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  featureRowPressed: { opacity: 0.58 },
+  featureCopy: { flex: 1, paddingRight: spacing.md },
+  featureTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15 },
+  featureHint: { marginTop: 5, color: colors.inkFaint, fontSize: 9, lineHeight: 15 },
+  featureMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  featureDivider: { marginLeft: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   albumCount: { color: colors.life, fontSize: 10 },
-  memorySetting: { minHeight: 58, marginTop: spacing.lg, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.sheet },
-  memoryIndicator: { width: 9, height: 9, borderRadius: 5, borderWidth: 1, borderColor: colors.inkFaint },
-  memoryIndicatorOn: { borderColor: colors.life, backgroundColor: colors.life },
-  memorySettingText: { flex: 1, marginLeft: spacing.md },
-  memorySettingTitle: { color: colors.ink, fontSize: 11 },
-  memorySettingHint: { marginTop: 3, color: colors.inkFaint, fontSize: 9 },
+  memorySwitch: { width: 40, height: 24, padding: 3, justifyContent: 'center', borderRadius: 12, backgroundColor: colors.line },
+  memorySwitchOn: { backgroundColor: colors.life },
+  memoryThumb: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.sheet },
+  memoryThumbOn: { alignSelf: 'flex-end' },
   sectionLine: { marginTop: spacing.xxl, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   sectionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
   count: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
@@ -159,4 +215,4 @@ const styles = StyleSheet.create({
   missing: { marginTop: spacing.xxl, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
   deleteButton: { minHeight: 48, marginTop: spacing.xxl, alignItems: 'center', justifyContent: 'center' },
   deleteText: { color: colors.danger, fontSize: typography.size.meta },
-});
+}));
