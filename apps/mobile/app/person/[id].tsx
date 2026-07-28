@@ -158,5 +158,5 @@ const styles = StyleSheet.create({
   body: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 28 },
   missing: { marginTop: spacing.xxl, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
   deleteButton: { minHeight: 48, marginTop: spacing.xxl, alignItems: 'center', justifyContent: 'center' },
-  deleteText: { color: '#9B493F', fontSize: 10 },
+  deleteText: { color: colors.danger, fontSize: typography.size.meta },
 });

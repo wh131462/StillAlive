@@ -50,7 +50,7 @@ export default function PostDetailScreen() {
               <SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" />
             </Pressable>
             <Pressable accessibilityLabel="删除日记" accessibilityRole="button" onPress={confirmDelete} style={styles.headerButton}>
-              <SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor="#9B493F" type="hierarchical" />
+              <SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" />
             </Pressable>
           </View>
         ) : null}

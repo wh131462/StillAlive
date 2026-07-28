@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   reminderStatus: { color: colors.inkFaint, fontSize: 10 },
   reminderAction: { marginTop: spacing.sm, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
   reminderActionText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
-  reminderError: { marginTop: spacing.sm, color: '#9B493F', fontSize: 9, lineHeight: 16 },
+  reminderError: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 16 },
   reminderReady: { marginTop: spacing.sm, paddingHorizontal: spacing.md, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
   reminderReadyText: { color: colors.inkSoft, fontSize: 10 },
   reminderReadyAction: { color: colors.life, fontSize: 10, fontWeight: '700' },
