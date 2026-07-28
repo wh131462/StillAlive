@@ -7,7 +7,20 @@ MOBILE_DIR="$ROOT_DIR/apps/mobile"
 SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 NDK_VERSION="${ANDROID_NDK_VERSION:-27.1.12297006}"
 
-if [[ -n "$SDK_DIR" && ! -f "$SDK_DIR/ndk/$NDK_VERSION/source.properties" ]]; then
+if [[ -z "$SDK_DIR" && -d "$HOME/Library/Android/sdk" ]]; then
+  SDK_DIR="$HOME/Library/Android/sdk"
+fi
+
+if [[ -z "$SDK_DIR" || ! -d "$SDK_DIR" ]]; then
+  printf 'Error: 当前未找到可用的 Android SDK。\n' >&2
+  printf '请设置 ANDROID_HOME，或通过 Android Studio 安装 Android SDK。\n' >&2
+  exit 1
+fi
+
+export ANDROID_HOME="$SDK_DIR"
+export ANDROID_SDK_ROOT="$SDK_DIR"
+
+if [[ ! -f "$SDK_DIR/ndk/$NDK_VERSION/source.properties" ]]; then
   for NDK_SOURCE in "$SDK_DIR"/ndk/27.*/source.properties; do
     if [[ -f "$NDK_SOURCE" ]]; then
       NDK_VERSION="$(basename "$(dirname "$NDK_SOURCE")")"
