@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import { File } from 'expo-file-system';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
@@ -134,7 +135,7 @@ export default function EditorScreen() {
 
   const editorMedia = useMemo<EditorMediaSource[]>(() => {
     const ids = new Set(extractEmbeddedMediaIds(body));
-    return media.filter((item) => ids.has(item.id)).map((item) => ({ id: item.id, uri: item.localPath }));
+    return media.filter((item) => ids.has(item.id)).map((item) => ({ id: item.id, mimeType: item.mimeType, uri: item.localPath }));
   }, [body, media]);
 
   const handleBodyChange = (markdown: string) => {
@@ -211,7 +212,7 @@ export default function EditorScreen() {
       await saveMedia(item);
       const durationMs = Math.max(recorderState.durationMillis, Math.round(audioRecorder.currentTime * 1000));
       createdAudioRef.current = [...createdAudioRef.current, item];
-      sendCommand('audio', { durationMs, id: item.id, uri: item.localPath });
+      sendCommand('audio', { durationMs, id: item.id, uri: await mediaDataUrl(item) });
       setDraftStatus('语音已保存到本机');
     } catch (cause: unknown) {
       if (importedAudio) await discardMedia(importedAudio);
@@ -288,7 +289,8 @@ export default function EditorScreen() {
         importedItems.push(item);
         await saveMedia(item);
       }
-      sendCommand('images', importedItems.map((item) => ({ id: item.id, uri: item.localPath, alt: '照片' })));
+      const editorImages = await Promise.all(importedItems.map(async (item) => ({ id: item.id, uri: await mediaDataUrl(item), alt: '照片' })));
+      sendCommand('images', editorImages);
       setDraftStatus('图片已保存到本机');
     } catch (cause: unknown) {
       for (const item of importedItems) await discardMedia(item);
@@ -330,9 +332,11 @@ export default function EditorScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
-          <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}>
-            <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
-          </Pressable>
+          <View style={styles.headerSide}>
+            <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}>
+              <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
+            </Pressable>
+          </View>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>{postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}</Text>
             <Text style={styles.statusText}>{headerSubtitle}</Text>
@@ -355,6 +359,7 @@ export default function EditorScreen() {
             onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
             onStopRecording={() => void stopRecording()}
             placeholder={`${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
+            readLocalFile={readLocalFile}
             recordingDurationMs={recorderState.isRecording ? recorderState.durationMillis : null}
             theme={editorTheme()}
           />
@@ -442,6 +447,14 @@ export default function EditorScreen() {
   );
 }
 
+async function readLocalFile(uri: string): Promise<string> {
+  return new File(uri).base64();
+}
+
+async function mediaDataUrl(item: Media): Promise<string> {
+  return `data:${item.mimeType || 'application/octet-stream'};base64,${await readLocalFile(item.localPath)}`;
+}
+
 function ToolButton({ active = false, androidIcon, icon, iconSize = 21, label, onPress }: { active?: boolean; androidIcon: AndroidSymbol; icon: SFSymbol; iconSize?: number; label: string; onPress(): void }) {
   return (
     <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.toolButton, active && styles.toolButtonActive, pressed && styles.toolButtonPressed]}>
@@ -482,7 +495,8 @@ const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.sheet },
   header: { minHeight: 62, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 54, minHeight: 48, justifyContent: 'center' },
+  headerSide: { width: 68 },
+  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   statusText: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },

@@ -17,9 +17,6 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@eternalheart/react-file-preview':
-        specifier: 1.6.1
-        version: 1.6.1(@types/react@19.2.17)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@expo/dom-webview':
         specifier: ^57.0.1
         version: 57.0.1(expo@57.0.7)(react-native@0.86.0(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
@@ -580,12 +577,6 @@ packages:
 
   '@dxfom/mtext@0.3.2':
     resolution: {integrity: sha512-QL2XYBiAidjKYe0W04Icz051P9V0EBh6H7R0rcrvcUEPGr7PzLBYRt+f9X4WOnBGuoGlTKJ/7NKPRYUCCSkVYg==}
-
-  '@eternalheart/react-file-preview@1.6.1':
-    resolution: {integrity: sha512-Ztbe6Apj0koRjPN1qN7meT+KJPr4Wig2mo6LanyFnh2lYbp/hi0QQes88iP+q9ZapnSGs39YOU/a7XZT6vNT2Q==}
-    peerDependencies:
-      react: ^18.0.0
-      react-dom: ^18.0.0
 
   '@expo-google-fonts/material-symbols@0.4.41':
     resolution: {integrity: sha512-BKNSJ6oFGWi+aXu6PF+1EdI43J8Ag+Sm7Ste1SXYmC2eYOJasyjXHkKjgkIieBB1eDZQJSPWuPv421Vg6N5tCQ==}
@@ -4665,46 +4656,6 @@ snapshots:
   '@cornerstonejs/codec-openjpeg@1.3.0': {}
 
   '@dxfom/mtext@0.3.2': {}
-
-  '@eternalheart/react-file-preview@1.6.1(@types/react@19.2.17)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
-    dependencies:
-      '@cornerstonejs/codec-openjpeg': 1.3.0
-      '@jsquash/avif': 2.1.1
-      '@kenjiuno/msgreader': 1.28.0
-      '@likecoin/epub-ts': 0.6.9
-      ag-psd: 30.2.0
-      docx-preview: 0.3.7
-      exceljs: 4.4.0
-      foliate-js: 1.0.1
-      framer-motion: 11.18.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      heic2any: 0.0.4
-      jpeg2000: 1.1.1
-      jsonc-parser: 3.3.1
-      jszip: 3.10.1
-      katex: 0.16.47
-      lucide-react: 0.460.0(react@19.2.3)
-      mammoth: 1.12.0
-      opentype.js: 2.0.0
-      pdfjs-dist: 6.1.200
-      pptx-preview: 1.0.7
-      react: 19.2.3
-      react-dom: 19.2.3(react@19.2.3)
-      react-markdown: 10.1.0(@types/react@19.2.17)(react@19.2.3)
-      rehype-katex: 7.0.1
-      rehype-raw: 7.0.0
-      remark-gfm: 4.0.1
-      remark-math: 6.0.0
-      shiki: 1.29.2
-      three: 0.170.0
-      three-dxf-loader: 5.2.0(three@0.170.0)
-      utif: 3.1.0
-      video.js: 8.23.9
-      x-data-spreadsheet: 1.1.9
-    transitivePeerDependencies:
-      - '@emotion/is-prop-valid'
-      - '@types/react'
-      - linkedom
-      - supports-color
 
   '@expo-google-fonts/material-symbols@0.4.41': {}
 

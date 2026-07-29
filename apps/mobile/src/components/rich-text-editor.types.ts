@@ -46,6 +46,7 @@ export interface EditorCommand {
 
 export interface EditorMediaSource {
   id: string;
+  mimeType?: string;
   uri: string;
 }
 

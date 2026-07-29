@@ -11,7 +11,6 @@
     "clean": "rm -rf .expo dist"
   },
   "dependencies": {
-    "@eternalheart/react-file-preview": "1.6.1",
     "@expo/dom-webview": "^57.0.1",
     "@noble/hashes": "1.8.0",
     "@react-native-masked-view/masked-view": "0.3.2",

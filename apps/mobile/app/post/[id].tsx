@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
@@ -17,6 +17,11 @@ export default function PostDetailScreen() {
   const { deletePost, media, posts, ready } = useAppState();
   const post = useMemo(() => posts.find((item) => item.id === id), [id, posts]);
   const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
+  const [readyPostId, setReadyPostId] = useState<string | null>(null);
+  const contentReady = Boolean(post && readyPostId === post.id);
+  const handleContentReady = useCallback(() => {
+    if (post) setReadyPostId(post.id);
+  }, [post]);
 
   const confirmDelete = () => {
     if (!post) return;
@@ -54,14 +59,18 @@ export default function PostDetailScreen() {
       {!ready ? (
         <DetailLoading />
       ) : post ? (
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <PostBody
-            markdown={post.bodyMarkdown}
-            mediaById={mediaById}
-            onImagePress={(item) => router.push({ pathname: '/file-preview', params: previewRouteParams(extractMediaItems(post.bodyMarkdown, mediaById).map(toSelectedPreviewFile), extractMediaItems(post.bodyMarkdown, mediaById).findIndex((candidate) => candidate.id === item.id)) })}
-          />
-          <Text style={styles.detailTime}>记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
-        </ScrollView>
+        <View style={styles.detailContainer}>
+          <ScrollView contentContainerStyle={styles.content} pointerEvents={contentReady ? 'auto' : 'none'} showsVerticalScrollIndicator={false} style={!contentReady && styles.contentHidden}>
+            <PostBody
+              markdown={post.bodyMarkdown}
+              mediaById={mediaById}
+              onImagePress={(item) => router.push({ pathname: '/file-preview', params: previewRouteParams(extractMediaItems(post.bodyMarkdown, mediaById).map(toSelectedPreviewFile), extractMediaItems(post.bodyMarkdown, mediaById).findIndex((candidate) => candidate.id === item.id)) })}
+              onReady={handleContentReady}
+            />
+            <Text style={styles.detailTime}>记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
+          </ScrollView>
+          {!contentReady ? <View pointerEvents="none" style={styles.loadingOverlay}><DetailLoading /></View> : null}
+        </View>
       ) : (
         <Text style={styles.missing}>这篇日记不存在或已被删除。</Text>
       )}
@@ -82,7 +91,7 @@ function DetailLoading() {
   }, [opacity]);
 
   return (
-    <ScrollView accessibilityLabel="正在加载日记详情" accessibilityLiveRegion="polite" contentContainerStyle={styles.loadingContent} scrollEnabled={false}>
+    <ScrollView accessibilityLabel="正在加载日记详情" accessibilityLiveRegion="polite" contentContainerStyle={styles.loadingContent} scrollEnabled={false} style={styles.loadingScroll}>
       <Animated.View style={{ opacity }}>
         <View style={[styles.skeleton, styles.skeletonLineLong]} />
         <View style={[styles.skeleton, styles.skeletonLineFull]} />
@@ -90,21 +99,35 @@ function DetailLoading() {
         <View style={[styles.skeleton, styles.skeletonLineShort]} />
         <View style={[styles.skeleton, styles.skeletonTime]} />
       </Animated.View>
-      <Text style={styles.loadingText}>正在打开这段记忆…</Text>
     </ScrollView>
   );
 }
 
-function PostBody({ markdown, mediaById, onImagePress }: { markdown: string; mediaById: Map<string, Media>; onImagePress(item: Media): void }) {
-  return splitPostBody(markdown).map((segment, index) => {
+function PostBody({ markdown, mediaById, onImagePress, onReady }: { markdown: string; mediaById: Map<string, Media>; onImagePress(item: Media): void; onReady(): void }) {
+  const segments = splitPostBody(markdown);
+  const markdownSegmentCount = segments.filter((segment) => segment.type === 'markdown' && segment.value.trim()).length;
+  const readinessRef = useRef({ markdown, readyIndexes: new Set<number>() });
+  if (readinessRef.current.markdown !== markdown) readinessRef.current = { markdown, readyIndexes: new Set<number>() };
+
+  useEffect(() => {
+    if (markdownSegmentCount === 0) onReady();
+  }, [markdownSegmentCount, onReady]);
+
+  const markMarkdownReady = (index: number) => {
+    readinessRef.current.readyIndexes.add(index);
+    if (readinessRef.current.readyIndexes.size === markdownSegmentCount) onReady();
+  };
+
+  return segments.map((segment, index) => {
     if (segment.type === 'markdown') {
       if (!segment.value.trim()) return null;
       return (
         <MarkdownView
           key={`markdown_${index}`}
-          dom={{ matchContents: true, scrollEnabled: false, style: styles.markdownView }}
+          dom={{ containerStyle: styles.markdownView, matchContents: true, scrollEnabled: false, style: styles.markdownView }}
           markdown={segment.value.trim()}
           media={[]}
+          onReady={() => markMarkdownReady(index)}
           theme={editorTheme()}
         />
       );
@@ -126,18 +149,18 @@ function PostBody({ markdown, mediaById, onImagePress }: { markdown: string; med
 function PostImage({ alt, item, onPress }: { alt: string; item: Media; onPress(): void }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const aspectRatio = item.width && item.height ? Math.min(1.8, Math.max(0.8, item.width / item.height)) : 4 / 3;
+  const aspectRatio = item.width && item.height ? item.width / item.height : 4 / 3;
 
   if (failed) {
     return <ImageFallback aspectRatio={aspectRatio} onRetry={() => { setAttempt((value) => value + 1); setFailed(false); }} />;
   }
 
-  return <Pressable accessibilityLabel={alt || '预览日记图片'} accessibilityRole="button" onPress={onPress}>
+  return <Pressable accessibilityLabel={alt || '预览日记图片'} accessibilityRole="button" onPress={onPress} style={styles.postImagePressable}>
     <Image
       key={attempt}
       accessibilityLabel={alt || '日记图片'}
       onError={() => setFailed(true)}
-      resizeMode="cover"
+      resizeMode="contain"
       source={{ uri: item.localPath }}
       style={[styles.postImage, { aspectRatio }]}
     />
@@ -197,19 +220,24 @@ function formatTime(iso: string): string {
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.sheet },
-  header: { minHeight: 54, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   actions: { flexDirection: 'row' },
+  detailContainer: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  contentHidden: { opacity: 0 },
   detailTime: { marginTop: spacing.lg, color: colors.inkFaint, fontSize: 9, textAlign: 'right' },
-  markdownView: { width: '100%', backgroundColor: 'transparent' },
+  markdownView: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
   audioSection: { marginTop: spacing.md },
   audioMissing: { minHeight: 64, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.paper },
   audioMissingText: { color: colors.inkFaint, fontSize: 10 },
+  postImagePressable: { width: '100%' },
   postImage: { width: '100%', marginBottom: spacing.lg, borderRadius: 4, backgroundColor: colors.lifeLight },
   imageFallback: { width: '100%', marginBottom: spacing.lg, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 4, backgroundColor: colors.paper },
   imageFallbackTitle: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 11 },
   imageFallbackHint: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
+  loadingOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.sheet },
+  loadingScroll: { flex: 1 },
   loadingContent: { flexGrow: 1, padding: spacing.lg, paddingBottom: spacing.xxl },
   skeleton: { borderRadius: 5, backgroundColor: colors.lifeLight },
   skeletonLineLong: { width: '86%', height: 18, marginTop: spacing.md },
@@ -217,6 +245,5 @@ const styles = createThemedStyles(() => ({
   skeletonLineMedium: { width: '74%', height: 18, marginTop: spacing.md },
   skeletonLineShort: { width: '48%', height: 18, marginTop: spacing.md },
   skeletonTime: { width: 126, height: 8, marginTop: spacing.lg, marginLeft: 'auto' },
-  loadingText: { marginTop: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 12 },
   missing: { margin: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
 }));

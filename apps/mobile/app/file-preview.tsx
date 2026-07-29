@@ -1,43 +1,49 @@
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { File } from 'expo-file-system';
+import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet } from 'react-native';
+import { FlatList, Image, type NativeScrollEvent, type NativeSyntheticEvent, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import FilePreview from '../src/components/file-preview.dom';
 import type { SelectedPreviewFile } from '../src/components/file-preview.types';
 
 export default function FilePreviewScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { files: filesParam, index: indexParam } = useLocalSearchParams<{ files?: string; index?: string }>();
   const initialFiles = parsePreviewFiles(filesParam);
   const [currentIndex, setCurrentIndex] = useState(() => clampIndex(Number(indexParam), initialFiles.length));
 
+  const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setCurrentIndex(clampIndex(Math.round(event.nativeEvent.contentOffset.x / width), initialFiles.length));
+  };
+
   return (
-    <>
+    <View style={styles.screen}>
       <StatusBar style="light" />
-      <SafeAreaView edges={['top']} style={styles.screen}>
-        <FilePreview
-          currentIndex={currentIndex}
-          dom={{
-            allowFileAccess: true,
-            automaticallyAdjustContentInsets: false,
-            contentInsetAdjustmentBehavior: 'never',
-            scrollEnabled: false,
-            style: styles.preview,
-          }}
-          files={initialFiles}
-          onClose={() => router.back()}
-          onNavigate={setCurrentIndex}
-          readLocalFile={readLocalFile}
+      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+        <View style={styles.header}>
+          <Pressable accessibilityLabel="关闭图片预览" accessibilityRole="button" hitSlop={8} onPress={() => router.back()} style={({ pressed }) => [styles.closeButton, pressed && styles.controlPressed]}>
+            <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={21} tintColor="#FFFFFF" type="hierarchical" />
+          </Pressable>
+          {initialFiles.length ? <Text accessibilityLiveRegion="polite" style={styles.counter}>{currentIndex + 1} / {initialFiles.length}</Text> : null}
+          <View style={styles.headerSpacer} />
+        </View>
+        <FlatList
+          data={initialFiles}
+          getItemLayout={(_data, index) => ({ index, length: width, offset: width * index })}
+          horizontal
+          initialScrollIndex={currentIndex}
+          keyExtractor={(item, index) => `${item.url}_${index}`}
+          ListEmptyComponent={<View style={[styles.empty, { width }]}><Text style={styles.emptyText}>图片不可用</Text></View>}
+          onMomentumScrollEnd={handleScrollEnd}
+          pagingEnabled
+          renderItem={({ item, index }) => <View style={[styles.page, { width }]}><Image accessibilityLabel={`第 ${index + 1} 张图片`} resizeMode="contain" source={{ uri: item.url }} style={styles.image} /></View>}
+          showsHorizontalScrollIndicator={false}
+          style={styles.preview}
         />
       </SafeAreaView>
-    </>
+    </View>
   );
-}
-
-async function readLocalFile(uri: string): Promise<string> {
-  return new File(uri).base64();
 }
 
 function parsePreviewFiles(value: string | string[] | undefined): SelectedPreviewFile[] {
@@ -64,5 +70,15 @@ function clampIndex(value: number, length: number): number {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#000' },
-  preview: { flex: 1, backgroundColor: '#000' },
+  safeArea: { flex: 1 },
+  header: { height: 52, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.1)' },
+  controlPressed: { opacity: 0.62 },
+  counter: { color: 'rgba(255, 255, 255, 0.82)', fontSize: 12, fontVariant: ['tabular-nums'], fontWeight: '600', letterSpacing: 0.6 },
+  headerSpacer: { width: 44 },
+  preview: { flex: 1 },
+  page: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  image: { width: '100%', height: '100%' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { color: 'rgba(255, 255, 255, 0.64)', fontSize: 14 },
 });

@@ -9,12 +9,13 @@ import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
+import MarkdownView from '../../src/components/markdown-view.dom';
 import { StyledName } from '../../src/components/styled-name';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
 import { nextBirthday } from '../../src/domain/person-profile';
-import { createThemedStyles } from '../../src/theme/app-theme';
+import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 type TimelineItem =
   | { kind: 'check-in'; checkIn: CheckIn }
@@ -31,6 +32,7 @@ interface BirthdayPrompt {
 }
 
 const AUDIO_WAVE_HEIGHTS = [7, 13, 19, 11, 23, 15, 9, 20, 12, 17, 8, 14];
+const POST_PREVIEW_MAX_HEIGHT = 211;
 
 export default function SpaceScreen() {
   const router = useRouter();
@@ -263,7 +265,7 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
 function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, onPress, post, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; signature: string }) {
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
-  const excerpt = markdownToPlainText(post.bodyMarkdown);
+  const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
 
   return (
@@ -274,7 +276,7 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
           <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
           {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
-        {excerpt ? <Text numberOfLines={6} style={styles.postText}>{excerpt}</Text> : null}
+        {displayMarkdown ? <View pointerEvents="none" style={styles.postMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }} markdown={displayMarkdown} maxHeight={POST_PREVIEW_MAX_HEIGHT} media={[]} theme={editorTheme()} /></View> : null}
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
         {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
         <View style={styles.postFooter}>
@@ -304,7 +306,7 @@ function PostImageGrid({ images, onPressImage, totalCount }: { images: Media[]; 
   if (images.length === 1) {
     return (
       <Pressable accessibilityLabel="预览记录图片" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPressImage(0); }}>
-        <Image accessibilityLabel="记录图片" resizeMode="contain" source={{ uri: images[0].localPath }} style={[styles.postSingleImage, { aspectRatio: previewAspectRatio(images[0]) }]} />
+        <Image accessibilityLabel="记录图片" resizeMode="cover" source={{ uri: images[0].localPath }} style={[styles.postSingleImage, { aspectRatio: previewAspectRatio(images[0]) }]} />
       </Pressable>
     );
   }
@@ -313,7 +315,7 @@ function PostImageGrid({ images, onPressImage, totalCount }: { images: Media[]; 
     <View style={styles.postImageGrid}>
       {visibleImages.map((image, index) => (
         <Pressable accessibilityLabel={`预览记录图片 ${index + 1}`} accessibilityRole="button" key={`${image.id}_${index}`} onPress={(event) => { event.stopPropagation(); onPressImage(index); }} style={styles.postImageCell}>
-          <Image accessibilityLabel={`记录图片 ${index + 1}`} resizeMode="contain" source={{ uri: image.localPath }} style={styles.postImage} />
+          <Image accessibilityLabel={`记录图片 ${index + 1}`} resizeMode="cover" source={{ uri: image.localPath }} style={styles.postImage} />
           {index === visibleImages.length - 1 && totalCount > visibleImages.length ? <View style={styles.postImageMore}><Text style={styles.postImageMoreText}>+{totalCount - visibleImages.length}</Text></View> : null}
         </Pressable>
       ))}
@@ -432,6 +434,10 @@ function markdownToPlainText(markdown: string): string {
     .trim();
 }
 
+function withoutEmbeddedAttachments(markdown: string): string {
+  return markdown.replace(/!\[[^\]]*\]\((?:media|audio):\/\/[^)]+\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function extractMediaIds(markdown: string): string[] {
   return [...new Set([...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].map((match) => match[1]))];
 }
@@ -535,7 +541,8 @@ const styles = createThemedStyles(() => ({
   postHeader: { minHeight: 24, alignItems: 'flex-start', justifyContent: 'center' },
   postAuthor: { color: colors.life, fontFamily: typography.body, fontSize: 14, fontWeight: '700' },
   postSignature: { maxWidth: '100%', marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
-  postText: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.body, fontSize: 15, lineHeight: 24 },
+  postMarkdownFrame: { width: '100%', marginTop: spacing.sm },
+  postMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
   postSingleImage: { width: '92%', marginTop: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   postImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   postImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.lifeLight },
