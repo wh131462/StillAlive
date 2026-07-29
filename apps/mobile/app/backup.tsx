@@ -14,7 +14,7 @@ import type { MaterializedBackup, ParsedBackup } from '../src/data/local-backup'
 
 export default function BackupScreen() {
   const router = useRouter();
-  const { createBackupSnapshot, media, people, posts, preferences, recordBackupExport, restoreBackupSnapshot } = useAppState();
+  const { createBackupSnapshot, deleteAllLocalData, media, people, posts, preferences, recordBackupExport, restoreBackupSnapshot } = useAppState();
   const [busy, setBusy] = useState<'export' | 'restore' | null>(null);
   const [selectedBackup, setSelectedBackup] = useState<ParsedBackup | null>(null);
   const [backupMasterPassword, setBackupMasterPassword] = useState('');
@@ -92,9 +92,19 @@ export default function BackupScreen() {
     finally { setBusy(null); }
   };
 
+  const confirmDeleteAll = () => {
+    Alert.alert('删除这台设备上的全部内容？', '日记、草稿、人物、图片、密码本和设置都会被真实删除。之前导出的备份文件不会被删除。', [
+      { text: '取消', style: 'cancel' },
+      { text: '继续', onPress: () => Alert.alert('最后确认', '这个操作无法撤销。确定清空“仍在”的全部本地数据吗？', [
+        { text: '保留数据', style: 'cancel' },
+        { text: '全部删除', style: 'destructive', onPress: () => void deleteAllLocalData().then(() => router.replace('/'), (cause: unknown) => Alert.alert('删除失败', errorMessage(cause))) },
+      ]) },
+    ]);
+  };
+
   const disabled = busy !== null;
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>备份与恢复</Text><View style={styles.headerButton} /></View>
+    <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>数据管理</Text><View style={styles.headerButton} /></View>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.summary}><View style={styles.summaryIcon}><SymbolView name={{ android: 'inventory_2', ios: 'archivebox', web: 'inventory_2' }} size={25} tintColor={colors.life} type="hierarchical" /></View><View style={styles.summaryCopy}><Text style={styles.summaryTitle}>当前本地数据</Text><Text style={styles.summaryMeta}>{posts.length} 篇日记 · {people.length} 个人物 · {media.length} 个媒体文件</Text><Text style={styles.summaryMeta}>预计 {formatBytes(estimatedBytes)}</Text></View></View>
 
@@ -115,6 +125,11 @@ export default function BackupScreen() {
         </View> : <Text style={styles.noVaultText}>这个历史备份不包含密码本；恢复日记不会删除当前密码本。</Text>}
       </View> : null}
       <View style={styles.notice}><SymbolView name={{ android: 'lock_outline', ios: 'lock', web: 'lock_outline' }} size={17} tintColor={colors.inkFaint} type="hierarchical" /><Text style={styles.noticeText}>备份只会在你主动导出时离开应用私有目录。</Text></View>
+
+      <View style={styles.rule} />
+      <Text style={styles.dangerEyebrow}>DANGER ZONE</Text>
+      <Text style={styles.sectionTitle}>危险操作</Text>
+      <Pressable accessibilityRole="button" disabled={disabled} onPress={confirmDeleteAll} style={({ pressed }) => [styles.deleteButton, disabled && styles.disabled, pressed && styles.pressed]}><Text style={styles.deleteTitle}>删除全部本地数据</Text><Text style={styles.deleteHint}>不可撤销；建议先导出备份</Text></Pressable>
     </ScrollView>
   </SafeAreaView>;
 }
@@ -124,8 +139,9 @@ function formatDateTime(iso: string) { const date = new Date(iso); if (Number.is
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
 
 const styles = createThemedStyles(() => ({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   summary: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet }, summaryIcon: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 26, backgroundColor: colors.lifeLight }, summaryCopy: { flex: 1, marginLeft: spacing.md }, summaryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 }, summaryMeta: { marginTop: 5, color: colors.inkFaint, fontSize: 9 },
   eyebrow: { marginTop: spacing.xl, color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 }, sectionTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 }, sectionText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 10, lineHeight: 19 }, primaryButton: { minHeight: 52, marginTop: spacing.lg, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life }, primaryText: { color: colors.onLife, fontSize: 11, fontWeight: '700' }, lastExport: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 8, textAlign: 'center' }, rule: { height: StyleSheet.hairlineWidth, marginTop: spacing.xl, backgroundColor: colors.line }, secondaryButton: { minHeight: 52, marginTop: spacing.lg, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.life, borderRadius: radius.md }, secondaryText: { color: colors.life, fontSize: 11, fontWeight: '700' }, notice: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, noticeText: { marginLeft: spacing.sm, color: colors.inkFaint, fontSize: 9 }, disabled: { opacity: 0.4 }, pressed: { opacity: 0.72 },
+  dangerEyebrow: { marginTop: spacing.xl, color: colors.danger, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 }, deleteButton: { minHeight: 72, marginTop: spacing.lg, paddingHorizontal: spacing.md, justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md }, deleteTitle: { color: colors.danger, fontSize: typography.size.caption, fontWeight: '800' }, deleteHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
   selectedBackup: { marginTop: spacing.lg, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet }, selectedEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 }, selectedTitle: { marginTop: spacing.xs, color: colors.ink, fontFamily: typography.display, fontSize: 19 }, selectedMeta: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta }, restoreDataButton: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight }, restoreDataText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' }, vaultRestore: { marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }, vaultRestoreHeading: { flexDirection: 'row', alignItems: 'center' }, vaultRestoreIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.sunLight }, vaultRestoreCopy: { flex: 1, marginLeft: spacing.md }, vaultRestoreTitle: { color: colors.ink, fontSize: typography.size.caption, fontWeight: '800' }, vaultRestoreHint: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 }, inputLabel: { marginTop: spacing.md, marginBottom: 6, color: colors.inkSoft, fontSize: typography.size.meta, fontWeight: '700' }, input: { minHeight: 48, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, backgroundColor: colors.paper }, restoreVaultButton: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeDeep }, restoreVaultText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' }, noVaultText: { marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 16 },
 }));

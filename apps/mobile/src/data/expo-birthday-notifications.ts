@@ -6,6 +6,7 @@ import type { MemoryNotificationAdapter, PlannedMemoryNotification } from '../do
 
 const BIRTHDAY_CHANNEL_ID = 'birthday-reminders';
 const MEMORY_CHANNEL_ID = 'memory-reminders';
+const DEBUG_CHANNEL_ID = 'debug-notifications';
 let notificationsModule: typeof ExpoNotifications | null | undefined;
 
 export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
@@ -79,6 +80,29 @@ export async function initializeMemoryNotificationChannel(): Promise<void> {
   await ensureMemoryChannel(loadNotifications());
 }
 
+export async function scheduleDebugNotification(): Promise<string> {
+  const notifications = requireNotifications();
+  await ensureDebugChannel(notifications);
+  let permission = permissionStatus(await notifications.getPermissionsAsync(), notifications);
+  if (permission === 'undetermined') {
+    permission = permissionStatus(await notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: false, allowSound: true } }), notifications);
+  }
+  if (permission !== 'granted') throw new Error('系统通知权限未开启');
+  return notifications.scheduleNotificationAsync({
+    content: {
+      title: '通知测试成功',
+      body: '这是一条来自“仍在”调试界面的本地通知。',
+      data: { type: 'debug' },
+      sound: 'default',
+    },
+    trigger: {
+      type: notifications.SchedulableTriggerInputTypes.DATE,
+      date: new Date(Date.now() + 1000),
+      channelId: DEBUG_CHANNEL_ID,
+    },
+  });
+}
+
 export function getLastBirthdayNotificationResponse(): ExpoNotifications.NotificationResponse | null {
   try {
     return loadNotifications()?.getLastNotificationResponse() ?? null;
@@ -118,6 +142,17 @@ async function ensureMemoryChannel(notifications: typeof ExpoNotifications | nul
     description: '偶尔推荐以前留下的本地记录',
     importance: notifications.AndroidImportance.DEFAULT,
     sound: 'default',
+  });
+}
+
+async function ensureDebugChannel(notifications: typeof ExpoNotifications | null): Promise<void> {
+  if (Platform.OS !== 'android' || !notifications) return;
+  await notifications.setNotificationChannelAsync(DEBUG_CHANNEL_ID, {
+    name: '通知调试',
+    description: '仅用于验证本机通知是否正常工作',
+    importance: notifications.AndroidImportance.HIGH,
+    sound: 'default',
+    vibrationPattern: [0, 200, 120, 200],
   });
 }
 
