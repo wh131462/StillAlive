@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { colors, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
@@ -19,6 +19,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.inkFaint,
         tabBarLabelStyle: { fontFamily: typography.body, fontSize: 11 },
         tabBarStyle: { backgroundColor: colors.sheet, borderTopColor: colors.line },
+        tabBarButton: Platform.OS === 'android' ? ({ ref: _ref, ...props }) => <Pressable {...props} android_ripple={null} /> : undefined,
       }}
     >
       <Tabs.Screen name="index" options={{ title: '空间', tabBarIcon: ({ color }) => <TabIcon color={color} name="space" /> }} />
