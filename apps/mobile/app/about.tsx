@@ -2,12 +2,53 @@ import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../src/theme/app-theme';
+import { checkForAndroidUpdate, downloadAndInstallAndroidUpdate, getCurrentAndroidVersion } from '../src/update/android-update';
 
 export default function AboutScreen() {
   const router = useRouter();
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'downloading'>('idle');
+  const currentVersion = getCurrentAndroidVersion();
+
+  const checkUpdate = async () => {
+    setUpdateState('checking');
+    try {
+      const result = await checkForAndroidUpdate();
+      if (result.status === 'not-configured') {
+        Alert.alert('暂未配置更新服务器', '请先填写 Android 更新清单地址。');
+      } else if (result.status === 'unsupported') {
+        Alert.alert('当前平台不支持', 'APK 自动更新仅支持 Android 安装包。');
+      } else if (result.status === 'current') {
+        Alert.alert('已是最新版本', `当前版本 ${currentVersion.versionName}`);
+      } else {
+        const { manifest } = result;
+        Alert.alert(`发现新版本 ${manifest.versionName}`, manifest.releaseNotes || '新版本已经可以下载。', [
+          { text: '取消', style: 'cancel' },
+          { text: '下载更新', onPress: () => void installUpdate(manifest) },
+        ]);
+      }
+    } catch (cause) {
+      Alert.alert('检查更新失败', errorMessage(cause));
+    } finally {
+      setUpdateState('idle');
+    }
+  };
+
+  const installUpdate = async (manifest: Parameters<typeof downloadAndInstallAndroidUpdate>[0]) => {
+    setUpdateState('downloading');
+    try {
+      const result = await downloadAndInstallAndroidUpdate(manifest);
+      if (result === 'permission-required') Alert.alert('需要安装权限', '请允许“仍在”安装未知应用，返回后再次检查更新。');
+    } catch (cause) {
+      Alert.alert('更新失败', errorMessage(cause));
+    } finally {
+      setUpdateState('idle');
+    }
+  };
+
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}>
       <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
@@ -20,7 +61,7 @@ export default function AboutScreen() {
           <Image accessibilityLabel="仍在 Logo" source={require('../assets/icon.png')} style={styles.logo} />
         </Pressable>
         <Text style={styles.name}>仍在 Still Alive</Text>
-        <Text style={styles.version}>VERSION 0.1.0</Text>
+        <Text style={styles.version}>VERSION {currentVersion.versionName} ({currentVersion.versionCode})</Text>
         <Text style={styles.tagline}>把日子留下来，也把自己留在时间里。</Text>
       </View>
 
@@ -30,9 +71,18 @@ export default function AboutScreen() {
         <Text style={styles.aboutText}>“仍在”是一款面向个人的生活记录应用。你可以用打卡、日记、人物和相册，留下值得记住的日子。</Text>
       </View>
       <View style={styles.links}>
+        <Pressable accessibilityRole="button" disabled={updateState !== 'idle'} onPress={() => void checkUpdate()} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
+          <View style={styles.linkIcon}><SymbolView name={{ android: 'system_update', ios: 'arrow.down.circle', web: 'system_update' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
+          <View style={styles.linkCopy}>
+            <Text style={styles.linkText}>{updateState === 'checking' ? '正在检查更新…' : updateState === 'downloading' ? '正在下载更新…' : '检查更新'}</Text>
+            <Text style={styles.linkHint}>{Platform.OS === 'android' ? '启动时也会自动检查' : '仅 Android APK 支持'}</Text>
+          </View>
+          <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
+        </Pressable>
+        <View style={styles.separator} />
         <Pressable accessibilityRole="button" onPress={() => router.push('/privacy-policy' as RelativePathString)} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
           <View style={styles.linkIcon}><SymbolView name={{ android: 'shield', ios: 'checkmark.shield', web: 'shield' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
-          <Text style={styles.linkText}>隐私协议</Text>
+          <View style={styles.linkCopy}><Text style={styles.linkText}>隐私协议</Text></View>
           <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
         </Pressable>
       </View>
@@ -59,6 +109,13 @@ const styles = createThemedStyles(() => ({
   links: { marginTop: spacing.md, overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet },
   link: { minHeight: 64, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
   linkIcon: { width: 36, height: 36, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.lifeLight },
-  linkText: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: '600' },
+  linkCopy: { flex: 1 },
+  linkText: { color: colors.ink, fontSize: 13, fontWeight: '600' },
+  linkHint: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 64, backgroundColor: colors.line },
   pressed: { opacity: 0.76, transform: [{ scale: 0.97 }] },
 }));
+
+function errorMessage(cause: unknown) {
+  return cause instanceof Error ? cause.message : '请稍后重试。';
+}

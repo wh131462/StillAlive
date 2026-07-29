@@ -8,6 +8,7 @@ import { AppStateProvider, useAppState } from '../src/state/app-state';
 import { migrateDatabase } from '../src/data/sqlite-repository';
 import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/data/expo-birthday-notifications';
 import { applyColorTheme } from '../src/theme/app-theme';
+import { AutomaticUpdateChecker } from '../src/components/automatic-update-checker';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -42,6 +43,7 @@ function ThemedNavigator() {
     <>
       <StatusBar style={preferences.appearanceTheme === 'midnight' ? 'light' : 'dark'} />
       <Stack screenOptions={{ contentStyle: { backgroundColor: colors.paper }, headerShown: false }} />
+      <AutomaticUpdateChecker />
     </>
   );
 }
