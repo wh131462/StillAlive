@@ -20,6 +20,7 @@ import {
   deletePasswordVaultStorage,
   disablePasswordVaultBiometrics,
   enablePasswordVaultBiometrics,
+  isPasswordVaultBiometricCancellation,
   passwordVaultBiometricsEnabled,
   passwordVaultExists,
   readPasswordVaultBiometricKey,
@@ -159,15 +160,23 @@ export function PasswordVaultStateProvider({ children }: PropsWithChildren) {
 
   const unlockWithBiometrics = useCallback(async () => {
     logPasswordVaultDiagnostic('state.biometric-unlock.start');
-    const dek = await readPasswordVaultBiometricKey();
+    let dek: Uint8Array | null;
+    try {
+      dek = await readPasswordVaultBiometricKey();
+    } catch (cause) {
+      logPasswordVaultDiagnostic('state.biometric-unlock.interrupted', { error: passwordVaultErrorKind(cause) });
+      if (isPasswordVaultBiometricCancellation(cause)) return;
+      throw new Error('生物识别暂时不可用，请使用主密码');
+    }
     if (!dek) {
       await disablePasswordVaultBiometrics().catch(() => undefined);
       setBiometricEnabledState(false);
-      throw new Error('快捷解锁已失效，请使用主密码');
+      throw new Error('快捷解锁已失效，请重新启用或使用主密码');
     }
     try {
       const lifecycleVersion = lifecycleVersionRef.current;
       enterSession(await unlockPasswordVaultWithKey(await readPasswordVaultEnvelope(), dek), lifecycleVersion);
+      logPasswordVaultDiagnostic('state.biometric-unlock.success');
     } catch (cause) {
       logPasswordVaultDiagnostic('state.biometric-unlock.failed', { error: passwordVaultErrorKind(cause) });
       dek.fill(0);
@@ -233,7 +242,12 @@ export function PasswordVaultStateProvider({ children }: PropsWithChildren) {
     if (enabled) {
       const current = sessionRef.current;
       if (!current) throw new Error('密码本已经锁定');
-      await enablePasswordVaultBiometrics(current.dek);
+      try {
+        await enablePasswordVaultBiometrics(current.dek);
+      } catch (cause) {
+        if (isPasswordVaultBiometricCancellation(cause)) return;
+        throw cause;
+      }
     } else {
       await disablePasswordVaultBiometrics();
     }

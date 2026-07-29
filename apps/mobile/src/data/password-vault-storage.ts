@@ -22,6 +22,9 @@ const BIOMETRIC_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
   requireAuthentication: true,
 };
+const BIOMETRIC_MARKER_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+};
 
 export function passwordVaultExists(): boolean {
   return vaultFile().exists || backupFile().exists;
@@ -127,7 +130,7 @@ export function canUsePasswordVaultBiometrics(): boolean {
 }
 
 export async function passwordVaultBiometricsEnabled(): Promise<boolean> {
-  return await SecureStore.getItemAsync(BIOMETRIC_MARKER_KEY) === '1';
+  return await SecureStore.getItemAsync(BIOMETRIC_MARKER_KEY, BIOMETRIC_MARKER_OPTIONS) === '1';
 }
 
 export async function enablePasswordVaultBiometrics(dek: Uint8Array): Promise<void> {
@@ -138,11 +141,11 @@ export async function enablePasswordVaultBiometrics(dek: Uint8Array): Promise<vo
     const verified = await SecureStore.getItemAsync(BIOMETRIC_KEY, BIOMETRIC_OPTIONS);
     if (!verified) throw new Error('未能验证快捷解锁材料');
     decodePasswordVaultKey(verified).fill(0);
-    await SecureStore.setItemAsync(BIOMETRIC_MARKER_KEY, '1');
+    await SecureStore.setItemAsync(BIOMETRIC_MARKER_KEY, '1', BIOMETRIC_MARKER_OPTIONS);
     logPasswordVaultDiagnostic('biometric.enable.success');
   } catch (cause) {
     logPasswordVaultDiagnostic('biometric.enable.failed', { error: passwordVaultErrorKind(cause) });
-    await disablePasswordVaultBiometrics();
+    await disablePasswordVaultBiometrics().catch(() => undefined);
     throw cause;
   }
 }
@@ -158,9 +161,14 @@ export async function disablePasswordVaultBiometrics(): Promise<void> {
   logPasswordVaultDiagnostic('biometric.disable.start');
   await Promise.all([
     SecureStore.deleteItemAsync(BIOMETRIC_KEY, BIOMETRIC_OPTIONS),
-    SecureStore.deleteItemAsync(BIOMETRIC_MARKER_KEY),
+    SecureStore.deleteItemAsync(BIOMETRIC_MARKER_KEY, BIOMETRIC_MARKER_OPTIONS),
   ]);
   logPasswordVaultDiagnostic('biometric.disable.success');
+}
+
+export function isPasswordVaultBiometricCancellation(cause: unknown): boolean {
+  if (!(cause instanceof Error)) return false;
+  return cause.message.includes('User canceled the authentication') || cause.message.includes('User canceled the operation');
 }
 
 function vaultFile(): File { return new File(Paths.document, VAULT_FILE_NAME); }
