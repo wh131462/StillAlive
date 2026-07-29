@@ -64,7 +64,7 @@ function mixHexColors(start: string, end: string, amount: number): string {
 }
 
 const styles = StyleSheet.create({
-  iridescentName: { maxWidth: '100%', alignSelf: 'flex-start' },
+  iridescentName: { maxWidth: '100%' },
   measureText: { opacity: 0 },
   maskText: { color: '#000000' },
   gradient: { flex: 1, flexDirection: 'row' },
