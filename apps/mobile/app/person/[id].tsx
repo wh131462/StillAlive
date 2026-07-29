@@ -59,9 +59,6 @@ export default function PersonScreen() {
             <Pressable accessibilityLabel="编辑人物" accessibilityRole="button" onPress={() => router.push({ pathname: '/person/edit', params: { id: person.id } })} style={styles.headerButton}>
               <SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" />
             </Pressable>
-            {todayCheckIn ? <Pressable accessibilityLabel={`写一条与${person.name}有关的日记`} accessibilityRole="button" onPress={() => router.push({ pathname: '/editor', params: { personId: person.id } })} style={styles.headerButton}>
-              <SymbolView name={{ android: 'edit_note', ios: 'square.and.pencil', web: 'edit_note' }} size={21} tintColor={colors.life} type="hierarchical" />
-            </Pressable> : null}
           </View> : null}
         </View>
 
@@ -157,7 +154,7 @@ function firstMediaId(markdown: string): string | null {
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  header: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { minHeight: 56, marginHorizontal: spacing.md - spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

@@ -196,9 +196,9 @@ function SectionHeader({ description, index, title }: { description: string; ind
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  saveButton: { width: 64, minHeight: 44, justifyContent: 'center' },
+  saveButton: { width: 44, minHeight: 44, justifyContent: 'center' },
   saveText: { color: colors.life, fontSize: 11, fontWeight: '700', textAlign: 'right' },
   headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
