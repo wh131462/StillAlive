@@ -6,6 +6,42 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOBILE_DIR="$ROOT_DIR/apps/mobile"
 SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 NDK_VERSION="${ANDROID_NDK_VERSION:-27.1.12297006}"
+APP_VERSION="$(node -e "const config = require(process.argv[1]); process.stdout.write(config.expo.version);" "$MOBILE_DIR/app.json")"
+SIGNING_CONFIG="$MOBILE_DIR/android-production-signing.gradle"
+SIGNING_ENV_FILE="$ROOT_DIR/jks/export.sh"
+
+if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+  printf 'Error: apps/mobile/app.json 中的 expo.version 无效：%s\n' "$APP_VERSION" >&2
+  exit 1
+fi
+
+for SIGNING_VARIABLE in \
+  STILL_ALIVE_ANDROID_KEYSTORE_PATH \
+  STILL_ALIVE_ANDROID_KEYSTORE_PASSWORD \
+  STILL_ALIVE_ANDROID_KEY_ALIAS \
+  STILL_ALIVE_ANDROID_KEY_PASSWORD; do
+  if [[ -z "${!SIGNING_VARIABLE:-}" && -f "$SIGNING_ENV_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$SIGNING_ENV_FILE"
+    break
+  fi
+done
+
+for SIGNING_VARIABLE in \
+  STILL_ALIVE_ANDROID_KEYSTORE_PATH \
+  STILL_ALIVE_ANDROID_KEYSTORE_PASSWORD \
+  STILL_ALIVE_ANDROID_KEY_ALIAS \
+  STILL_ALIVE_ANDROID_KEY_PASSWORD; do
+  if [[ -z "${!SIGNING_VARIABLE:-}" ]]; then
+    printf 'Error: 缺少生产签名环境变量 %s。\n' "$SIGNING_VARIABLE" >&2
+    exit 1
+  fi
+done
+
+if [[ ! -f "$STILL_ALIVE_ANDROID_KEYSTORE_PATH" ]]; then
+  printf 'Error: 生产签名文件不存在：%s\n' "$STILL_ALIVE_ANDROID_KEYSTORE_PATH" >&2
+  exit 1
+fi
 
 if [[ -z "$SDK_DIR" && -d "$HOME/Library/Android/sdk" ]]; then
   SDK_DIR="$HOME/Library/Android/sdk"
@@ -83,7 +119,12 @@ fi
 
 (
   cd "$MOBILE_DIR/android"
-  ./gradlew -PndkVersion="$NDK_VERSION" assembleRelease
+  ./gradlew --init-script "$SIGNING_CONFIG" -PndkVersion="$NDK_VERSION" assembleRelease
 )
 
-printf 'APK: %s\n' "$MOBILE_DIR/android/app/build/outputs/apk/release/app-release.apk"
+APK_OUTPUT_DIR="$MOBILE_DIR/android/app/build/outputs/apk/release"
+APK_SOURCE="$APK_OUTPUT_DIR/app-release.apk"
+APK_TARGET="$APK_OUTPUT_DIR/still-alive-pro-v$APP_VERSION.apk"
+
+mv -f "$APK_SOURCE" "$APK_TARGET"
+printf 'APK: %s\n' "$APK_TARGET"

@@ -2,11 +2,7 @@ import { requireOptionalNativeModule } from 'expo';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
-/**
- * 后续填写返回版本清单 JSON 的 HTTPS 地址。
- * 响应字段：versionCode、versionName、apkUrl，可选 releaseNotes。
- */
-export const ANDROID_UPDATE_MANIFEST_URL = '';
+export const ANDROID_UPDATE_MANIFEST_URL = 'https://github.com/wh131462/StillAlive/releases/latest/download/latest.json';
 
 export interface AndroidUpdateManifest {
   versionCode: number;

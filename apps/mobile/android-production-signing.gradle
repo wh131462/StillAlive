@@ -1,0 +1,14 @@
+gradle.beforeProject { project ->
+    if (project.path != ':app') return
+    project.plugins.withId('com.android.application') {
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            def production = android.signingConfigs.maybeCreate('production')
+
+            production.storeFile = new File(System.getenv('STILL_ALIVE_ANDROID_KEYSTORE_PATH'))
+            production.storePassword = System.getenv('STILL_ALIVE_ANDROID_KEYSTORE_PASSWORD')
+            production.keyAlias = System.getenv('STILL_ALIVE_ANDROID_KEY_ALIAS')
+            production.keyPassword = System.getenv('STILL_ALIVE_ANDROID_KEY_PASSWORD')
+            android.buildTypes.getByName('release').signingConfig = production
+        }
+    }
+}
