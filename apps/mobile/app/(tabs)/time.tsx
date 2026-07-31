@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { CheckIn, DayKey, Post } from '@still-alive/types';
+import type { BirthdayCalendar, CheckIn, DayKey, Person, Post } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../src/state/app-state';
 import { extractAudioEmbeds } from '../../src/domain/embedded-media';
+import { birthdayForCalendar, birthdayInSolarYear, birthdaySolarDate, toLocalDayKey } from '../../src/domain/person-profile';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { createThemedStyles } from '../../src/theme/app-theme';
 
@@ -15,7 +17,7 @@ type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const { checkIns, posts, today, todayCheckIn } = useAppState();
+  const { checkIns, people, posts, today, todayCheckIn } = useAppState();
   const [activeMonth, setActiveMonth] = useState(today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const checkInDays = useMemo(() => new Set(checkIns.map((item) => item.dayKey)), [checkIns]);
@@ -49,6 +51,7 @@ export default function CalendarScreen() {
           onOpenPost={(postId) => router.push(`/post/${postId}`)}
           onSelectDay={setSelectedDay}
           onWrite={openEditorForDay}
+          people={people}
           posts={posts}
           selectedCheckIn={selectedCheckIn}
           selectedDay={selectedDay}
@@ -67,6 +70,7 @@ interface CalendarViewProps {
   onOpenPost(postId: string): void;
   onSelectDay(dayKey: DayKey): void;
   onWrite(dayKey: DayKey): void;
+  people: Person[];
   posts: Post[];
   selectedCheckIn?: CheckIn;
   selectedDay: DayKey;
@@ -74,7 +78,7 @@ interface CalendarViewProps {
   today: DayKey;
 }
 
-function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, posts, selectedCheckIn, selectedDay, selectedPosts, today }: CalendarViewProps) {
+function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, selectedCheckIn, selectedDay, selectedPosts, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
     return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
@@ -84,7 +88,9 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
     for (const post of posts) values.set(post.dayKey, [...(values.get(post.dayKey) ?? []), post]);
     return values;
   }, [posts]);
+  const birthdaysByDay = useMemo(() => calendarBirthdaysByDay(people, Number(activeMonth.slice(0, 4))), [activeMonth, people]);
   const selectedLunarDate = lunarDateInfo(selectedDay);
+  const selectedBirthdays = birthdaysByDay.get(selectedDay) ?? [];
   const selectedItemCount = selectedPosts.length + Number(Boolean(selectedCheckIn));
   const canNext = activeMonth < today.slice(0, 7);
   const [year, month] = activeMonth.split('-');
@@ -109,6 +115,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               const dividers = [columnIndex < 6 && styles.calendarCellColumnDivider, rowIndex < weeks.length - 1 && styles.calendarCellRowDivider];
               if (!dayKey) return <View key={`empty_${rowIndex}_${columnIndex}`} style={[styles.calendarCell, ...dividers, styles.calendarCellEmpty]} />;
               const dayPosts = postsByDay.get(dayKey) ?? [];
+              const dayBirthdays = birthdaysByDay.get(dayKey) ?? [];
               const itemCount = dayPosts.length + Number(checkInDays.has(dayKey));
               const markers: CalendarMarkerKind[] = [
                 ...(checkInDays.has(dayKey) ? ['check-in' as const] : []),
@@ -121,7 +128,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               return (
                 <Pressable
                   key={dayKey}
-                  accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}${itemCount ? `，有 ${itemCount} 条内容` : ''}`}
+                  accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}${dayBirthdays.length ? `，有 ${dayBirthdays.length} 个生日` : ''}${itemCount ? `，有 ${itemCount} 条内容` : ''}`}
                   accessibilityRole="button"
                   disabled={future}
                   onPress={() => onSelectDay(dayKey)}
@@ -132,8 +139,9 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                     {isToday ? <View style={styles.todayMark}><Text style={styles.todayMarkText}>今</Text></View> : null}
                   </View>
                   {lunarDate ? <Text numberOfLines={1} style={[styles.lunarDay, lunarDate.emphasis && styles.lunarFestival, selected && styles.lunarDaySelected]}>{lunarDate.shortLabel}</Text> : null}
+                  {dayBirthdays.length ? <View style={styles.birthdayMark}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={11} tintColor={colors.sun} type="hierarchical" /></View> : null}
                   {markers.length ? (
-                    <View style={styles.calendarMarks}>
+                    <View style={[styles.calendarMarks, dayBirthdays.length > 0 && styles.calendarMarksWithBirthday]}>
                       {markers.map((kind, index) => <View key={`${dayKey}_mark_${index}`} style={[styles.calendarMark, { backgroundColor: markerColor(kind) }]} />)}
                     </View>
                   ) : null}
@@ -149,7 +157,8 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
         <LegendItem kind="text" label="文字" />
         <LegendItem kind="image" label="图片" />
         <LegendItem kind="audio" label="录音" />
-        <Text style={styles.legendText}>最多 3 个</Text>
+        <View style={styles.legendItem}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={11} tintColor={colors.sun} type="hierarchical" /><Text style={styles.legendText}>生日</Text></View>
+        <Text style={styles.legendText}>内容最多 3 个</Text>
       </View>
 
       <View style={styles.selectedPanel}>
@@ -161,8 +170,17 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           </View>
           <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable>
         </View>
-        {selectedItemCount ? (
+        {selectedBirthdays.length || selectedItemCount ? (
           <View style={styles.selectedList}>
+            {selectedBirthdays.map((birthday) => (
+              <View key={`${birthday.personId}_${birthday.calendar}`} style={styles.selectedEntry}>
+                <View style={styles.selectedEntryRail}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={14} tintColor={colors.sun} type="hierarchical" /></View>
+                <View style={styles.selectedEntryContent}>
+                  <Text style={styles.selectedEntryMeta}>人物生日</Text>
+                  <Text style={styles.selectedBirthdayTitle}>今天是{birthday.personName}的{birthdayCalendarLabel(birthday.calendar)}生日</Text>
+                </View>
+              </View>
+            ))}
             {selectedCheckIn ? (
               <View style={styles.selectedEntry}>
                 <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor('check-in') }]} /></View>
@@ -195,6 +213,31 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
 
 function LegendItem({ kind, label }: { kind: CalendarMarkerKind; label: string }) {
   return <View style={styles.legendItem}><View style={[styles.legendMark, { backgroundColor: markerColor(kind) }]} /><Text style={styles.legendText}>{label}</Text></View>;
+}
+
+interface CalendarBirthday {
+  calendar: BirthdayCalendar;
+  personId: string;
+  personName: string;
+}
+
+function calendarBirthdaysByDay(people: Person[], solarYear: number): Map<DayKey, CalendarBirthday[]> {
+  const values = new Map<DayKey, CalendarBirthday[]>();
+  for (const person of people) {
+    if (!person.birthday || birthdaySolarDate(person.birthday).getFullYear() > solarYear) continue;
+    const reminderMode = person.birthday.reminderMode ?? person.birthday.calendar;
+    const calendars: BirthdayCalendar[] = reminderMode === 'both' ? ['solar', 'lunar'] : [reminderMode];
+    for (const calendar of calendars) {
+      const dayKey = toLocalDayKey(birthdayInSolarYear(birthdayForCalendar(person.birthday, calendar), solarYear));
+      values.set(dayKey, [...(values.get(dayKey) ?? []), { calendar, personId: person.id, personName: person.name }]);
+    }
+  }
+  for (const birthdays of values.values()) birthdays.sort((left, right) => left.personName.localeCompare(right.personName) || left.calendar.localeCompare(right.calendar));
+  return values;
+}
+
+function birthdayCalendarLabel(calendar: BirthdayCalendar): string {
+  return calendar === 'solar' ? '公历' : '农历';
 }
 
 function calendarCells(month: string): Array<DayKey | null> {
@@ -312,7 +355,9 @@ const styles = createThemedStyles(() => ({
   lunarFestival: { color: colors.sun, fontWeight: '700' },
   lunarDaySelected: { color: colors.life },
   calendarMarks: { position: 'absolute', bottom: 7, flexDirection: 'row', gap: 3 },
+  calendarMarksWithBirthday: { left: 6 },
   calendarMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
+  birthdayMark: { position: 'absolute', right: 5, bottom: 4 },
   calendarLegend: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
@@ -333,6 +378,7 @@ const styles = createThemedStyles(() => ({
   selectedEntryContent: { flex: 1 },
   selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
   selectedCheckInTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
+  selectedBirthdayTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 24 },
   selectedPostText: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
   selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
 }));
