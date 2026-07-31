@@ -18,6 +18,7 @@ export interface Birthday {
 export interface CheckIn {
   id: string;
   dayKey: DayKey;
+  city: string | null;
   createdAt: string;
 }
 
@@ -25,6 +26,7 @@ export interface Post {
   id: string;
   dayKey: DayKey;
   bodyMarkdown: string;
+  locationName: string | null;
   createdAt: string;
   updatedAt: string;
 }

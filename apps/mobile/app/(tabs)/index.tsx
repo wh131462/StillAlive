@@ -15,6 +15,7 @@ import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
 import { nextBirthday } from '../../src/domain/person-profile';
+import { resolveDeviceLocation } from '../../src/data/device-location';
 import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 type TimelineItem =
@@ -68,9 +69,21 @@ export default function SpaceScreen() {
 
   const handlePrimaryAction = async () => {
     if (!todayCheckIn) {
+      let city: string;
       try {
         setCheckingIn(true);
-        await checkInToday();
+        const location = await resolveDeviceLocation();
+        city = location.city;
+      } catch (cause: unknown) {
+        setCheckingIn(false);
+        Alert.alert('无法获取打卡城市', cause instanceof Error ? cause.message : '请稍后重试。', [
+          { text: '取消', style: 'cancel' },
+          { text: '不记录城市，继续', onPress: () => void finishCheckInWithoutCity() },
+        ]);
+        return;
+      }
+      try {
+        await checkInToday(city);
       } catch (cause: unknown) {
         Alert.alert('暂时无法打卡', cause instanceof Error ? cause.message : '请稍后重试。');
       } finally {
@@ -79,6 +92,17 @@ export default function SpaceScreen() {
       return;
     }
     router.push('/editor');
+  };
+
+  const finishCheckInWithoutCity = async () => {
+    try {
+      setCheckingIn(true);
+      await checkInToday(null);
+    } catch (cause: unknown) {
+      Alert.alert('暂时无法打卡', cause instanceof Error ? cause.message : '请稍后重试。');
+    } finally {
+      setCheckingIn(false);
+    }
   };
 
   const completeOnboarding = async () => {
@@ -130,7 +154,7 @@ export default function SpaceScreen() {
             <Text style={styles.cardTitle}>
               {!todayCheckIn
                 ? returningAfterBreak ? '欢迎回来，今天也可以重新开始' : '为今天留一个坐标'
-                : hasWritten ? `今天已记下 ${todayPosts.length} 条` : '今天，已经留下了坐标'}
+                : hasWritten ? `今天已记下 ${todayPosts.length} 条` : todayCheckIn.city ? `今天，已经在${todayCheckIn.city}留下坐标` : '今天，已经留下了坐标'}
             </Text>
             <Text style={styles.cardDescription}>
               {!todayCheckIn ? '不需要写什么，点一下就好。' : hasWritten ? '还想记下什么，可以继续写。' : '就这样也很好。或者，留下一点今天。'}
@@ -142,7 +166,7 @@ export default function SpaceScreen() {
               style={({ pressed }) => [styles.primaryButton, todayCheckIn && styles.secondaryButton, (!ready || Boolean(error) || checkingIn) && styles.disabled, pressed && styles.pressed]}
             >
               <Text style={[styles.primaryButtonText, todayCheckIn && styles.secondaryButtonText]}>
-                {checkingIn ? '正在留下坐标…' : !todayCheckIn ? '今天也在' : '写一条记录'}
+                {checkingIn ? '正在定位并打卡…' : !todayCheckIn ? '今天也在' : '写一条记录'}
               </Text>
             </Pressable>
           </View>
@@ -252,11 +276,11 @@ function DayHeader({ dayKey, today }: { dayKey: DayKey; today: DayKey }) {
 
 function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
   return (
-    <View accessibilityLabel={`${checkIn.dayKey} ${formatTime(checkIn.createdAt)} 留下坐标`} style={styles.checkInRow}>
+    <View accessibilityLabel={`${checkIn.dayKey} ${checkIn.city ? `${checkIn.city} ` : ''}${formatTime(checkIn.createdAt)} 留下坐标`} style={styles.checkInRow}>
       <View style={styles.checkInMarker}><View style={styles.checkInDot}><View style={styles.checkInDotCore} /></View></View>
       <View style={styles.checkInContent}>
         <Text style={styles.checkInTitle}>今天也在</Text>
-        <Text style={styles.checkInMeta}>{formatTime(checkIn.createdAt)} · 留下坐标</Text>
+        <Text style={styles.checkInMeta}>{checkIn.city ? `${checkIn.city} · ` : ''}{formatTime(checkIn.createdAt)}</Text>
       </View>
     </View>
   );
@@ -280,7 +304,7 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
         {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
         <View style={styles.postFooter}>
-          <Text style={styles.postTime}>{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' · 修改过' : ''}</Text>
+          <Text numberOfLines={1} style={styles.postTime}>{post.locationName ? `${post.locationName} · ` : ''}{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' · 修改过' : ''}</Text>
           <Text numberOfLines={1} style={styles.postType}>{recordTypeLabel(images.length, mediaIds.length, audioEmbeds.map((item) => item.durationMs))}</Text>
         </View>
       </View>

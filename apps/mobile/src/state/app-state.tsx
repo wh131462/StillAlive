@@ -60,9 +60,9 @@ interface AppStateValue {
   shouldShowBackupReminder: boolean;
   ready: boolean;
   error: string | null;
-  checkInToday(): Promise<void>;
-  savePost(bodyMarkdown: string, personIds?: string[], dayKey?: DayKey): Promise<void>;
-  updatePost(postId: string, bodyMarkdown: string, personIds?: string[]): Promise<void>;
+  checkInToday(city: string | null): Promise<void>;
+  savePost(bodyMarkdown: string, personIds?: string[], dayKey?: DayKey, locationName?: string | null): Promise<void>;
+  updatePost(postId: string, bodyMarkdown: string, personIds?: string[], locationName?: string | null): Promise<void>;
   deletePost(postId: string): Promise<void>;
   getPersonIdsByPost(postId: string): Promise<string[]>;
   getPostsByPerson(personId: string): Promise<Post[]>;
@@ -237,19 +237,21 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return () => { active = false; };
   }, [repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
-  const checkInToday = useCallback(async () => {
-    const checkIn = await repository.checkIn(today);
+  const checkInToday = useCallback(async (city: string | null) => {
+    if (city && city.length > 40) throw new Error('城市名称不能超过 40 字');
+    const checkIn = await repository.checkIn(today, city);
     setTodayCheckIn(checkIn);
     setCheckIns(await repository.listCheckIns());
   }, [repository, today]);
 
-  const savePost = useCallback(async (bodyMarkdown: string, personIds: string[] = [], dayKey: DayKey = today) => {
-    validatePost(bodyMarkdown, personIds);
+  const savePost = useCallback(async (bodyMarkdown: string, personIds: string[] = [], dayKey: DayKey = today, locationName: string | null = null) => {
+    validatePost(bodyMarkdown, personIds, locationName);
     const now = new Date().toISOString();
     const post: Post = {
       id: `post_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       dayKey,
       bodyMarkdown,
+      locationName,
       createdAt: now,
       updatedAt: now,
     };
@@ -281,11 +283,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (removable.length) setMedia((current) => current.filter((item) => !removable.includes(item.id)));
   }, [media, repository]);
 
-  const updatePost = useCallback(async (postId: string, bodyMarkdown: string, personIds: string[] = []) => {
-    validatePost(bodyMarkdown, personIds);
+  const updatePost = useCallback(async (postId: string, bodyMarkdown: string, personIds: string[] = [], locationName: string | null = null) => {
+    validatePost(bodyMarkdown, personIds, locationName);
     const existing = posts.find((post) => post.id === postId);
     if (!existing) throw new Error('要编辑的日记不存在');
-    const nextPost = { ...existing, bodyMarkdown, updatedAt: new Date().toISOString() };
+    const nextPost = { ...existing, bodyMarkdown, locationName, updatedAt: new Date().toISOString() };
     await repository.updatePost(nextPost, personIds);
     const storedPosts = await repository.listPosts();
     setPosts(storedPosts);
@@ -791,10 +793,11 @@ export function useAppState(): AppStateValue {
   return value;
 }
 
-function validatePost(bodyMarkdown: string, personIds: string[]): void {
+function validatePost(bodyMarkdown: string, personIds: string[], locationName: string | null): void {
   if (!bodyMarkdown.trim()) throw new Error('正文、图片或语音至少需要保留一项');
   if (extractImageMediaIds(bodyMarkdown).length > 9) throw new Error('一篇日记最多包含 9 张图片');
   if (new Set(personIds).size > 10) throw new Error('一篇日记最多关联 10 个人物');
+  if (locationName && locationName.length > 80) throw new Error('地点名称不能超过 80 字');
 }
 
 function normalizeTagName(name: string): string {

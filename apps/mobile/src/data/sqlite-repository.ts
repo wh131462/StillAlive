@@ -6,6 +6,7 @@ import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../
 interface CheckInRow {
   id: string;
   day_key: string;
+  city: string | null;
   created_at: string;
 }
 
@@ -13,6 +14,7 @@ interface PostRow {
   id: string;
   day_key: string;
   body_markdown: string;
+  location_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -336,6 +338,12 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'persons', 'gender', 'TEXT');
     await db.execAsync('PRAGMA user_version = 13;');
   }
+
+  if (currentVersion < 14) {
+    await addColumnIfMissing(db, 'checkins', 'city', 'TEXT');
+    await addColumnIfMissing(db, 'posts', 'location_name', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 14;');
+  }
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {
@@ -424,19 +432,21 @@ async function addColumnIfMissing(db: SQLiteDatabase, table: string, column: str
 export class SQLiteStillAliveRepository implements StillAliveRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
-  async checkIn(dayKey: DayKey): Promise<CheckIn> {
+  async checkIn(dayKey: DayKey, city: string | null): Promise<CheckIn> {
     const existing = await this.getCheckIn(dayKey);
     if (existing) return existing;
 
     const checkIn: CheckIn = {
       id: createLocalId('checkin'),
       dayKey,
+      city,
       createdAt: new Date().toISOString(),
     };
     await this.db.runAsync(
-      'INSERT INTO checkins (id, day_key, created_at) VALUES (?, ?, ?)',
+      'INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)',
       checkIn.id,
       checkIn.dayKey,
+      checkIn.city,
       checkIn.createdAt,
     );
     return checkIn;
@@ -444,7 +454,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async getCheckIn(dayKey: DayKey): Promise<CheckIn | null> {
     const row = await this.db.getFirstAsync<CheckInRow>(
-      'SELECT id, day_key, created_at FROM checkins WHERE day_key = ?',
+      'SELECT id, day_key, city, created_at FROM checkins WHERE day_key = ?',
       dayKey,
     );
     return row ? mapCheckIn(row) : null;
@@ -452,7 +462,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listCheckIns(): Promise<CheckIn[]> {
     const rows = await this.db.getAllAsync<CheckInRow>(
-      'SELECT id, day_key, created_at FROM checkins ORDER BY day_key DESC',
+      'SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key DESC',
     );
     return rows.map(mapCheckIn);
   }
@@ -460,10 +470,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async createPost(post: Post, personIds: string[] = []): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
       await transaction.runAsync(
-        'INSERT INTO posts (id, day_key, body_markdown, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
         post.id,
         post.dayKey,
         post.bodyMarkdown,
+        post.locationName,
         post.createdAt,
         post.updatedAt,
       );
@@ -481,8 +492,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async updatePost(post: Post, personIds: string[] = []): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
       await transaction.runAsync(
-        'UPDATE posts SET body_markdown = ?, updated_at = ? WHERE id = ?',
+        'UPDATE posts SET body_markdown = ?, location_name = ?, updated_at = ? WHERE id = ?',
         post.bodyMarkdown,
+        post.locationName,
         post.updatedAt,
         post.id,
       );
@@ -511,14 +523,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPosts(): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      'SELECT id, day_key, body_markdown, created_at, updated_at FROM posts ORDER BY day_key DESC, created_at DESC',
+      'SELECT id, day_key, body_markdown, location_name, created_at, updated_at FROM posts ORDER BY day_key DESC, created_at DESC',
     );
     return rows.map(mapPost);
   }
 
   async listPostsByDay(dayKey: DayKey): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      'SELECT id, day_key, body_markdown, created_at, updated_at FROM posts WHERE day_key = ? ORDER BY created_at DESC',
+      'SELECT id, day_key, body_markdown, location_name, created_at, updated_at FROM posts WHERE day_key = ? ORDER BY created_at DESC',
       dayKey,
     );
     return rows.map(mapPost);
@@ -526,7 +538,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPostsByPerson(personId: string): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.created_at, posts.updated_at
+      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.created_at, posts.updated_at
        FROM posts
        INNER JOIN post_persons ON post_persons.post_id = posts.id
        WHERE post_persons.person_id = ?
@@ -853,7 +865,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     const preferences = await this.getPreferences();
     if (!preferences.globalMemoryEnabled) return null;
     const onThisDay = await this.db.getFirstAsync<PostRow>(
-      `SELECT id, day_key, body_markdown, created_at, updated_at
+      `SELECT id, day_key, body_markdown, location_name, created_at, updated_at
        FROM posts
        WHERE substr(day_key, 6, 5) = substr(?, 6, 5) AND day_key < ?
        ORDER BY day_key DESC, created_at DESC
@@ -865,7 +877,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const personMemory = await this.db.getFirstAsync<PostRow & { person_id: string; person_name: string }>(
-      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.created_at, posts.updated_at,
+      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.created_at, posts.updated_at,
               persons.id AS person_id, persons.name AS person_name
        FROM posts
        INNER JOIN post_persons ON post_persons.post_id = posts.id
@@ -946,7 +958,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
     const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, albums, albumMedia] = await Promise.all([
-      this.db.getAllAsync<CheckInRow>('SELECT id, day_key, created_at FROM checkins ORDER BY day_key'),
+      this.db.getAllAsync<CheckInRow>('SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key'),
       this.listPosts(),
       this.db.getAllAsync<DraftRow>('SELECT id, day_key, body_markdown, updated_at FROM drafts ORDER BY day_key'),
       this.listPeople(),
@@ -981,7 +993,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     await this.db.withExclusiveTransactionAsync(async (transaction) => {
       await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
-        await transaction.runAsync('INSERT INTO checkins (id, day_key, created_at) VALUES (?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.createdAt);
+        await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(
@@ -1000,8 +1012,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const post of snapshot.posts) {
         await transaction.runAsync(
-          'INSERT INTO posts (id, day_key, body_markdown, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-          post.id, post.dayKey, post.bodyMarkdown, post.createdAt, post.updatedAt,
+          'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+          post.id, post.dayKey, post.bodyMarkdown, post.locationName, post.createdAt, post.updatedAt,
         );
       }
       for (const relation of snapshot.postPersons) {
@@ -1021,7 +1033,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 }
 
 function mapCheckIn(row: CheckInRow): CheckIn {
-  return { id: row.id, dayKey: row.day_key as DayKey, createdAt: row.created_at };
+  return { id: row.id, dayKey: row.day_key as DayKey, city: row.city, createdAt: row.created_at };
 }
 
 function mapPost(row: PostRow): Post {
@@ -1029,6 +1041,7 @@ function mapPost(row: PostRow): Post {
     id: row.id,
     dayKey: row.day_key as DayKey,
     bodyMarkdown: row.body_markdown,
+    locationName: row.location_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

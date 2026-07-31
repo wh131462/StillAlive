@@ -26,6 +26,7 @@ import type { EditorCommand, EditorCommandType, EditorMediaSource } from '../src
 import { useAppState } from '../src/state/app-state';
 import { createThemedStyles, editorTheme } from '../src/theme/app-theme';
 import { persistPickedImage, persistVoiceRecording } from '../src/data/local-media';
+import { resolveDeviceLocation } from '../src/data/device-location';
 import { extractEmbeddedMediaIds } from '../src/domain/embedded-media';
 
 export default function EditorScreen() {
@@ -37,6 +38,7 @@ export default function EditorScreen() {
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
   const initialPersonIdsRef = useRef<string[]>([]);
+  const initialLocationRef = useRef<string | null>(null);
   const createdAudioRef = useRef<Media[]>([]);
   const commandIdRef = useRef(0);
   const [body, setBody] = useState('');
@@ -49,6 +51,10 @@ export default function EditorScreen() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('https://');
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [locationName, setLocationName] = useState<string | null>(null);
+  const [customLocation, setCustomLocation] = useState('');
+  const [locating, setLocating] = useState(false);
   const [draftStatus, setDraftStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [audioSaving, setAudioSaving] = useState(false);
@@ -69,7 +75,9 @@ export default function EditorScreen() {
       }
       initializedRef.current = true;
       initialBodyRef.current = post.bodyMarkdown;
+      initialLocationRef.current = post.locationName;
       setBody(post.bodyMarkdown);
+      setLocationName(post.locationName);
       setInitialized(true);
       void getPersonIdsByPost(post.id).then((ids) => {
         initialPersonIdsRef.current = ids;
@@ -105,7 +113,7 @@ export default function EditorScreen() {
   }, [body, postId, saveDraft, targetDay]);
 
   useEffect(() => navigation.addListener('beforeRemove', (event) => {
-    if (allowExitRef.current || (!recorderState.isRecording && !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current))) return;
+    if (allowExitRef.current || (!recorderState.isRecording && !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current))) return;
     event.preventDefault();
     if (recorderState.isRecording) {
       Alert.alert('正在录音', '停止录音后才能离开这条记录。');
@@ -131,7 +139,7 @@ export default function EditorScreen() {
         },
       ],
     );
-  }), [body, discardMedia, navigation, postId, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
+  }), [body, discardMedia, locationName, navigation, postId, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
 
   const editorMedia = useMemo<EditorMediaSource[]>(() => {
     const ids = new Set(extractEmbeddedMediaIds(body));
@@ -161,8 +169,8 @@ export default function EditorScreen() {
     }
     try {
       setSaving(true);
-      if (postId) await updatePost(postId, value, selectedPersonIds);
-      else await savePost(value, selectedPersonIds, targetDay);
+      if (postId) await updatePost(postId, value, selectedPersonIds, locationName);
+      else await savePost(value, selectedPersonIds, targetDay, locationName);
       allowExitRef.current = true;
       router.back();
     } catch (cause: unknown) {
@@ -328,6 +336,31 @@ export default function EditorScreen() {
     setLinkPickerOpen(false);
   };
 
+  const openLocationPicker = () => {
+    setCustomLocation(locationName ?? '');
+    setLocationPickerOpen(true);
+  };
+
+  const useCurrentLocation = async () => {
+    try {
+      setLocating(true);
+      const location = await resolveDeviceLocation();
+      setLocationName(location.address);
+      setLocationPickerOpen(false);
+    } catch (cause: unknown) {
+      Alert.alert('暂时无法定位', cause instanceof Error ? cause.message : '请稍后重试。');
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const useCustomLocation = () => {
+    const value = customLocation.trim();
+    if (!value) return;
+    setLocationName(value);
+    setLocationPickerOpen(false);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -366,6 +399,10 @@ export default function EditorScreen() {
         ) : <View style={styles.domEditor} />}
 
         <View style={styles.meta}>
+          <Pressable accessibilityLabel={locationName ? `地点：${locationName}` : '添加地点'} accessibilityRole="button" onPress={openLocationPicker} style={({ pressed }) => [styles.locationButton, pressed && styles.locationButtonPressed]}>
+            <SymbolView name={{ android: 'location_on', ios: 'mappin.and.ellipse', web: 'location_on' }} size={14} tintColor={locationName ? colors.life : colors.inkFaint} type="hierarchical" />
+            <Text numberOfLines={1} style={[styles.locationButtonText, locationName && styles.locationButtonTextActive]}>{locationName ?? '所在位置'}</Text>
+          </Pressable>
           <Text style={styles.metaText}>{markdownTextLength(body)} 字</Text>
         </View>
 
@@ -429,6 +466,25 @@ export default function EditorScreen() {
           </Pressable>
         </Modal>
 
+        <Modal animationType="slide" onRequestClose={() => setLocationPickerOpen(false)} transparent visible={locationPickerOpen}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setLocationPickerOpen(false)}>
+            <Pressable style={styles.locationSheet} onPress={(event) => event.stopPropagation()}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.locationSheetTitle}>所在位置</Text>
+              <Text style={styles.locationSheetHint}>地点只保存在这条本地记录中，不会保存经纬度。</Text>
+              <LocationOption androidIcon="location_off" icon="location.slash" label="不记录位置" onPress={() => { setLocationName(null); setLocationPickerOpen(false); }} />
+              <LocationOption androidIcon="my_location" disabled={locating} icon="location.fill" label={locating ? '正在获取当前位置…' : '使用当前位置'} onPress={() => void useCurrentLocation()} />
+              <View style={styles.customLocationBlock}>
+                <Text style={styles.customLocationLabel}>自定义位置</Text>
+                <View style={styles.customLocationRow}>
+                  <TextInput maxLength={80} onChangeText={setCustomLocation} onSubmitEditing={useCustomLocation} placeholder="例如 家里、颐和园、公司" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.customLocationInput} value={customLocation} />
+                  <Pressable accessibilityRole="button" disabled={!customLocation.trim()} onPress={useCustomLocation} style={[styles.customLocationApply, !customLocation.trim() && styles.saveButtonDisabled]}><Text style={styles.customLocationApplyText}>使用</Text></Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
         <Modal animationType="fade" onRequestClose={() => setLinkPickerOpen(false)} transparent visible={linkPickerOpen}>
           <Pressable style={styles.centeredBackdrop} onPress={() => setLinkPickerOpen(false)}>
             <Pressable style={styles.linkCard} onPress={(event) => event.stopPropagation()}>
@@ -469,6 +525,16 @@ function ToolButton({ active = false, androidIcon, icon, iconSize = 21, label, o
   );
 }
 
+function LocationOption({ androidIcon, disabled = false, icon, label, onPress }: { androidIcon: AndroidSymbol; disabled?: boolean; icon: SFSymbol; label: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.locationOption, disabled && styles.saveButtonDisabled, pressed && styles.locationButtonPressed]}>
+      <View style={styles.locationOptionIcon}><SymbolView name={{ android: androidIcon, ios: icon, web: androidIcon }} size={20} tintColor={colors.life} type="hierarchical" /></View>
+      <Text style={styles.locationOptionText}>{label}</Text>
+      <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={15} tintColor={colors.inkFaint} type="hierarchical" />
+    </Pressable>
+  );
+}
+
 function validPastDay(value: string | undefined, today: DayKey): DayKey {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value > today) return today;
   const [year, month, day] = value.split('-').map(Number);
@@ -476,9 +542,10 @@ function validPastDay(value: string | undefined, today: DayKey): DayKey {
   return toDayKey(parsed) === value ? value as DayKey : today;
 }
 
-function hasUnsavedContent(body: string, postId: string | undefined, initialBody: string, personIds: string[], initialPersonIds: string[]): boolean {
+function hasUnsavedContent(body: string, postId: string | undefined, initialBody: string, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
   if (!postId) return Boolean(body.trim());
   if (body !== initialBody) return true;
+  if (locationName !== initialLocation) return true;
   return [...personIds].sort().join(',') !== [...initialPersonIds].sort().join(',');
 }
 
@@ -504,8 +571,12 @@ const styles = createThemedStyles(() => ({
   saveButtonDisabled: { opacity: 0.6 },
   saveText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },
   domEditor: { flex: 1, width: '100%', backgroundColor: 'transparent' },
-  meta: { minHeight: 28, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
+  meta: { minHeight: 34, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: typography.size.meta },
+  locationButton: { maxWidth: '76%', minHeight: 30, paddingRight: spacing.sm, flexDirection: 'row', gap: 5, alignItems: 'center' },
+  locationButtonPressed: { opacity: 0.58 },
+  locationButtonText: { flexShrink: 1, color: colors.inkFaint, fontSize: typography.size.meta },
+  locationButtonTextActive: { color: colors.life, fontWeight: '700' },
   toolbarStage: { paddingHorizontal: spacing.md, paddingTop: 5, paddingBottom: spacing.sm, gap: 8, backgroundColor: colors.sheet },
   toolbar: { height: 58, flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 29, backgroundColor: colors.toolbar, shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.13, shadowRadius: 16, elevation: 9 },
   toolbarContent: { minWidth: '100%', paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 2 },
@@ -516,6 +587,18 @@ const styles = createThemedStyles(() => ({
   toolButtonPressed: { backgroundColor: colors.paper, transform: [{ scale: 0.92 }] },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },
   personSheet: { maxHeight: '72%', paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  locationSheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  locationSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 24 },
+  locationSheetHint: { marginTop: 5, marginBottom: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
+  locationOption: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  locationOptionIcon: { width: 38, alignItems: 'flex-start' },
+  locationOptionText: { flex: 1, color: colors.ink, fontSize: 14 },
+  customLocationBlock: { marginTop: spacing.lg },
+  customLocationLabel: { marginBottom: spacing.sm, color: colors.inkSoft, fontSize: typography.size.meta, fontWeight: '700' },
+  customLocationRow: { minHeight: 50, paddingLeft: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
+  customLocationInput: { flex: 1, minHeight: 48, color: colors.ink, fontSize: 14 },
+  customLocationApply: { minWidth: 58, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  customLocationApplyText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   sheetHandle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },
   personSheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   personSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 24 },

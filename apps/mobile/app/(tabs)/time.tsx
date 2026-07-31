@@ -167,7 +167,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               <View style={styles.selectedEntry}>
                 <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor('check-in') }]} /></View>
                 <View style={styles.selectedEntryContent}>
-                  <Text style={styles.selectedEntryMeta}>打卡 · {formatTime(selectedCheckIn.createdAt)}</Text>
+                  <Text style={styles.selectedEntryMeta}>打卡 · {selectedCheckIn.city ? `${selectedCheckIn.city} · ` : ''}{formatTime(selectedCheckIn.createdAt)}</Text>
                   <Text style={styles.selectedCheckInTitle}>今天也在</Text>
                 </View>
               </View>
@@ -179,7 +179,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                 <Pressable key={post.id} accessibilityLabel={`打开 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedEntry, pressed && styles.selectedEntryPressed]}>
                   <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor(markerKind) }]} /></View>
                   <View style={styles.selectedEntryContent}>
-                    <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} · {formatTime(post.createdAt)}{attachmentLabel ? ` · ${attachmentLabel}` : ''}</Text>
+                    <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} · {post.locationName ? `${post.locationName} · ` : ''}{formatTime(post.createdAt)}{attachmentLabel ? ` · ${attachmentLabel}` : ''}</Text>
                     <Text numberOfLines={3} style={styles.selectedPostText}>{markdownToPlainText(post.bodyMarkdown) || attachmentLabel || '记录了一些内容'}</Text>
                   </View>
                   <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>

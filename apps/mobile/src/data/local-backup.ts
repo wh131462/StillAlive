@@ -58,7 +58,8 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
       const audio = portableMedia.find((item) => item.id === id);
       return audio ? `[语音记录（${formatAudioDuration(Number(duration ?? 0))}）](../${audio.localPath})` : token;
     });
-    entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${portableMarkdown}\n`);
+    const locationLine = post.locationName ? `地点：${post.locationName}\n\n` : '';
+    entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${locationLine}${portableMarkdown}\n`);
   }
 
   const files = [];
@@ -235,7 +236,11 @@ function validateSnapshot(value: BackupSnapshot): void {
   const postIds = new Set(value.posts.map((post) => post.id));
   const personIds = new Set(value.people.map((person) => person.id));
   const mediaIds = new Set(value.media.map((item) => item.id));
-  for (const post of value.posts) validateAudioEmbeds(post.bodyMarkdown, value.media, mediaIds);
+  for (const checkIn of value.checkIns) if (checkIn.city !== null && (typeof checkIn.city !== 'string' || checkIn.city.length > 40)) throw new Error('备份中的打卡城市无效');
+  for (const post of value.posts) {
+    if (post.locationName !== null && (typeof post.locationName !== 'string' || post.locationName.length > 80)) throw new Error('备份中的记录地点无效');
+    validateAudioEmbeds(post.bodyMarkdown, value.media, mediaIds);
+  }
   for (const draft of value.drafts) validateAudioEmbeds(draft.bodyMarkdown, value.media, mediaIds);
   for (const relation of value.postPersons) {
     if (!postIds.has(relation.postId) || !personIds.has(relation.personId)) throw new Error('备份中的人物关联无效');
@@ -294,7 +299,11 @@ function migrateSnapshot(value: BackupSnapshot): void {
     person.birthday ??= null;
     if (person.birthday) person.birthday.reminderMode ??= person.birthday.calendar;
   }
-  if (Array.isArray(value.posts)) for (const post of value.posts) migrateLegacyAudio(post);
+  if (Array.isArray(value.checkIns)) for (const checkIn of value.checkIns) checkIn.city ??= null;
+  if (Array.isArray(value.posts)) for (const post of value.posts) {
+    post.locationName ??= null;
+    migrateLegacyAudio(post);
+  }
   if (Array.isArray(value.drafts)) for (const draft of value.drafts) migrateLegacyAudio(draft);
 }
 

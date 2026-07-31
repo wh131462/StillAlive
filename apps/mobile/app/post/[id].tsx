@@ -67,7 +67,7 @@ export default function PostDetailScreen() {
               onImagePress={(item) => router.push({ pathname: '/file-preview', params: previewRouteParams(extractMediaItems(post.bodyMarkdown, mediaById).map(toSelectedPreviewFile), extractMediaItems(post.bodyMarkdown, mediaById).findIndex((candidate) => candidate.id === item.id)) })}
               onReady={handleContentReady}
             />
-            <Text style={styles.detailTime}>记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
+            <Text style={styles.detailTime}>{post.locationName ? `${post.locationName} · ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
           </ScrollView>
           {!contentReady ? <View pointerEvents="none" style={styles.loadingOverlay}><DetailLoading /></View> : null}
         </View>
