@@ -28,7 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       STILL_ALIVE_ANDROID_KEYSTORE_BASE64: ${{ secrets.STILL_ALIVE_ANDROID_KEYSTORE_BASE64 }}
-      STILL_ALIVE_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/still-alive-release.jks
       STILL_ALIVE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.STILL_ALIVE_ANDROID_KEYSTORE_PASSWORD }}
       STILL_ALIVE_ANDROID_KEY_ALIAS: ${{ secrets.STILL_ALIVE_ANDROID_KEY_ALIAS }}
       STILL_ALIVE_ANDROID_KEY_PASSWORD: ${{ secrets.STILL_ALIVE_ANDROID_KEY_PASSWORD }}
@@ -72,6 +71,8 @@ jobs:
         run: node ./scripts/release.mjs --ci
 
       - name: Restore production keystore
+        env:
+          STILL_ALIVE_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/still-alive-release.jks
         run: |
           if [[ -z "$STILL_ALIVE_ANDROID_KEYSTORE_BASE64" ]]; then
             echo 'Missing secret: STILL_ALIVE_ANDROID_KEYSTORE_BASE64' >&2
@@ -81,6 +82,8 @@ jobs:
           test -s "$STILL_ALIVE_ANDROID_KEYSTORE_PATH"
 
       - name: Build signed APK
+        env:
+          STILL_ALIVE_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/still-alive-release.jks
         run: pnpm build:apk
 
       - name: Prepare release notes
