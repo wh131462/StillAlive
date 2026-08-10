@@ -183,10 +183,15 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
       </View>
 
       {selectedAlmanac ? (
-        <View accessibilityLabel={`黄历宜忌，宜：${selectedAlmanac.recommends.join('、')}，忌：${selectedAlmanac.avoids.join('、')}`} style={styles.almanacCard}>
+        <View accessibilityLabel={`黄历宜忌，${selectedAlmanac.luck}，宜：${selectedAlmanac.recommends.join('、')}，忌：${selectedAlmanac.avoids.join('、')}`} style={styles.almanacCard}>
           <View style={styles.almanacHeader}>
-            <Text style={styles.almanacEyebrow}>DAILY ALMANAC</Text>
-            <Text style={styles.almanacTitle}>黄历宜忌</Text>
+            <View>
+              <Text style={styles.almanacEyebrow}>DAILY ALMANAC</Text>
+              <Text style={styles.almanacTitle}>黄历宜忌</Text>
+            </View>
+            <View style={[styles.almanacSeal, selectedAlmanac.luck === '吉' ? styles.almanacLuckySeal : styles.almanacUnluckySeal]}>
+              <View style={[styles.almanacSealInner, selectedAlmanac.luck === '吉' ? styles.almanacLuckySeal : styles.almanacUnluckySeal]}><Text style={[styles.almanacSealText, selectedAlmanac.luck === '吉' ? styles.almanacLuckySealText : styles.almanacUnluckySealText]}>{selectedAlmanac.luck}</Text></View>
+            </View>
           </View>
           <View style={styles.almanacRow}>
             <View style={[styles.almanacBadge, styles.almanacRecommendBadge]}><Text style={[styles.almanacBadgeText, styles.almanacRecommendBadgeText]}>宜</Text></View>
@@ -311,6 +316,7 @@ interface LunarDateInfo {
 }
 
 interface AlmanacInfo {
+  luck: string;
   recommends: string[];
   avoids: string[];
 }
@@ -320,6 +326,7 @@ function almanacInfo(dayKey: DayKey): AlmanacInfo | null {
     const [year, month, day] = dayKey.split('-').map(Number);
     const lunar = SolarDay.fromYmd(year, month, day).getLunarDay();
     return {
+      luck: lunar.getTwelveStar().getEcliptic().getLuck().getName(),
       recommends: lunar.getRecommends().map((item) => item.getName()),
       avoids: lunar.getAvoids().map((item) => item.getName()),
     };
@@ -420,9 +427,16 @@ const styles = createThemedStyles(() => ({
   legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
   legendMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
   almanacCard: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
-  almanacHeader: { paddingHorizontal: spacing.lg, paddingTop: 16, paddingBottom: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  almanacHeader: { minHeight: 76, paddingHorizontal: spacing.lg, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   almanacEyebrow: { color: colors.sun, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.1 },
   almanacTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18, lineHeight: 24 },
+  almanacSeal: { width: 44, height: 44, padding: 3, borderWidth: 2, transform: [{ rotate: '-4deg' }] },
+  almanacLuckySeal: { borderColor: colors.life },
+  almanacUnluckySeal: { borderColor: colors.danger },
+  almanacSealInner: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth },
+  almanacSealText: { fontFamily: typography.display, fontSize: 22, lineHeight: 26, fontWeight: '700' },
+  almanacLuckySealText: { color: colors.life },
+  almanacUnluckySealText: { color: colors.danger },
   almanacRow: { minHeight: 62, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   almanacAvoidRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
   almanacBadge: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
