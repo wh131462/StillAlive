@@ -50,7 +50,7 @@ class PersistentNotificationService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   private fun quickCheckIn() {
-    val database = openDatabase() ?: return
+    val database = openDatabase(writable = true) ?: return
     database.use { db ->
       val now = Date()
       val values = ContentValues().apply {
@@ -116,11 +116,18 @@ class PersistentNotificationService : Service() {
     }
   }
 
-  private fun openDatabase(): SQLiteDatabase? {
+  private fun openDatabase(writable: Boolean = false): SQLiteDatabase? {
     val path = File(filesDir, "SQLite/$DATABASE_NAME")
     if (!path.exists()) return null
     return runCatching {
-      SQLiteDatabase.openDatabase(path.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+      val flags = if (writable) {
+        SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING
+      } else {
+        SQLiteDatabase.OPEN_READONLY
+      }
+      SQLiteDatabase.openDatabase(path.absolutePath, null, flags).apply {
+        rawQuery("PRAGMA busy_timeout = $DATABASE_BUSY_TIMEOUT_MS", null).use { it.moveToFirst() }
+      }
     }.getOrNull()
   }
 
@@ -164,6 +171,7 @@ class PersistentNotificationService : Service() {
     private const val CHANNEL_ID = "persistent-check-in"
     private const val NOTIFICATION_ID = 41001
     private const val DATABASE_NAME = "still-alive.db"
+    private const val DATABASE_BUSY_TIMEOUT_MS = 5000
     private const val PREFERENCES_NAME = "still_alive_persistent_notification"
     private const val ENABLED_KEY = "enabled"
     private const val ACTION_REFRESH = "com.wh131462.stillalive.persistentnotification.REFRESH"

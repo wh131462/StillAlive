@@ -106,7 +106,7 @@ export type HomeMemory =
   | { kind: 'person'; post: Post; person: { id: string; name: string } };
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
-  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  await db.execAsync('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const currentVersion = result?.user_version ?? 0;
   if (currentVersion < 1) await db.execAsync(`
