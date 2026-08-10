@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Image, Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { BirthdayCalendar, CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
@@ -254,22 +254,24 @@ export default function SpaceScreen() {
       />
 
       <Modal animationType="fade" transparent visible={ready && !preferences.onboardingCompleted}>
-        <SafeAreaView style={styles.onboardingBackdrop}>
-          <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingSheet}>
-            <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
-            <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
-            <Text style={styles.onboardingText}>无需注册。日记、人物和图片默认只保存在这台设备，可以随时完整导出。</Text>
-            <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
-            <View style={styles.onboardingCalendar}>
-              <Text style={styles.onboardingCalendarLabel}>生日历法</Text>
-              <View style={styles.onboardingSegmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} accessibilityRole="button" accessibilityState={{ selected: birthDateCalendar === calendar }} onPress={() => { setBirthDateCalendar(calendar); setBirthDateIsLeapMonth(false); }} style={[styles.onboardingSegment, birthDateCalendar === calendar && styles.onboardingSegmentActive]}><Text style={[styles.onboardingSegmentText, birthDateCalendar === calendar && styles.onboardingSegmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
-            </View>
-            <DatePickerField dayCount={birthDateCalendar === 'lunar' ? (value) => lunarMonthDayCount(value.year, value.month, birthDateIsLeapMonth) : undefined} enforceMaximum={birthDateCalendar === 'solar'} label={`${birthDateCalendar === 'solar' ? '公历' : '农历'}生日 可跳过`} onChange={({ year, month, day }) => { setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`); if (lunarLeapMonth(year) !== month) setBirthDateIsLeapMonth(false); }} onClear={() => { setBirthDate(''); setBirthDateIsLeapMonth(false); }} value={birthDateParts} />
-            {birthDateCalendar === 'lunar' && birthDateParts && lunarLeapMonth(birthDateParts.year) === birthDateParts.month ? <Pressable accessibilityRole="switch" accessibilityState={{ checked: birthDateIsLeapMonth }} onPress={() => setBirthDateIsLeapMonth((value) => !value)} style={styles.onboardingOption}><Text style={styles.onboardingOptionTitle}>这是闰{birthDateParts.month}月</Text><Text style={styles.onboardingOptionAction}>{birthDateIsLeapMonth ? '已选择' : '选择'}</Text></Pressable> : null}
-            <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入空间</Text></Pressable>
-            <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
-          </ScrollView>
-        </SafeAreaView>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.onboardingKeyboardAvoidingView}>
+          <SafeAreaView style={styles.onboardingBackdrop}>
+            <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingSheet}>
+              <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
+              <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
+              <Text style={styles.onboardingText}>无需注册。日记、人物和图片默认只保存在这台设备，可以随时完整导出。</Text>
+              <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
+              <View style={styles.onboardingCalendar}>
+                <Text style={styles.onboardingCalendarLabel}>生日历法</Text>
+                <View style={styles.onboardingSegmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} accessibilityRole="button" accessibilityState={{ selected: birthDateCalendar === calendar }} onPress={() => { setBirthDateCalendar(calendar); setBirthDateIsLeapMonth(false); }} style={[styles.onboardingSegment, birthDateCalendar === calendar && styles.onboardingSegmentActive]}><Text style={[styles.onboardingSegmentText, birthDateCalendar === calendar && styles.onboardingSegmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
+              </View>
+              <DatePickerField dayCount={birthDateCalendar === 'lunar' ? (value) => lunarMonthDayCount(value.year, value.month, birthDateIsLeapMonth) : undefined} enforceMaximum={birthDateCalendar === 'solar'} label={`${birthDateCalendar === 'solar' ? '公历' : '农历'}生日 可跳过`} onChange={({ year, month, day }) => { setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`); if (lunarLeapMonth(year) !== month) setBirthDateIsLeapMonth(false); }} onClear={() => { setBirthDate(''); setBirthDateIsLeapMonth(false); }} value={birthDateParts} />
+              {birthDateCalendar === 'lunar' && birthDateParts && lunarLeapMonth(birthDateParts.year) === birthDateParts.month ? <Pressable accessibilityRole="switch" accessibilityState={{ checked: birthDateIsLeapMonth }} onPress={() => setBirthDateIsLeapMonth((value) => !value)} style={styles.onboardingOption}><Text style={styles.onboardingOptionTitle}>这是闰{birthDateParts.month}月</Text><Text style={styles.onboardingOptionAction}>{birthDateIsLeapMonth ? '已选择' : '选择'}</Text></Pressable> : null}
+              <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入空间</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
+            </ScrollView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -599,6 +601,7 @@ const styles = createThemedStyles(() => ({
   postFooterAfterMore: { marginTop: 0 },
   postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
+  onboardingKeyboardAvoidingView: { flex: 1 },
   onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
   onboardingSheet: { maxHeight: '100%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   onboardingContent: { padding: spacing.lg, paddingBottom: spacing.xxl },

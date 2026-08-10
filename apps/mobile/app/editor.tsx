@@ -595,8 +595,9 @@ export default function EditorScreen() {
         </Modal>
 
         <Modal animationType="slide" onRequestClose={() => setPersonPickerOpen(false)} transparent visible={personPickerOpen}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setPersonPickerOpen(false)}>
-            <Pressable style={styles.personSheet} onPress={(event) => event.stopPropagation()}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setPersonPickerOpen(false)}>
+              <Pressable style={styles.personSheet} onPress={(event) => event.stopPropagation()}>
               <View style={styles.sheetHandle} />
               <View style={styles.personSheetHeader}>
                 <View>
@@ -619,13 +620,15 @@ export default function EditorScreen() {
                 <TextInput onChangeText={setNewPersonName} onSubmitEditing={() => void handleCreatePerson()} placeholder="输入名字，快速创建人物" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.personInput} value={newPersonName} />
                 <Pressable accessibilityRole="button" disabled={!newPersonName.trim()} onPress={() => void handleCreatePerson()} style={styles.createButton}><Text style={styles.createButtonText}>创建</Text></Pressable>
               </View>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardAvoidingView>
         </Modal>
 
         <Modal animationType="slide" onRequestClose={() => setLocationPickerOpen(false)} transparent visible={locationPickerOpen}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setLocationPickerOpen(false)}>
-            <Pressable style={styles.locationSheet} onPress={(event) => event.stopPropagation()}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+            <Pressable style={styles.modalBackdrop} onPress={() => setLocationPickerOpen(false)}>
+              <Pressable style={styles.locationSheet} onPress={(event) => event.stopPropagation()}>
               <View style={styles.sheetHandle} />
               <Text style={styles.locationSheetTitle}>所在位置</Text>
               <Text style={styles.locationSheetHint}>地点只保存在这条本地记录中，不会保存经纬度。</Text>
@@ -638,13 +641,15 @@ export default function EditorScreen() {
                   <Pressable accessibilityRole="button" disabled={!customLocation.trim()} onPress={useCustomLocation} style={[styles.customLocationApply, !customLocation.trim() && styles.saveButtonDisabled]}><Text style={styles.customLocationApplyText}>使用</Text></Pressable>
                 </View>
               </View>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardAvoidingView>
         </Modal>
 
         <Modal animationType="fade" onRequestClose={() => setLinkPickerOpen(false)} transparent visible={linkPickerOpen}>
-          <Pressable style={styles.centeredBackdrop} onPress={() => setLinkPickerOpen(false)}>
-            <Pressable style={styles.linkCard} onPress={(event) => event.stopPropagation()}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+            <Pressable style={styles.centeredBackdrop} onPress={() => setLinkPickerOpen(false)}>
+              <Pressable style={styles.linkCard} onPress={(event) => event.stopPropagation()}>
               <Text style={styles.linkTitle}>插入链接</Text>
               <Text style={styles.linkHint}>选中文字后添加链接；未选中时将插入链接文字。</Text>
               <TextInput autoCapitalize="none" autoCorrect={false} keyboardType="url" onChangeText={setLinkUrl} placeholder="https://" placeholderTextColor={colors.inkFaint} style={styles.linkInput} value={linkUrl} />
@@ -652,8 +657,9 @@ export default function EditorScreen() {
                 <Pressable accessibilityRole="button" onPress={() => setLinkPickerOpen(false)} style={styles.linkAction}><Text style={styles.linkCancel}>取消</Text></Pressable>
                 <Pressable accessibilityRole="button" onPress={insertLink} style={styles.linkAction}><Text style={styles.linkConfirm}>插入</Text></Pressable>
               </View>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardAvoidingView>
         </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>

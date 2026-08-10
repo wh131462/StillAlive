@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../src/state/app-state';
 import { createThemedStyles } from '../src/theme/app-theme';
@@ -105,7 +105,8 @@ export default function BackupScreen() {
   const disabled = busy !== null;
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>数据管理</Text><View style={styles.headerButton} /></View>
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.summary}><View style={styles.summaryIcon}><SymbolView name={{ android: 'inventory_2', ios: 'archivebox', web: 'inventory_2' }} size={25} tintColor={colors.life} type="hierarchical" /></View><View style={styles.summaryCopy}><Text style={styles.summaryTitle}>当前本地数据</Text><Text style={styles.summaryMeta}>{posts.length} 篇日记 · {people.length} 个人物 · {media.length} 个媒体文件</Text><Text style={styles.summaryMeta}>预计 {formatBytes(estimatedBytes)}</Text></View></View>
 
       <Text style={styles.eyebrow}>EXPORT</Text><Text style={styles.sectionTitle}>导出完整备份</Text><Text style={styles.sectionText}>生成 ZIP 文件，包含结构化数据、Markdown 正文和原始媒体文件。密码本存在时，只附加原始加密文件，不生成明文密码清单。</Text>
@@ -130,7 +131,8 @@ export default function BackupScreen() {
       <Text style={styles.dangerEyebrow}>DANGER ZONE</Text>
       <Text style={styles.sectionTitle}>危险操作</Text>
       <Pressable accessibilityRole="button" disabled={disabled} onPress={confirmDeleteAll} style={({ pressed }) => [styles.deleteButton, disabled && styles.disabled, pressed && styles.pressed]}><Text style={styles.deleteTitle}>删除全部本地数据</Text><Text style={styles.deleteHint}>不可撤销；建议先导出备份</Text></Pressable>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   </SafeAreaView>;
 }
 
@@ -139,7 +141,7 @@ function formatDateTime(iso: string) { const date = new Date(iso); if (Number.is
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
 
 const styles = createThemedStyles(() => ({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   summary: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet }, summaryIcon: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 26, backgroundColor: colors.lifeLight }, summaryCopy: { flex: 1, marginLeft: spacing.md }, summaryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 }, summaryMeta: { marginTop: 5, color: colors.inkFaint, fontSize: 9 },
   eyebrow: { marginTop: spacing.xl, color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 }, sectionTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 }, sectionText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 10, lineHeight: 19 }, primaryButton: { minHeight: 52, marginTop: spacing.lg, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life }, primaryText: { color: colors.onLife, fontSize: 11, fontWeight: '700' }, lastExport: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 8, textAlign: 'center' }, rule: { height: StyleSheet.hairlineWidth, marginTop: spacing.xl, backgroundColor: colors.line }, secondaryButton: { minHeight: 52, marginTop: spacing.lg, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.life, borderRadius: radius.md }, secondaryText: { color: colors.life, fontSize: 11, fontWeight: '700' }, notice: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, noticeText: { marginLeft: spacing.sm, color: colors.inkFaint, fontSize: 9 }, disabled: { opacity: 0.4 }, pressed: { opacity: 0.72 },
   dangerEyebrow: { marginTop: spacing.xl, color: colors.danger, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 }, deleteButton: { minHeight: 72, marginTop: spacing.lg, paddingHorizontal: spacing.md, justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md }, deleteTitle: { color: colors.danger, fontSize: typography.size.caption, fontWeight: '800' }, deleteHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },

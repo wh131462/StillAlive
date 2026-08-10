@@ -65,7 +65,7 @@ export default function PasswordVaultEntryScreen() {
 
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}><Pressable accessibilityLabel="返回密码本" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>{entry ? '编辑密码记录' : '新建密码记录'}</Text><Pressable accessibilityLabel="保存密码记录" disabled={busy} onPress={() => void save()} style={styles.headerButton}><Text style={[styles.saveText, busy && styles.disabled]}>{busy ? '保存中' : '保存'}</Text></Pressable></View>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.archiveHeader}><View style={styles.archiveNumber}><Text style={styles.archiveNumberText}>{entry ? 'EDIT' : 'NEW'}</Text></View><View style={styles.archiveCopy}><Text style={styles.archiveEyebrow}>PASSWORD ENTRY</Text><Text style={styles.archiveTitle}>密码记录</Text></View></View>
         <View style={styles.formCard}>

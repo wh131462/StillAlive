@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { usePasswordVaultState } from '../../src/state/password-vault-state';
 import { createThemedStyles } from '../../src/theme/app-theme';
@@ -53,7 +53,8 @@ export default function PasswordVaultSettingsScreen() {
 
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}><Pressable accessibilityLabel="返回密码本" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>密码本安全</Text><View style={styles.headerButton} /></View>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.securitySummary}><View style={styles.summaryIcon}><SymbolView name={{ android: 'verified_user', ios: 'checkmark.shield', web: 'verified_user' }} size={27} tintColor={colors.sun} type="hierarchical" /></View><Text style={styles.summaryEyebrow}>PASSWORD SECURITY</Text><Text style={styles.summaryTitle}>密码本始终由主密码保护</Text><Text style={styles.summaryText}>生物识别只是这台设备的快捷解锁方式。修改主密码或恢复备份时，仍必须提供正确主密码。</Text></View>
 
       <Text style={styles.eyebrow}>QUICK UNLOCK</Text>
@@ -75,7 +76,8 @@ export default function PasswordVaultSettingsScreen() {
         <Text style={styles.fieldLabel}>输入“永久删除”确认</Text><TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setDeleteConfirmation} placeholder="永久删除" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.dangerInput]} value={deleteConfirmation} />
         <Pressable disabled={busy !== null || deleteConfirmation !== '永久删除'} onPress={() => Alert.alert('最后确认', '密码本删除后无法恢复。确定继续吗？', [{ text: '取消', style: 'cancel' }, { text: '永久删除', style: 'destructive', onPress: () => void deleteVault() }])} style={[styles.deleteButton, (busy !== null || deleteConfirmation !== '永久删除') && styles.disabled]}><Text style={styles.deleteButtonText}>{busy === 'delete' ? '正在删除…' : '永久删除密码本'}</Text></Pressable>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   </SafeAreaView>;
 }
 
@@ -86,7 +88,7 @@ function PasswordInput({ label, onChangeText, placeholder, value }: { label: str
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
 
 const styles = createThemedStyles(() => ({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   securitySummary: { padding: spacing.xl, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeDeep }, summaryIcon: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.onLifeLine, borderRadius: 27 }, summaryEyebrow: { marginTop: spacing.lg, color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 }, summaryTitle: { marginTop: spacing.xs, color: colors.onLife, fontFamily: typography.display, fontSize: 25 }, summaryText: { marginTop: spacing.sm, color: colors.onLifeMuted, fontSize: typography.size.caption, lineHeight: 19 },
   eyebrow: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 }, card: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, switchRow: { minHeight: 82, padding: spacing.md, flexDirection: 'row', alignItems: 'center' }, rowIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.lifeLight }, rowCopy: { flex: 1, marginHorizontal: spacing.md }, rowTitle: { color: colors.ink, fontSize: typography.size.body, fontWeight: '700' }, rowHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 }, switchTrack: { width: 44, height: 26, padding: 2, borderRadius: 13, backgroundColor: colors.line }, switchTrackOn: { backgroundColor: colors.life }, switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper }, switchThumbOn: { alignSelf: 'flex-end' },
   cardForm: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet }, cardTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 20 }, cardHint: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 18 }, fieldLabel: { marginTop: spacing.lg, marginBottom: 7, color: colors.inkSoft, fontSize: typography.size.meta, fontWeight: '700' }, input: { minHeight: 50, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, backgroundColor: colors.paper, fontSize: typography.size.body }, primaryButton: { minHeight: 50, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life }, primaryButtonText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },

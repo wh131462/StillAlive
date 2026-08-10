@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../theme/app-theme';
 
@@ -40,56 +40,59 @@ export function RelationshipPicker({ onChange, value }: RelationshipPickerProps)
       </Pressable>
 
       <Modal animationType="slide" onRequestClose={() => setOpen(false)} transparent visible={open}>
-        <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.backdrop}>
-          <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>选择关系</Text>
-            <Text style={styles.sheetHint}>选择一个常用关系，或写下更准确的称呼。</Text>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+          <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.backdrop}>
+            <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+              <View style={styles.handle} />
+              <Text style={styles.sheetTitle}>选择关系</Text>
+              <Text style={styles.sheetHint}>选择一个常用关系，或写下更准确的称呼。</Text>
 
-            <View style={styles.presets}>
-              {RELATION_PRESETS.map((preset) => {
-                const selected = normalizedValue === preset;
-                return (
-                  <Pressable
-                    key={preset}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    onPress={() => selectValue(preset)}
-                    style={({ pressed }) => [styles.preset, selected && styles.presetSelected, pressed && styles.presetPressed]}
-                  >
-                    <Text style={[styles.presetText, selected && styles.presetTextSelected]}>{preset}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+              <View style={styles.presets}>
+                {RELATION_PRESETS.map((preset) => {
+                  const selected = normalizedValue === preset;
+                  return (
+                    <Pressable
+                      key={preset}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => selectValue(preset)}
+                      style={({ pressed }) => [styles.preset, selected && styles.presetSelected, pressed && styles.presetPressed]}
+                    >
+                      <Text style={[styles.presetText, selected && styles.presetTextSelected]}>{preset}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-            <View style={styles.divider}><View style={styles.dividerLine} /><Text style={styles.dividerText}>自定义</Text><View style={styles.dividerLine} /></View>
-            <View style={styles.customRow}>
-              <TextInput
-                accessibilityLabel="自定义关系"
-                maxLength={40}
-                onChangeText={setCustomValue}
-                onSubmitEditing={applyCustomValue}
-                placeholder="例如：室友、导师、旅行伙伴"
-                placeholderTextColor={colors.inkFaint}
-                returnKeyType="done"
-                style={styles.customInput}
-                value={customValue}
-              />
-              <Pressable accessibilityRole="button" disabled={!customValue.trim()} onPress={applyCustomValue} style={({ pressed }) => [styles.applyButton, !customValue.trim() && styles.applyButtonDisabled, pressed && styles.applyButtonPressed]}>
-                <Text style={styles.applyText}>使用</Text>
-              </Pressable>
-            </View>
+              <View style={styles.divider}><View style={styles.dividerLine} /><Text style={styles.dividerText}>自定义</Text><View style={styles.dividerLine} /></View>
+              <View style={styles.customRow}>
+                <TextInput
+                  accessibilityLabel="自定义关系"
+                  maxLength={40}
+                  onChangeText={setCustomValue}
+                  onSubmitEditing={applyCustomValue}
+                  placeholder="例如：室友、导师、旅行伙伴"
+                  placeholderTextColor={colors.inkFaint}
+                  returnKeyType="done"
+                  style={styles.customInput}
+                  value={customValue}
+                />
+                <Pressable accessibilityRole="button" disabled={!customValue.trim()} onPress={applyCustomValue} style={({ pressed }) => [styles.applyButton, !customValue.trim() && styles.applyButtonDisabled, pressed && styles.applyButtonPressed]}>
+                  <Text style={styles.applyText}>使用</Text>
+                </Pressable>
+              </View>
 
-            {normalizedValue ? <Pressable accessibilityRole="button" onPress={() => selectValue('')} style={styles.clearSelection}><Text style={styles.clearSelectionText}>暂不定义关系</Text></Pressable> : null}
+              {normalizedValue ? <Pressable accessibilityRole="button" onPress={() => selectValue('')} style={styles.clearSelection}><Text style={styles.clearSelectionText}>暂不定义关系</Text></Pressable> : null}
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
 const styles = createThemedStyles(() => ({
+  flex: { flex: 1 },
   field: { marginTop: spacing.lg },
   label: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
   selector: { minHeight: 52, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.sheet },
