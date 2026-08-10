@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import type { ImagePickerAsset } from 'expo-image-picker';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { SymbolView } from 'expo-symbols';
@@ -8,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -33,19 +35,25 @@ export default function EditorScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { dayKey: requestedDayKey, personId, postId } = useLocalSearchParams<{ dayKey?: string; personId?: string; postId?: string }>();
-  const { createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, replaceMedia, saveDraft, saveMedia, savePost, today, todayCheckIn, updatePost } = useAppState();
+  const { createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, saveDraft, saveMedia, savePost, today, todayCheckIn, updatePost } = useAppState();
   const initializedRef = useRef(false);
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
   const initialPersonIdsRef = useRef<string[]>([]);
   const initialLocationRef = useRef<string | null>(null);
-  const createdAudioRef = useRef<Media[]>([]);
+  const createdMediaRef = useRef<Media[]>([]);
+  const bodyTouchedRef = useRef(false);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftQueueRef = useRef(Promise.resolve());
+  const pendingDraftSaveRef = useRef<Promise<void> | null>(null);
   const commandIdRef = useRef(0);
   const [body, setBody] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [command, setCommand] = useState<EditorCommand | null>(null);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
   const [showMore, setShowMore] = useState(false);
+  const [showTextSize, setShowTextSize] = useState(false);
+  const [imageSourcePickerOpen, setImageSourcePickerOpen] = useState(false);
   const [personPickerOpen, setPersonPickerOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
@@ -58,19 +66,22 @@ export default function EditorScreen() {
   const [draftStatus, setDraftStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [audioSaving, setAudioSaving] = useState(false);
+  const [mediaSaving, setMediaSaving] = useState(false);
+  const [relationsLoading, setRelationsLoading] = useState(Boolean(postId));
   const editingPost = posts.find((item) => item.id === postId);
   const audioRecorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, directory: 'document' });
   const recorderState = useAudioRecorderState(audioRecorder, 250);
   const targetDay = editingPost?.dayKey ?? validPastDay(requestedDayKey, today);
   const isPastEntry = !postId && targetDay !== today;
   const headerSubtitle = draftStatus || (postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
+  const editorBusy = saving || audioSaving || mediaSaving || locating || relationsLoading;
 
   useEffect(() => {
     if (!ready || initializedRef.current) return;
     if (postId) {
       const post = posts.find((item) => item.id === postId);
       if (!post) {
-        Alert.alert('日记不存在', '它可能已经被删除。', [{ text: '返回', onPress: () => router.back() }]);
+        Alert.alert('日记不存在', '它可能已经被删除。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
         return;
       }
       initializedRef.current = true;
@@ -78,10 +89,14 @@ export default function EditorScreen() {
       initialLocationRef.current = post.locationName;
       setBody(post.bodyMarkdown);
       setLocationName(post.locationName);
-      setInitialized(true);
       void getPersonIdsByPost(post.id).then((ids) => {
         initialPersonIdsRef.current = ids;
         setSelectedPersonIds(ids);
+        setRelationsLoading(false);
+        setInitialized(true);
+      }).catch((cause: unknown) => {
+        setRelationsLoading(false);
+        Alert.alert('人物关联加载失败', cause instanceof Error ? cause.message : '请返回后重试。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
       });
       return;
     }
@@ -93,7 +108,10 @@ export default function EditorScreen() {
     void loadDraft(targetDay).then((draft) => {
       initialBodyRef.current = draft?.bodyMarkdown ?? '';
       setBody(draft?.bodyMarkdown ?? '');
+      setRelationsLoading(false);
       setInitialized(true);
+    }).catch((cause: unknown) => {
+      Alert.alert('草稿加载失败', cause instanceof Error ? cause.message : '请返回后重试。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
     });
   }, [getPersonIdsByPost, loadDraft, postId, posts, ready, router, targetDay, today, todayCheckIn]);
 
@@ -104,21 +122,42 @@ export default function EditorScreen() {
   }, [people, personId]);
 
   useEffect(() => {
-    if (postId || !body) return;
+    if (activeFormats.includes('table')) {
+      setShowMore(false);
+      setShowTextSize(false);
+    }
+  }, [activeFormats]);
+
+  useEffect(() => {
+    if (postId || !initialized || !bodyTouchedRef.current) return;
     setDraftStatus('保存中…');
-    const timer = setTimeout(() => {
-      void saveDraft(body, targetDay).then(() => setDraftStatus('刚刚已保存'));
+    draftTimerRef.current = setTimeout(() => {
+      const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(body, targetDay));
+      draftQueueRef.current = task;
+      pendingDraftSaveRef.current = task;
+      void task.then(() => {
+        if (pendingDraftSaveRef.current === task) setDraftStatus('刚刚已保存');
+      }).catch(() => {
+        if (pendingDraftSaveRef.current === task) setDraftStatus('草稿保存失败');
+      }).finally(() => {
+        if (pendingDraftSaveRef.current === task) pendingDraftSaveRef.current = null;
+      });
     }, 450);
-    return () => clearTimeout(timer);
-  }, [body, postId, saveDraft, targetDay]);
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    };
+  }, [body, initialized, postId, saveDraft, targetDay]);
 
   useEffect(() => navigation.addListener('beforeRemove', (event) => {
-    if (allowExitRef.current || (!recorderState.isRecording && !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current))) return;
-    event.preventDefault();
-    if (recorderState.isRecording) {
-      Alert.alert('正在录音', '停止录音后才能离开这条记录。');
+    if (allowExitRef.current) return;
+    if (editorBusy || recorderState.isRecording) {
+      event.preventDefault();
+      Alert.alert(recorderState.isRecording ? '正在录音' : '正在处理内容', recorderState.isRecording ? '停止录音后才能离开这条记录。' : '请等待当前操作完成后再离开。');
       return;
     }
+    if (!createdMediaRef.current.length && !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current)) return;
+    event.preventDefault();
     Alert.alert(
       postId ? '放弃这次修改？' : '先退出编写？',
       postId ? '尚未保存的修改会丢失。' : '正文会保留在本地草稿中，下次可以继续。',
@@ -128,18 +167,32 @@ export default function EditorScreen() {
           text: postId ? '放弃修改' : '退出，保留草稿',
           style: postId ? 'destructive' : 'default',
           onPress: () => {
-            allowExitRef.current = true;
             const leave = () => navigation.dispatch(event.data.action);
-            if (!postId && body) {
-              void saveDraft(body, targetDay).then(leave, leave);
-            } else if (postId && createdAudioRef.current.length) {
-              void Promise.all(createdAudioRef.current.map(discardMedia)).then(leave, leave);
-            } else leave();
+            if (!postId) {
+              const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(body, targetDay));
+              draftQueueRef.current = task;
+              void task.then(async () => {
+                const created = createdMediaRef.current;
+                createdMediaRef.current = [];
+                await Promise.all(created.map(discardMedia)).catch(() => undefined);
+                allowExitRef.current = true;
+                leave();
+              }).catch((cause: unknown) => {
+                Alert.alert('草稿保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
+              });
+              return;
+            }
+            const created = createdMediaRef.current;
+            createdMediaRef.current = [];
+            void Promise.all(created.map(discardMedia)).catch(() => undefined).then(() => {
+              allowExitRef.current = true;
+              leave();
+            });
           },
         },
       ],
     );
-  }), [body, discardMedia, locationName, navigation, postId, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
+  }), [body, discardMedia, editorBusy, locationName, navigation, postId, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
 
   const editorMedia = useMemo<EditorMediaSource[]>(() => {
     const ids = new Set(extractEmbeddedMediaIds(body));
@@ -147,12 +200,8 @@ export default function EditorScreen() {
   }, [body, media]);
 
   const handleBodyChange = (markdown: string) => {
+    bodyTouchedRef.current = true;
     setBody(markdown);
-    const referencedIds = new Set(extractEmbeddedMediaIds(markdown));
-    const removed = createdAudioRef.current.filter((item) => !referencedIds.has(item.id));
-    if (!removed.length) return;
-    createdAudioRef.current = createdAudioRef.current.filter((item) => referencedIds.has(item.id));
-    void Promise.all(removed.map(discardMedia));
   };
 
   const sendCommand = (type: EditorCommandType, value?: EditorCommand['value']) => {
@@ -160,8 +209,13 @@ export default function EditorScreen() {
     setCommand({ id: commandIdRef.current, type, value });
   };
 
+  const setTextSize = (type: 'paragraph' | 'heading1' | 'heading2' | 'heading3') => {
+    sendCommand(type);
+    setShowTextSize(false);
+  };
+
   const handleSave = async () => {
-    if (audioSaving) return;
+    if (editorBusy) return;
     const value = body.trim();
     if (!value) {
       Alert.alert('还没有内容', '写下一点内容或录一段语音后再记下。');
@@ -169,8 +223,14 @@ export default function EditorScreen() {
     }
     try {
       setSaving(true);
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+      await draftQueueRef.current.catch(() => undefined);
       if (postId) await updatePost(postId, value, selectedPersonIds, locationName);
       else await savePost(value, selectedPersonIds, targetDay, locationName);
+      const created = createdMediaRef.current;
+      createdMediaRef.current = [];
+      await Promise.all(created.map(discardMedia)).catch(() => undefined);
       allowExitRef.current = true;
       router.back();
     } catch (cause: unknown) {
@@ -199,7 +259,7 @@ export default function EditorScreen() {
   };
 
   const startRecording = async () => {
-    if (recorderState.isRecording || audioSaving) return;
+    if (editorBusy || recorderState.isRecording) return;
     if (Platform.OS === 'web') {
       Alert.alert('当前设备暂不支持', '请在 iOS 或 Android 客户端中录入语音。');
       return;
@@ -219,11 +279,14 @@ export default function EditorScreen() {
       importedAudio = item;
       await saveMedia(item);
       const durationMs = Math.max(recorderState.durationMillis, Math.round(audioRecorder.currentTime * 1000));
-      createdAudioRef.current = [...createdAudioRef.current, item];
+      createdMediaRef.current = [...createdMediaRef.current, item];
       sendCommand('audio', { durationMs, id: item.id, uri: await mediaDataUrl(item) });
       setDraftStatus('语音已保存到本机');
     } catch (cause: unknown) {
-      if (importedAudio) await discardMedia(importedAudio);
+      if (importedAudio) {
+        createdMediaRef.current = createdMediaRef.current.filter((item) => item.id !== importedAudio?.id);
+        await discardMedia(importedAudio).catch(() => undefined);
+      }
       sendCommand('recordingCancel');
       Alert.alert('语音保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
       setDraftStatus('本地草稿');
@@ -242,11 +305,16 @@ export default function EditorScreen() {
 
   const selectPerson = (person: { id: string; name: string }) => {
     const alreadySelected = selectedPersonIds.includes(person.id);
+    if (alreadySelected) {
+      setSelectedPersonIds((current) => current.filter((id) => id !== person.id));
+      setPersonPickerOpen(false);
+      return;
+    }
     if (!alreadySelected && selectedPersonIds.length >= 10) {
       Alert.alert('最多提及 10 个人物', '这条记录已经提及了 10 个人物。');
       return;
     }
-    if (!alreadySelected) setSelectedPersonIds((current) => [...current, person.id]);
+    setSelectedPersonIds((current) => [...current, person.id]);
     sendCommand('mention', person.name);
     setPersonPickerOpen(false);
   };
@@ -267,14 +335,69 @@ export default function EditorScreen() {
     }
   };
 
-  const handlePickImages = async () => {
-    const importedItems: Media[] = [];
+  const remainingImageSlots = () => {
     const currentCount = [...body.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].length;
     const remaining = 9 - currentCount;
     if (remaining <= 0) {
       Alert.alert('最多添加 9 张图片', '可以先删除一张，再添加新的图片。');
+      return 0;
+    }
+    return remaining;
+  };
+
+  const importPickedImages = async (assets: ImagePickerAsset[], limit: number) => {
+    const importedItems: Media[] = [];
+    try {
+      setMediaSaving(true);
+      setDraftStatus('正在保存图片…');
+      for (const asset of assets.slice(0, limit)) {
+        const item = await persistPickedImage(asset);
+        importedItems.push(item);
+        await saveMedia(item);
+        createdMediaRef.current = [...createdMediaRef.current, item];
+      }
+      const editorImages = await Promise.all(importedItems.map(async (item) => ({ id: item.id, uri: await mediaDataUrl(item), alt: '照片' })));
+      sendCommand('images', editorImages);
+      setDraftStatus('图片已保存到本机');
+    } catch (cause: unknown) {
+      await Promise.all(importedItems.map(discardMedia)).catch(() => undefined);
+      const failedIds = new Set(importedItems.map((item) => item.id));
+      createdMediaRef.current = createdMediaRef.current.filter((item) => !failedIds.has(item.id));
+      Alert.alert('图片保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
+      setDraftStatus('本地草稿');
+    } finally {
+      setMediaSaving(false);
+    }
+  };
+
+  const openImageSourcePicker = () => {
+    if (editorBusy || !remainingImageSlots()) return;
+    Keyboard.dismiss();
+    setImageSourcePickerOpen(true);
+  };
+
+  const handleTakePhoto = async () => {
+    setImageSourcePickerOpen(false);
+    if (editorBusy) return;
+    const remaining = remainingImageSlots();
+    if (!remaining) return;
+
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('无法使用相机', '请在系统设置中允许“仍在”使用相机。');
       return;
     }
+
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 });
+    if (result.canceled) return;
+    await importPickedImages(result.assets, remaining);
+  };
+
+  const handlePickImages = async () => {
+    setImageSourcePickerOpen(false);
+    if (editorBusy) return;
+    const remaining = remainingImageSlots();
+    if (!remaining) return;
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -289,25 +412,12 @@ export default function EditorScreen() {
       selectionLimit: remaining,
     });
     if (result.canceled) return;
-
-    try {
-      setDraftStatus('正在保存图片…');
-      for (const asset of result.assets.slice(0, remaining)) {
-        const item = await persistPickedImage(asset);
-        importedItems.push(item);
-        await saveMedia(item);
-      }
-      const editorImages = await Promise.all(importedItems.map(async (item) => ({ id: item.id, uri: await mediaDataUrl(item), alt: '照片' })));
-      sendCommand('images', editorImages);
-      setDraftStatus('图片已保存到本机');
-    } catch (cause: unknown) {
-      for (const item of importedItems) await discardMedia(item);
-      Alert.alert('图片保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
-      setDraftStatus('本地草稿');
-    }
+    await importPickedImages(result.assets, remaining);
   };
 
   const handleReplaceImage = async (mediaId: string) => {
+    if (editorBusy) return;
+    let replacement: Media | null = null;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('无法访问照片', '请在系统设置中允许“仍在”访问照片。');
@@ -316,13 +426,22 @@ export default function EditorScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     try {
+      setMediaSaving(true);
       setDraftStatus('正在替换图片…');
-      const replacement = await persistPickedImage(result.assets[0]);
-      await replaceMedia(mediaId, replacement);
+      replacement = await persistPickedImage(result.assets[0]);
+      await saveMedia(replacement);
+      createdMediaRef.current = [...createdMediaRef.current, replacement];
+      sendCommand('replaceImage', { ...replacement, alt: '照片', previousId: mediaId, uri: await mediaDataUrl(replacement) });
       setDraftStatus('图片已替换');
     } catch (cause: unknown) {
+      if (replacement) {
+        createdMediaRef.current = createdMediaRef.current.filter((item) => item.id !== replacement?.id);
+        await discardMedia(replacement).catch(() => undefined);
+      }
       Alert.alert('图片替换失败', cause instanceof Error ? cause.message : '请稍后重试。');
       setDraftStatus('本地草稿');
+    } finally {
+      setMediaSaving(false);
     }
   };
 
@@ -361,12 +480,19 @@ export default function EditorScreen() {
     setLocationPickerOpen(false);
   };
 
+  const confirmDeleteTable = () => {
+    Alert.alert('删除整个表格？', '表格中的全部内容都会被删除。', [
+      { text: '取消', style: 'cancel' },
+      { text: '删除表格', style: 'destructive', onPress: () => sendCommand('tableDelete') },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
           <View style={styles.headerSide}>
-            <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}>
+            <Pressable accessibilityLabel="返回" accessibilityRole="button" disabled={editorBusy} onPress={() => router.back()} style={[styles.headerButton, editorBusy && styles.disabledControl]}>
               <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
             </Pressable>
           </View>
@@ -374,8 +500,8 @@ export default function EditorScreen() {
             <Text style={styles.headerTitle}>{postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}</Text>
             <Text style={styles.statusText}>{headerSubtitle}</Text>
           </View>
-          <Pressable accessibilityRole="button" disabled={saving || audioSaving || recorderState.isRecording} onPress={() => void handleSave()} style={[styles.saveButton, (saving || audioSaving || recorderState.isRecording) && styles.saveButtonDisabled]}>
-            <Text style={styles.saveText}>{saving ? '保存中' : audioSaving ? '保存语音' : '完成'}</Text>
+          <Pressable accessibilityRole="button" disabled={editorBusy || recorderState.isRecording} onPress={() => void handleSave()} style={[styles.saveButton, (editorBusy || recorderState.isRecording) && styles.saveButtonDisabled]}>
+            <Text style={styles.saveText}>{saving ? '保存中' : mediaSaving ? '处理图片' : audioSaving ? '保存语音' : relationsLoading ? '加载中' : '完成'}</Text>
           </Pressable>
         </View>
 
@@ -383,6 +509,7 @@ export default function EditorScreen() {
           <RichTextEditor
             audioSaving={audioSaving}
             command={command}
+            disabled={editorBusy}
             dom={{ allowFileAccess: true, keyboardDisplayRequiresUserAction: false, style: styles.domEditor }}
             initialMarkdown={initialBodyRef.current}
             media={editorMedia}
@@ -398,7 +525,7 @@ export default function EditorScreen() {
           />
         ) : <View style={styles.domEditor} />}
 
-        <View style={styles.meta}>
+        <View pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.meta, editorBusy && styles.disabledControl]}>
           <Pressable accessibilityLabel={locationName ? `地点：${locationName}` : '添加地点'} accessibilityRole="button" onPress={openLocationPicker} style={({ pressed }) => [styles.locationButton, pressed && styles.locationButtonPressed]}>
             <SymbolView name={{ android: 'location_on', ios: 'mappin.and.ellipse', web: 'location_on' }} size={14} tintColor={locationName ? colors.life : colors.inkFaint} type="hierarchical" />
             <Text numberOfLines={1} style={[styles.locationButtonText, locationName && styles.locationButtonTextActive]}>{locationName ?? '所在位置'}</Text>
@@ -406,23 +533,40 @@ export default function EditorScreen() {
           <Text style={styles.metaText}>{markdownTextLength(body)} 字</Text>
         </View>
 
-        <View style={styles.toolbarStage}>
-          {showMore ? (
+        <View pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.toolbarStage, editorBusy && styles.disabledControl]}>
+          {activeFormats.includes('table') ? (
+            <View accessibilityLabel="表格操作" style={styles.tableContextBar}>
+              <TableActionButton androidIcon="add_row_below" icon="rectangle.split.1x2" label="添加行" text="+ 行" onPress={() => sendCommand('tableAddRow')} />
+              <TableActionButton androidIcon="remove" icon="minus" label="删除当前行" text="- 行" onPress={() => sendCommand('tableDeleteRow')} />
+              <TableActionButton androidIcon="add_column_right" icon="rectangle.split.2x1" label="添加列" text="+ 列" onPress={() => sendCommand('tableAddColumn')} />
+              <TableActionButton androidIcon="remove" icon="minus" label="删除当前列" text="- 列" onPress={() => sendCommand('tableDeleteColumn')} />
+              <TableActionButton androidIcon="delete" destructive icon="trash" label="删除整个表格" text="删除表格" onPress={confirmDeleteTable} />
+            </View>
+          ) : null}
+
+          {showTextSize && showMore && !activeFormats.includes('table') ? (
+            <View accessibilityLabel="字号选项" style={styles.tableContextBar}>
+              <TableActionButton active={activeFormats.includes('paragraph')} androidIcon="format_paragraph" icon="paragraphsign" label="正文" text="正文" onPress={() => setTextSize('paragraph')} />
+              <TableActionButton active={activeFormats.includes('heading1')} androidIcon="format_size" icon="textformat.size.larger" label="标题 1" text="标题 1" onPress={() => setTextSize('heading1')} />
+              <TableActionButton active={activeFormats.includes('heading2')} androidIcon="format_size" icon="textformat.size.larger" label="标题 2" text="标题 2" onPress={() => setTextSize('heading2')} />
+              <TableActionButton active={activeFormats.includes('heading3')} androidIcon="format_size" icon="textformat.size.larger" label="标题 3" text="标题 3" onPress={() => setTextSize('heading3')} />
+            </View>
+          ) : null}
+
+          {showMore && !activeFormats.includes('table') ? (
             <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.moreBar} contentContainerStyle={styles.expandedToolbarContent}>
               <ToolButton androidIcon="undo" icon="arrow.uturn.backward" label="撤销" onPress={() => sendCommand('undo')} />
               <ToolButton androidIcon="redo" icon="arrow.uturn.forward" label="重做" onPress={() => sendCommand('redo')} />
-              <ToolButton androidIcon="format_paragraph" icon="paragraphsign" label="正文" onPress={() => sendCommand('paragraph')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={22} label="标题 1" onPress={() => sendCommand('heading1')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={19} label="标题 2" onPress={() => sendCommand('heading2')} />
-              <ToolButton androidIcon="format_size" icon="textformat.size.larger" iconSize={17} label="标题 3" onPress={() => sendCommand('heading3')} />
+              <ToolButton active={showTextSize} androidIcon="format_size" icon="textformat.size.larger" label="字号" onPress={() => setShowTextSize((value) => !value)} />
               <ToolButton active={activeFormats.includes('italic')} androidIcon="format_italic" icon="italic" label="斜体" onPress={() => sendCommand('italic')} />
               <ToolButton active={activeFormats.includes('strikethrough')} androidIcon="format_strikethrough" icon="strikethrough" label="删除线" onPress={() => sendCommand('strikethrough')} />
               <ToolButton active={activeFormats.includes('inlineCode')} androidIcon="code" icon="chevron.left.forwardslash.chevron.right" label="行内代码" onPress={() => sendCommand('inlineCode')} />
               <ToolButton active={activeFormats.includes('quote')} androidIcon="format_quote" icon="text.quote" label="引用" onPress={() => sendCommand('quote')} />
               <ToolButton active={activeFormats.includes('orderedList')} androidIcon="format_list_numbered" icon="list.number" label="有序列表" onPress={() => sendCommand('orderedList')} />
-              <ToolButton androidIcon="checklist" icon="checklist" label="任务列表" onPress={() => sendCommand('taskList')} />
-              <ToolButton androidIcon="data_object" icon="curlybraces" label="代码块" onPress={() => sendCommand('codeBlock')} />
-              <ToolButton androidIcon="link" icon="link" label="链接" onPress={() => setLinkPickerOpen(true)} />
+              <ToolButton active={activeFormats.includes('taskList')} androidIcon="checklist" icon="checklist" label={activeFormats.includes('taskList') ? '取消工作事项' : '工作事项'} onPress={() => sendCommand('taskList')} />
+              <ToolButton active={activeFormats.includes('codeBlock')} androidIcon="data_object" icon="curlybraces" label="代码块" onPress={() => sendCommand('codeBlock')} />
+              <ToolButton active={activeFormats.includes('link')} androidIcon="link" icon="link" label={activeFormats.includes('link') ? '编辑链接' : '链接'} onPress={() => setLinkPickerOpen(true)} />
+              {activeFormats.includes('link') ? <ToolButton androidIcon="link" icon="link" label="取消链接" onPress={() => sendCommand('unlink')} /> : null}
               <ToolButton androidIcon="horizontal_rule" icon="minus" label="分隔线" onPress={() => sendCommand('horizontalRule')} />
               <ToolButton androidIcon="table" icon="tablecells" label="表格" onPress={() => sendCommand('table')} />
             </ScrollView>
@@ -432,11 +576,22 @@ export default function EditorScreen() {
             <ToolButton active={activeFormats.includes('bold')} androidIcon="format_bold" icon="bold" label="粗体" onPress={() => sendCommand('bold')} />
             <ToolButton active={activeFormats.includes('bulletList')} androidIcon="format_list_bulleted" icon="list.bullet" label="无序列表" onPress={() => sendCommand('bulletList')} />
             <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={openPersonPicker} />
-            <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={() => void handlePickImages()} />
+            <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={openImageSourcePicker} />
             <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />
-            <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => setShowMore((value) => !value)} />
+            <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => { setShowMore((value) => !value); setShowTextSize(false); }} />
           </ScrollView>
         </View>
+
+        <Modal animationType="slide" onRequestClose={() => setImageSourcePickerOpen(false)} transparent visible={imageSourcePickerOpen}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setImageSourcePickerOpen(false)}>
+            <Pressable accessibilityLabel="选择图片来源" accessibilityRole="menu" accessibilityViewIsModal style={styles.imageSourceSheet} onPress={(event) => event.stopPropagation()}>
+              <View style={styles.sheetHandle} />
+              <ImageSourceOption label="拍摄" onPress={() => void handleTakePhoto()} />
+              <ImageSourceOption label="从手机相册选择" onPress={() => void handlePickImages()} />
+              <Pressable accessibilityRole="button" onPress={() => setImageSourcePickerOpen(false)} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <Modal animationType="slide" onRequestClose={() => setPersonPickerOpen(false)} transparent visible={personPickerOpen}>
           <Pressable style={styles.modalBackdrop} onPress={() => setPersonPickerOpen(false)}>
@@ -445,18 +600,19 @@ export default function EditorScreen() {
               <View style={styles.personSheetHeader}>
                 <View>
                   <Text style={styles.personSheetTitle}>提到谁？</Text>
-                  <Text style={styles.personCount}>已提及 {selectedPersonIds.length} / 10</Text>
+                  <Text style={styles.personCount}>已关联 {selectedPersonIds.length} / 10</Text>
                 </View>
                 <Pressable accessibilityRole="button" onPress={() => setPersonPickerOpen(false)} style={styles.sheetClose}><Text style={styles.sheetCloseText}>完成</Text></Pressable>
               </View>
               <ScrollView style={styles.personList} keyboardShouldPersistTaps="handled">
-                {people.map((person) => (
-                  <Pressable key={person.id} accessibilityRole="button" onPress={() => selectPerson(person)} style={styles.personRow}>
+                {people.map((person) => {
+                  const selected = selectedPersonIds.includes(person.id);
+                  return <Pressable key={person.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => selectPerson(person)} style={styles.personRow}>
                     <View style={styles.avatar}><Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text></View>
                     <View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRelation}>{person.relationToMe ?? '还没有填写关系'}</Text></View>
-                    <Text style={styles.personSelect}>提到</Text>
-                  </Pressable>
-                ))}
+                    <Text style={[styles.personSelect, selected && styles.personSelected]}>{selected ? '取消关联' : '提到'}</Text>
+                  </Pressable>;
+                })}
               </ScrollView>
               <View style={styles.quickCreate}>
                 <TextInput onChangeText={setNewPersonName} onSubmitEditing={() => void handleCreatePerson()} placeholder="输入名字，快速创建人物" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.personInput} value={newPersonName} />
@@ -511,16 +667,34 @@ async function mediaDataUrl(item: Media): Promise<string> {
   return `data:${item.mimeType || 'application/octet-stream'};base64,${await readLocalFile(item.localPath)}`;
 }
 
-function ToolButton({ active = false, androidIcon, icon, iconSize = 21, label, onPress }: { active?: boolean; androidIcon: AndroidSymbol; icon: SFSymbol; iconSize?: number; label: string; onPress(): void }) {
+function TableActionButton({ active = false, androidIcon, destructive = false, icon, label, onPress, text }: { active?: boolean; androidIcon: AndroidSymbol; destructive?: boolean; icon: SFSymbol; label: string; onPress(): void; text: string }) {
+  const tintColor = destructive ? colors.danger : active ? colors.life : colors.inkSoft;
+  return (
+    <Pressable accessibilityLabel={label} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.tableAction, active && styles.tableActionActive, destructive && styles.tableActionDestructive, pressed && styles.tableActionPressed]}>
+      <SymbolView name={{ android: androidIcon, ios: icon, web: androidIcon }} size={15} tintColor={tintColor} type="hierarchical" />
+      <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={[styles.tableActionText, active && styles.tableActionTextActive, destructive && styles.tableActionTextDestructive]}>{text}</Text>
+    </Pressable>
+  );
+}
+
+function ToolButton({ active = false, androidIcon, destructive = false, icon, iconSize = 21, label, onPress }: { active?: boolean; androidIcon: AndroidSymbol; destructive?: boolean; icon: SFSymbol; iconSize?: number; label: string; onPress(): void }) {
   return (
     <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.toolButton, active && styles.toolButtonActive, pressed && styles.toolButtonPressed]}>
       <SymbolView
         animationSpec={active ? { effect: { type: 'scale' }, speed: 1.4 } : undefined}
         name={{ android: androidIcon, ios: icon, web: androidIcon }}
         size={iconSize}
-        tintColor={active ? colors.life : colors.inkSoft}
+        tintColor={destructive ? colors.danger : active ? colors.life : colors.inkSoft}
         type="hierarchical"
       />
+    </Pressable>
+  );
+}
+
+function ImageSourceOption({ label, onPress }: { label: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.imageSourceOption, pressed && styles.imageSourceOptionPressed]}>
+      <Text style={styles.imageSourceOptionText}>{label}</Text>
     </Pressable>
   );
 }
@@ -543,7 +717,7 @@ function validPastDay(value: string | undefined, today: DayKey): DayKey {
 }
 
 function hasUnsavedContent(body: string, postId: string | undefined, initialBody: string, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
-  if (!postId) return Boolean(body.trim());
+  if (!postId) return body !== initialBody || Boolean(body.trim());
   if (body !== initialBody) return true;
   if (locationName !== initialLocation) return true;
   return [...personIds].sort().join(',') !== [...initialPersonIds].sort().join(',');
@@ -551,6 +725,7 @@ function hasUnsavedContent(body: string, postId: string | undefined, initialBody
 
 function markdownTextLength(markdown: string): number {
   return markdown
+    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
     .replace(/\[[^\]]*\]\([^)]+\)/g, (value) => value.replace(/^\[|\]\([^)]+\)$/g, ''))
     .replace(/[#>*_~`|\[\]-]/g, '')
@@ -564,6 +739,7 @@ const styles = createThemedStyles(() => ({
   header: { minHeight: 62, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   headerSide: { width: 68 },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  disabledControl: { opacity: 0.55 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
   statusText: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
@@ -582,10 +758,24 @@ const styles = createThemedStyles(() => ({
   toolbarContent: { minWidth: '100%', paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 2 },
   moreBar: { flexGrow: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 23, backgroundColor: colors.toolbar, shadowColor: colors.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 12, elevation: 6 },
   expandedToolbarContent: { gap: 4, paddingHorizontal: 7, paddingVertical: 6 },
+  tableContextBar: { height: 50, padding: 3, flexDirection: 'row', alignItems: 'stretch', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.sm, backgroundColor: colors.toolbar, shadowColor: colors.ink, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
+  tableAction: { minWidth: 0, minHeight: 44, flex: 1, paddingHorizontal: 3, flexDirection: 'row', gap: 4, alignItems: 'center', justifyContent: 'center', borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.lineSoft },
+  tableActionActive: { backgroundColor: colors.lifeLight },
+  tableActionDestructive: { borderRightWidth: 0, backgroundColor: colors.dangerLight },
+  tableActionPressed: { backgroundColor: colors.paper },
+  tableActionText: { flexShrink: 1, color: colors.inkSoft, fontSize: 10, fontWeight: '700' },
+  tableActionTextActive: { color: colors.life },
+  tableActionTextDestructive: { color: colors.danger },
   toolButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
   toolButtonActive: { backgroundColor: colors.lifeLight },
   toolButtonPressed: { backgroundColor: colors.paper, transform: [{ scale: 0.92 }] },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },
+  imageSourceSheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  imageSourceOption: { minHeight: 60, alignItems: 'center', justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  imageSourceOptionPressed: { opacity: 0.58 },
+  imageSourceOptionText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
+  imageSourceCancel: { minHeight: 54, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
+  imageSourceCancelText: { color: colors.inkSoft, fontSize: 14, fontWeight: '600' },
   personSheet: { maxHeight: '72%', paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   locationSheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   locationSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 24 },
@@ -613,6 +803,7 @@ const styles = createThemedStyles(() => ({
   personName: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
   personRelation: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
   personSelect: { color: colors.life, fontSize: typography.size.meta },
+  personSelected: { color: colors.danger, fontWeight: '700' },
   quickCreate: { minHeight: 58, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
   personInput: { flex: 1, minHeight: 48, color: colors.ink, fontSize: 14 },
   createButton: { minWidth: 48, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },

@@ -1,5 +1,13 @@
 import type { EditorTheme } from './rich-text-editor.types';
 
+export function richTextSurfaceCss(theme: EditorTheme): string {
+  return `
+    .rich-text-surface { width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 19px; line-height: 1.85; }
+    ${richTextContentCss(theme)}
+    img { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
+  `;
+}
+
 export function richTextContentCss(theme: EditorTheme): string {
   return `
     p { margin: 0 0 0.85em; }
@@ -15,8 +23,9 @@ export function richTextContentCss(theme: EditorTheme): string {
     ul { list-style-type: disc; } ol { list-style-type: decimal; }
     li { margin: 0.34em 0; padding-left: 0.2em; }
     .task-list { padding-left: 0.25em; list-style: none; }
-    .task-list-item { list-style: none; }
-    input[type="checkbox"] { width: 18px; height: 18px; margin: 0 9px 0 0; vertical-align: -3px; accent-color: ${theme.life}; }
+    .task-list-item { position: relative; min-height: 1.85em; padding-left: 1.9em; list-style: none; }
+    .task-list-item::marker { content: ""; }
+    .task-list-item > input[type="checkbox"] { position: absolute; top: 0.45em; left: 0.2em; width: 18px; height: 18px; margin: 0; accent-color: ${theme.life}; }
     code { padding: 0.15em 0.36em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
     pre { overflow-x: auto; margin: 1.2em 0; padding: 15px 16px; border-radius: 14px; background: ${theme.codeBackground}; color: ${theme.codeForeground}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78em; line-height: 1.65; white-space: pre-wrap; }
     pre code { padding: 0; background: transparent; color: inherit; font-size: inherit; }

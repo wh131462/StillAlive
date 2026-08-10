@@ -1,45 +1,59 @@
 'use dom';
 
-import { useEffect } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { useEffect, useRef } from 'react';
 import type { DOMProps } from 'expo/dom';
 import type { EditorMediaSource, EditorTheme } from './rich-text-editor.types';
-import { richTextContentCss } from './rich-text-content-css';
+import { richTextSurfaceCss } from './rich-text-content-css';
+import { decorateRichTextContent, renderRichTextMarkdown, RICH_TEXT_MEDIA_ORIGIN } from './rich-text-markdown';
 
 interface MarkdownViewProps {
   markdown: string;
   maxHeight?: number;
   media: EditorMediaSource[];
+  onOverflowChange?(overflowed: boolean): void;
   onReady?(): void;
   theme: EditorTheme;
   dom?: DOMProps;
 }
 
-const MEDIA_ORIGIN = 'https://still-alive.local/media/';
-
-export default function MarkdownView({ markdown, maxHeight, media, onReady, theme }: MarkdownViewProps) {
-  const mediaSafeMarkdown = markdown.replace(
-    /!\[([^\]]*)\]\(media:\/\/([^)]+)\)/g,
-    (_match, alt: string, id: string) => `![${alt}](${MEDIA_ORIGIN}${encodeURIComponent(id)})`,
-  );
-  const html = DOMPurify.sanitize(marked.parse(mediaSafeMarkdown, { async: false, breaks: true, gfm: true }) as string, { USE_PROFILES: { html: true } });
+export default function MarkdownView({ markdown, maxHeight, media, onOverflowChange, onReady, theme }: MarkdownViewProps) {
+  const html = renderRichTextMarkdown(markdown);
+  const contentRef = useRef<HTMLElement | null>(null);
+  const overflowRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     void onReady?.();
   }, [html, onReady]);
 
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element || !onOverflowChange) return;
+    overflowRef.current = null;
+    const measure = () => {
+      const overflowed = maxHeight !== undefined && element.scrollHeight > element.clientHeight + 1;
+      if (overflowRef.current === overflowed) return;
+      overflowRef.current = overflowed;
+      onOverflowChange(overflowed);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    return () => observer?.disconnect();
+  }, [html, maxHeight, onOverflowChange]);
+
   return (
     <>
       <style>{viewCss(theme, maxHeight)}</style>
       <article
-        className="markdown"
+        className="markdown rich-text-surface"
         ref={(element) => {
           if (!element) return;
+          contentRef.current = element;
+          decorateRichTextContent(element, false);
           const mediaById = new Map(media.map((item) => [item.id, item.uri]));
           element.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
-            if (!image.src.startsWith(MEDIA_ORIGIN)) return;
-            const uri = mediaById.get(decodeURIComponent(image.src.slice(MEDIA_ORIGIN.length)));
+            if (!image.src.startsWith(RICH_TEXT_MEDIA_ORIGIN)) return;
+            const uri = mediaById.get(decodeURIComponent(image.src.slice(RICH_TEXT_MEDIA_ORIGIN.length)));
             if (uri) image.setAttribute('src', uri);
           });
         }}
@@ -54,7 +68,8 @@ const viewCss = (theme: EditorTheme, maxHeight?: number) => `
   * { box-sizing: border-box; }
   html, body, #root { width: 100%; margin: 0; background: transparent; }
   body { overflow: hidden; color: ${theme.ink}; -webkit-font-smoothing: antialiased; }
-  .markdown { width: 100%; ${maxHeight === undefined ? '' : `max-height: ${Math.max(0, maxHeight)}px; overflow: hidden;`} font-size: 19px; line-height: 1.85; }
-  ${richTextContentCss(theme)}
-  img { display: block; width: 100%; max-height: 560px; margin: 1.1em 0; border-radius: 4px; background: ${theme.lifeLight}; object-fit: cover; }
+  ${richTextSurfaceCss(theme)}
+  .markdown { ${maxHeight === undefined ? '' : `max-height: ${Math.max(0, maxHeight)}px; overflow: hidden;`} }
+  .markdown .task-list-item > input[type="checkbox"] { opacity: 1; pointer-events: none; }
+  .markdown img { margin: 1.2em 0; border-radius: 4px; }
 `;

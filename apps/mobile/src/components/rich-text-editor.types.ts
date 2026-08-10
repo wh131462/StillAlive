@@ -18,9 +18,16 @@ export type EditorCommandType =
   | 'taskList'
   | 'codeBlock'
   | 'link'
+  | 'unlink'
   | 'horizontalRule'
   | 'table'
+  | 'tableAddRow'
+  | 'tableDeleteRow'
+  | 'tableAddColumn'
+  | 'tableDeleteColumn'
+  | 'tableDelete'
   | 'images'
+  | 'replaceImage'
   | 'mention'
   | 'audio'
   | 'recordingStart'
@@ -38,10 +45,14 @@ export interface EditorAudio {
   uri: string;
 }
 
+export interface EditorImageReplacement extends EditorImage {
+  previousId: string;
+}
+
 export interface EditorCommand {
   id: number;
   type: EditorCommandType;
-  value?: string | EditorAudio | EditorImage[];
+  value?: string | EditorAudio | EditorImage[] | EditorImageReplacement;
 }
 
 export interface EditorMediaSource {

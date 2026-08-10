@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Alert, Image, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -291,6 +291,12 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
+  const [markdownOverflow, setMarkdownOverflow] = useState({ markdown: displayMarkdown, overflowed: false });
+  const markdownOverflowed = markdownOverflow.markdown === displayMarkdown && markdownOverflow.overflowed;
+  const hasHiddenContent = markdownOverflowed || images.length > 9 || audioEmbeds.length > 2;
+  const handleMarkdownOverflowChange = useCallback((overflowed: boolean) => {
+    setMarkdownOverflow((current) => current.markdown === displayMarkdown && current.overflowed === overflowed ? current : { markdown: displayMarkdown, overflowed });
+  }, [displayMarkdown]);
 
   return (
     <Pressable accessibilityLabel={`打开 ${post.dayKey} ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.postCard, pressed && styles.feedPressed]}>
@@ -300,12 +306,12 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
           <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
           {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
-        {displayMarkdown ? <View pointerEvents="none" style={styles.postMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }} markdown={displayMarkdown} maxHeight={POST_PREVIEW_MAX_HEIGHT} media={[]} theme={editorTheme()} /></View> : null}
+        {displayMarkdown ? <View pointerEvents="none" style={styles.postMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }} markdown={displayMarkdown} maxHeight={POST_PREVIEW_MAX_HEIGHT} media={[]} onOverflowChange={handleMarkdownOverflowChange} theme={editorTheme()} /></View> : null}
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
         {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
-        <View style={styles.postFooter}>
+        {hasHiddenContent ? <Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>更多</Text></Pressable> : null}
+        <View style={[styles.postFooter, hasHiddenContent && styles.postFooterAfterMore]}>
           <Text numberOfLines={1} style={styles.postTime}>{post.locationName ? `${post.locationName} · ` : ''}{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' · 修改过' : ''}</Text>
-          <Text numberOfLines={1} style={styles.postType}>{recordTypeLabel(images.length, mediaIds.length, audioEmbeds.map((item) => item.durationMs))}</Text>
         </View>
       </View>
     </Pressable>
@@ -365,7 +371,6 @@ function AudioPreviews({ audioEmbeds, mediaById }: { audioEmbeds: ReturnType<typ
           </View>
         </View>
       ))}
-      {audioEmbeds.length > visibleAudio.length ? <Text style={styles.audioMore}>还有 {audioEmbeds.length - visibleAudio.length} 段语音，进入详情查看</Text> : null}
     </View>
   );
 }
@@ -402,10 +407,6 @@ function birthdayPromptTitle(prompt: BirthdayPrompt): string {
   if (prompt.daysUntil === 0) return `今天是 ${prompt.person.name} 的生日`;
   if (prompt.daysUntil === 1) return `${prompt.person.name} 的生日就在明天`;
   return `${prompt.person.name} 的生日还有 ${prompt.daysUntil} 天`;
-}
-
-function recordTypeLabel(imageCount: number, totalImageCount: number, audioDurations: number[]): string {
-  return [imageCount ? `${totalImageCount} 张图片` : '', audioDurations.length ? audioDurations.length === 1 ? `语音 ${formatAudioDuration(audioDurations[0] ?? 0)}` : `${audioDurations.length} 段语音` : ''].filter(Boolean).join(' · ') || '文字记录';
 }
 
 function previewAspectRatio(media: Media): number {
@@ -583,10 +584,11 @@ const styles = createThemedStyles(() => ({
   audioMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   audioLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.7 },
   audioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
-  audioMore: { color: colors.inkFaint, fontSize: 9 },
+  postMoreButton: { minWidth: 64, minHeight: 44, marginTop: spacing.xs, alignSelf: 'flex-end', alignItems: 'flex-end', justifyContent: 'center' },
+  postMoreText: { color: colors.life, fontFamily: typography.mono, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
   postFooter: { marginTop: spacing.md },
+  postFooterAfterMore: { marginTop: 0 },
   postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
-  postType: { marginTop: 3, color: colors.inkFaint, fontSize: 8 },
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
   onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
   onboardingSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },

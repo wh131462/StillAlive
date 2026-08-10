@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import type { DOMProps } from 'expo/dom';
-import type { EditorAudio, EditorCommand, EditorImage, EditorMediaSource, EditorTheme } from './rich-text-editor.types';
-import { richTextContentCss } from './rich-text-content-css';
+import type { EditorAudio, EditorCommand, EditorImage, EditorImageReplacement, EditorMediaSource, EditorTheme } from './rich-text-editor.types';
+import { richTextSurfaceCss } from './rich-text-content-css';
+import { decorateRichTextContent, renderRichTextMarkdown, RICH_TEXT_AUDIO_ORIGIN, RICH_TEXT_MEDIA_ORIGIN } from './rich-text-markdown';
 import { createAudioEmbed, formatAudioDuration } from '../domain/embedded-media';
 
 interface RichTextEditorProps {
@@ -15,6 +15,7 @@ interface RichTextEditorProps {
   placeholder: string;
   command: EditorCommand | null;
   audioSaving: boolean;
+  disabled: boolean;
   media: EditorMediaSource[];
   recordingDurationMs: number | null;
   theme: EditorTheme;
@@ -27,14 +28,12 @@ interface RichTextEditorProps {
   dom?: DOMProps;
 }
 
-const MEDIA_ORIGIN = 'https://still-alive.local/media/';
-const AUDIO_ORIGIN = 'https://still-alive.local/audio/';
-
 export default function RichTextEditor({
   initialMarkdown,
   placeholder,
   command,
   audioSaving,
+  disabled,
   media,
   recordingDurationMs,
   theme,
@@ -51,13 +50,41 @@ export default function RichTextEditor({
   const lastCommandRef = useRef(0);
   const mediaRef = useRef<EditorMediaSource[]>([]);
   const mediaDataUrlCacheRef = useRef(new Map<string, string>());
+  const historyRef = useRef({ current: initialMarkdown, redo: [] as string[], undo: [] as string[] });
 
-  const initialHtml = useMemo(() => markdownToHtml(initialMarkdown), [initialMarkdown]);
+  const initialHtml = useMemo(() => renderRichTextMarkdown(initialMarkdown), [initialMarkdown]);
+
+  const commitEditorChange = (editor: HTMLDivElement) => {
+    const markdown = serializeMarkdown(editor);
+    const history = historyRef.current;
+    if (markdown !== history.current) {
+      history.undo.push(history.current);
+      if (history.undo.length > 100) history.undo.shift();
+      history.current = markdown;
+      history.redo = [];
+    }
+    onChange(markdown);
+  };
+
+  const restoreHistory = (editor: HTMLDivElement, direction: 'redo' | 'undo') => {
+    const history = historyRef.current;
+    const source = direction === 'undo' ? history.undo : history.redo;
+    const target = source.pop();
+    if (target === undefined) return;
+    const destination = direction === 'undo' ? history.redo : history.undo;
+    destination.push(history.current);
+    history.current = target;
+    editor.innerHTML = renderRichTextMarkdown(target);
+    decorateEditor(editor, mediaRef.current);
+    placeCursorAtEnd(editor);
+    onChange(target);
+  };
 
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
     editor.innerHTML = initialHtml;
+    historyRef.current = { current: initialMarkdown, redo: [], undo: [] };
     decorateEditor(editor, mediaRef.current);
     editor.focus();
     if (initialHtml) placeCursorAtEnd(editor);
@@ -94,10 +121,11 @@ export default function RichTextEditor({
     const editor = editorRef.current;
     if (!editor) return;
     restoreSelection(editor, savedRangeRef.current);
-    runCommand(editor, command);
+    if (command.type === 'undo' || command.type === 'redo') restoreHistory(editor, command.type);
+    else runCommand(editor, command);
     decorateEditor(editor, mediaRef.current);
     saveSelection(editor, savedRangeRef);
-    emitMarkdown(editor, onChange);
+    if (command.type !== 'undo' && command.type !== 'redo') commitEditorChange(editor);
     emitFormats(editor, onFormatsChange);
   }, [command, onChange, onFormatsChange]);
 
@@ -135,24 +163,25 @@ export default function RichTextEditor({
     }
     decorateEditor(editor, mediaRef.current);
     saveSelection(editor, savedRangeRef);
-    emitMarkdown(editor, onChange);
+    commitEditorChange(editor);
     if (nativeEvent.inputType === 'insertText' && nativeEvent.data === '@') onMention();
   };
 
   const handleCheckboxChange = () => {
     const editor = editorRef.current;
-    if (editor) emitMarkdown(editor, onChange);
+    if (editor) commitEditorChange(editor);
     pendingEmptyBlockRef.current = null;
   };
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const target = event.target instanceof Element ? event.target : null;
     const audioFrame = target?.closest<HTMLElement>('.audio-frame');
     if (audioFrame && target?.closest('.audio-remove')) {
       event.preventDefault();
       audioFrame.remove();
       ensureTrailingParagraph(event.currentTarget);
-      emitMarkdown(event.currentTarget, onChange);
+      commitEditorChange(event.currentTarget);
       return;
     }
     if (audioFrame && target?.closest('.audio-play')) {
@@ -168,8 +197,16 @@ export default function RichTextEditor({
       onStopRecording();
       return;
     }
-    const mediaId = target?.closest<HTMLElement>('.media-frame')?.dataset.mediaId;
-    if (mediaId) onReplaceImage(mediaId);
+    const mediaFrame = target?.closest<HTMLElement>('.media-frame');
+    if (mediaFrame && target?.closest('.media-remove')) {
+      event.preventDefault();
+      mediaFrame.remove();
+      ensureTrailingParagraph(event.currentTarget);
+      commitEditorChange(event.currentTarget);
+      return;
+    }
+    const mediaId = mediaFrame?.dataset.mediaId;
+    if (mediaId && target?.closest('.media-replace')) onReplaceImage(mediaId);
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -183,7 +220,7 @@ export default function RichTextEditor({
     pendingEmptyBlockRef.current = null;
     decorateEditor(editor, mediaRef.current);
     saveSelection(editor, savedRangeRef);
-    emitMarkdown(editor, onChange);
+    commitEditorChange(editor);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -204,7 +241,7 @@ export default function RichTextEditor({
       }
       decorateEditor(editor, mediaRef.current);
       saveSelection(editor, savedRangeRef);
-      emitMarkdown(editor, onChange);
+      commitEditorChange(editor);
       return;
     }
 
@@ -218,7 +255,7 @@ export default function RichTextEditor({
         pendingEmptyBlockRef.current = null;
         tableCell.innerHTML = '';
         exitBlock(table, null, true);
-        emitMarkdown(editor, onChange);
+        commitEditorChange(editor);
       } else {
         pendingEmptyBlockRef.current = tableCell;
       }
@@ -233,7 +270,7 @@ export default function RichTextEditor({
     if (quote && quoteLineIsEmpty) {
       event.preventDefault();
       exitBlock(quote, quoteLine && quoteLine !== editor ? quoteLine : null);
-      emitMarkdown(editor, onChange);
+      commitEditorChange(editor);
       return;
     }
 
@@ -242,7 +279,7 @@ export default function RichTextEditor({
     if (listItem && list && listItem === list.lastElementChild && !listItem.textContent?.trim()) {
       event.preventDefault();
       exitBlock(list, listItem);
-      emitMarkdown(editor, onChange);
+      commitEditorChange(editor);
       return;
     }
 
@@ -251,7 +288,7 @@ export default function RichTextEditor({
       event.preventDefault();
       pre.textContent = pre.textContent?.replace(/\n+$/, '') ?? '';
       exitBlock(pre);
-      emitMarkdown(editor, onChange);
+      commitEditorChange(editor);
     }
   };
 
@@ -262,14 +299,16 @@ export default function RichTextEditor({
         <div
           ref={editorRef}
           aria-label="正文编辑器"
-          className="editor"
-          contentEditable
+          className="editor rich-text-surface"
+          aria-disabled={disabled}
+          aria-multiline="true"
+          contentEditable={!disabled}
           data-placeholder={placeholder}
-          onChange={handleCheckboxChange}
+          onChange={disabled ? undefined : handleCheckboxChange}
           onClick={handleClick}
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
+          onInput={disabled ? undefined : handleInput}
+          onKeyDown={disabled ? undefined : handleKeyDown}
+          onPaste={disabled ? undefined : handlePaste}
           role="textbox"
           suppressContentEditableWarning
         />
@@ -280,19 +319,6 @@ export default function RichTextEditor({
 
 const WAVE_HEIGHTS = [10, 16, 24, 15, 30, 19, 12, 27, 17, 32, 21, 14, 25, 18, 11, 22, 29, 16];
 
-function markdownToHtml(markdown: string): string {
-  const audioSafeMarkdown = markdown.replace(
-    /!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g,
-    (_match, id: string, duration: string | undefined) => `![语音](${AUDIO_ORIGIN}${encodeURIComponent(id)}?duration=${Number(duration ?? 0)})`,
-  );
-  const mediaSafeMarkdown = audioSafeMarkdown.replace(
-    /!\[([^\]]*)\]\(media:\/\/([^)]+)\)/g,
-    (_match, alt: string, id: string) => `![${alt}](${MEDIA_ORIGIN}${encodeURIComponent(id)})`,
-  );
-  const html = marked.parse(mediaSafeMarkdown, { async: false, breaks: true, gfm: true }) as string;
-  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-}
-
 function createTurndownService(): TurndownService {
   const service = new TurndownService({
     bulletListMarker: '-',
@@ -302,6 +328,25 @@ function createTurndownService(): TurndownService {
     strongDelimiter: '**',
   });
   service.use(gfm);
+  service.addRule('taskCheckbox', {
+    filter: (node) => node.nodeName === 'INPUT' && (node as HTMLInputElement).type === 'checkbox' && node.parentElement?.nodeName === 'LI',
+    replacement: (_content, node) => {
+      const marker = (node as HTMLInputElement).checked ? '[x]' : '[ ]';
+      return node.parentElement?.textContent?.trim() ? `${marker} ` : `${marker} <!-- -->`;
+    },
+  });
+  service.addRule('emptyTaskBreak', {
+    filter: (node) => node.nodeName === 'BR' && Boolean(node.parentElement?.matches('li.task-list-item')) && !node.parentElement?.textContent?.trim(),
+    replacement: () => '',
+  });
+  service.addRule('tableCellBreak', {
+    filter: (node) => node.nodeName === 'BR' && Boolean(node.parentElement?.matches('td, th')),
+    replacement: () => '',
+  });
+  service.addRule('editorControls', {
+    filter: (node) => node.nodeName === 'SPAN' && node.classList.contains('media-actions'),
+    replacement: () => '',
+  });
   service.addRule('localAudio', {
     filter: (node) => node.nodeName === 'FIGURE' && Boolean(node.getAttribute('data-audio-id')),
     replacement: (_content, node) => createAudioEmbed(node.getAttribute('data-audio-id') ?? '', Number(node.getAttribute('data-duration-ms') ?? 0)),
@@ -323,21 +368,16 @@ function createTurndownService(): TurndownService {
 
 const turndownService = createTurndownService();
 
-function emitMarkdown(editor: HTMLDivElement, onChange: (markdown: string) => void) {
-  const markdown = turndownService.turndown(editor).replace(/\n{3,}/g, '\n\n').trim();
-  onChange(markdown);
+function serializeMarkdown(editor: HTMLDivElement): string {
+  return turndownService.turndown(editor).replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
   const mediaById = new Map(media.map((item) => [item.id, item.uri]));
-  editor.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((checkbox) => {
-    checkbox.disabled = false;
-    checkbox.contentEditable = 'false';
-    checkbox.parentElement?.classList.add('task-list-item');
-    checkbox.closest('ul')?.classList.add('task-list');
-  });
+  decorateRichTextContent(editor, true);
+  editor.querySelectorAll<HTMLLIElement>('li.task-list-item').forEach(ensureEmptyTaskItemAnchor);
   editor.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
-    if (image.src.startsWith(AUDIO_ORIGIN)) {
+    if (image.src.startsWith(RICH_TEXT_AUDIO_ORIGIN)) {
       const url = new URL(image.src);
       const id = decodeURIComponent(url.pathname.slice(url.pathname.lastIndexOf('/') + 1));
       const frame = createAudioFrame({ durationMs: Number(url.searchParams.get('duration') ?? 0), id, uri: mediaById.get(id) ?? '' });
@@ -346,7 +386,7 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
       else image.replaceWith(frame);
       return;
     }
-    const encodedId = image.src.startsWith(MEDIA_ORIGIN) ? image.src.slice(MEDIA_ORIGIN.length) : null;
+    const encodedId = image.src.startsWith(RICH_TEXT_MEDIA_ORIGIN) ? image.src.slice(RICH_TEXT_MEDIA_ORIGIN.length) : null;
     const id = image.dataset.mediaId ?? (encodedId ? decodeURIComponent(encodedId) : null);
     if (!id) return;
     image.dataset.mediaId = id;
@@ -362,6 +402,13 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
       frame.classList.add('media-frame');
     }
     frame.dataset.mediaId = id;
+    if (!frame.querySelector('.media-actions')) {
+      const actions = document.createElement('span');
+      actions.className = 'media-actions';
+      actions.contentEditable = 'false';
+      actions.innerHTML = '<button class="media-replace" type="button">替换</button><button class="media-remove" type="button">删除</button>';
+      frame.append(actions);
+    }
     image.onload = () => frame?.classList.remove('is-media-error');
     image.onerror = () => frame?.classList.add('is-media-error');
     const uri = mediaById.get(id);
@@ -370,7 +417,7 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
       const shouldRetry = image.complete && image.naturalWidth === 0;
       frame?.classList.remove('is-media-error');
       if (source !== uri || shouldRetry) image.setAttribute('src', uri);
-    } else if (source.startsWith(MEDIA_ORIGIN)) {
+    } else if (source.startsWith(RICH_TEXT_MEDIA_ORIGIN)) {
       frame?.classList.add('is-media-error');
     }
   });
@@ -467,27 +514,42 @@ function runCommand(editor: HTMLDivElement, command: EditorCommand) {
     case 'bold': document.execCommand('bold'); break;
     case 'italic': document.execCommand('italic'); break;
     case 'strikethrough': document.execCommand('strikeThrough'); break;
-    case 'inlineCode': wrapSelection('code'); break;
-    case 'quote': document.execCommand('formatBlock', false, 'blockquote'); break;
+    case 'inlineCode': toggleInlineCode(); break;
+    case 'quote': toggleQuote(); break;
     case 'bulletList': document.execCommand('insertUnorderedList'); break;
     case 'orderedList': document.execCommand('insertOrderedList'); break;
-    case 'taskList': insertHtml('<ul class="task-list"><li class="task-list-item"><input type="checkbox"> 待办事项</li></ul><p><br></p>'); break;
+    case 'taskList': toggleTaskList(); break;
     case 'codeBlock': {
       const selection = window.getSelection();
       const anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement;
-      if (!anchor?.closest('pre')) document.execCommand('formatBlock', false, 'pre');
+      const pre = anchor?.closest('pre');
+      if (pre) {
+        const paragraph = document.createElement('p');
+        paragraph.textContent = pre.textContent ?? '';
+        pre.replaceWith(paragraph);
+        placeCursorAtEnd(paragraph);
+      } else document.execCommand('formatBlock', false, 'pre');
       break;
     }
     case 'link':
       if (typeof command.value === 'string') insertLink(command.value);
       break;
+    case 'unlink': document.execCommand('unlink'); break;
     case 'horizontalRule': document.execCommand('insertHorizontalRule'); break;
     case 'table': insertTable(); break;
+    case 'tableAddRow': addTableRow(editor); break;
+    case 'tableDeleteRow': deleteTableRow(editor); break;
+    case 'tableAddColumn': addTableColumn(editor); break;
+    case 'tableDeleteColumn': deleteTableColumn(editor); break;
+    case 'tableDelete': deleteSelectedTable(editor); break;
     case 'images':
       if (Array.isArray(command.value)) insertImages(command.value);
       break;
+    case 'replaceImage':
+      if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'previousId' in command.value) replaceImage(editor, command.value);
+      break;
     case 'audio':
-      if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'id' in command.value) insertAudio(editor, command.value);
+      if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'durationMs' in command.value) insertAudio(editor, command.value);
       break;
     case 'recordingStart': insertRecordingFrame(); break;
     case 'recordingCancel': editor.querySelector('.audio-recording-frame')?.remove(); break;
@@ -497,15 +559,21 @@ function runCommand(editor: HTMLDivElement, command: EditorCommand) {
   }
 }
 
-function wrapSelection(tagName: 'code') {
+function toggleInlineCode() {
   const selection = window.getSelection();
   if (!selection?.rangeCount) return;
   const range = selection.getRangeAt(0);
   const anchor = range.commonAncestorContainer instanceof Element
     ? range.commonAncestorContainer
     : range.commonAncestorContainer.parentElement;
-  if (anchor?.closest(tagName)) return;
-  const element = document.createElement(tagName);
+  const existing = anchor?.closest('code');
+  if (existing) {
+    const lastChild = existing.lastChild;
+    existing.replaceWith(...existing.childNodes);
+    if (lastChild) placeCursorAtEnd(lastChild);
+    return;
+  }
+  const element = document.createElement('code');
   if (range.collapsed) element.textContent = '代码';
   else element.append(range.extractContents());
   range.insertNode(element);
@@ -514,8 +582,81 @@ function wrapSelection(tagName: 'code') {
   selection.addRange(range);
 }
 
+function toggleQuote() {
+  const selection = window.getSelection();
+  const anchor = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement;
+  const quote = anchor?.closest('blockquote');
+  if (!quote) {
+    document.execCommand('formatBlock', false, 'blockquote');
+    return;
+  }
+  const lastChild = quote.lastChild;
+  quote.replaceWith(...quote.childNodes);
+  if (lastChild) placeCursorAtEnd(lastChild);
+}
+
 function insertHtml(html: string) {
   document.execCommand('insertHTML', false, html);
+}
+
+function toggleTaskList() {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const anchor = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const taskItem = anchor?.closest('li.task-list-item') as HTMLLIElement | null;
+  if (taskItem) {
+    convertTaskItemToParagraph(taskItem);
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'task-list';
+  const item = document.createElement('li');
+  item.className = 'task-list-item';
+  const selectedContent = range.extractContents();
+  item.append(createTaskCheckbox(), selectedContent);
+  ensureEmptyTaskItemAnchor(item);
+  list.append(item);
+  const paragraph = document.createElement('p');
+  paragraph.append(document.createElement('br'));
+  const fragment = document.createDocumentFragment();
+  fragment.append(list, paragraph);
+  range.insertNode(fragment);
+  placeCursorInTaskItem(item, 'end');
+}
+
+function convertTaskItemToParagraph(taskItem: HTMLLIElement) {
+  const list = taskItem.closest('ul.task-list');
+  if (!list) return;
+  const paragraph = document.createElement('p');
+  const checkbox = taskItem.firstElementChild?.matches('input[type="checkbox"]') ? taskItem.firstElementChild : null;
+  checkbox?.remove();
+  const first = taskItem.firstChild;
+  if (first?.nodeType === Node.TEXT_NODE) {
+    first.textContent = (first.textContent ?? '').replace(/^\s/, '');
+    if (!first.textContent) first.remove();
+  }
+  paragraph.append(...taskItem.childNodes);
+  if (!paragraph.hasChildNodes()) paragraph.append(document.createElement('br'));
+
+  const items = Array.from(list.children);
+  const itemIndex = items.indexOf(taskItem);
+  const nextItems = items.slice(itemIndex + 1);
+  if (nextItems.length) {
+    const trailingList = list.cloneNode(false) as HTMLUListElement;
+    trailingList.append(...nextItems);
+    if (itemIndex > 0) {
+      taskItem.remove();
+      list.after(paragraph, trailingList);
+    } else list.replaceWith(paragraph, trailingList);
+  } else if (itemIndex > 0) {
+    taskItem.remove();
+    list.after(paragraph);
+  } else {
+    list.replaceWith(paragraph);
+  }
+  placeCursorAtEnd(paragraph);
 }
 
 function insertTaskListItem(taskItem: HTMLLIElement, selection: Selection) {
@@ -527,24 +668,72 @@ function insertTaskListItem(taskItem: HTMLLIElement, selection: Selection) {
 
   const nextItem = document.createElement('li');
   nextItem.className = 'task-list-item';
+  tail.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.remove());
+  nextItem.append(createTaskCheckbox(), tail);
+  ensureEmptyTaskItemAnchor(nextItem);
+  taskItem.parentElement?.insertBefore(nextItem, taskItem.nextSibling);
+  placeCursorInTaskItem(nextItem, 'start');
+}
+
+function createTaskCheckbox(): HTMLInputElement {
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.contentEditable = 'false';
-  nextItem.append(checkbox, document.createTextNode(' '), tail);
-  taskItem.parentElement?.insertBefore(nextItem, taskItem.nextSibling);
+  return checkbox;
+}
 
-  const cursorText = nextItem.childNodes[1];
-  const cursor = document.createRange();
-  cursor.setStart(cursorText, cursorText.textContent?.length ?? 0);
-  cursor.collapse(true);
+function ensureEmptyTaskItemAnchor(taskItem: HTMLLIElement) {
+  const hasContent = Array.from(taskItem.childNodes).some((node) => {
+    if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim());
+    return node instanceof Element && !node.matches('input[type="checkbox"], br');
+  });
+  if (hasContent) return;
+  Array.from(taskItem.childNodes).forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE && !node.textContent?.trim()) node.remove();
+  });
+  if (!taskItem.querySelector('br')) taskItem.append(document.createElement('br'));
+}
+
+function placeCursorInTaskItem(taskItem: HTMLLIElement, edge: 'end' | 'start') {
+  const walker = document.createTreeWalker(taskItem, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let current = walker.nextNode();
+  while (current) {
+    if (current.textContent?.trim()) textNodes.push(current as Text);
+    current = walker.nextNode();
+  }
+
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  const textNode = edge === 'start' ? textNodes[0] : textNodes[textNodes.length - 1];
+  if (textNode) {
+    const offset = edge === 'start'
+      ? textNode.data.length - textNode.data.trimStart().length
+      : textNode.data.length;
+    range.setStart(textNode, offset);
+  } else {
+    ensureEmptyTaskItemAnchor(taskItem);
+    const anchor = taskItem.querySelector('br');
+    if (!anchor) return;
+    range.setStartBefore(anchor);
+  }
+  range.collapse(true);
   selection.removeAllRanges();
-  selection.addRange(cursor);
+  selection.addRange(range);
 }
 
 function insertLink(url: string) {
   const selection = window.getSelection();
   if (!selection?.rangeCount) return;
   const range = selection.getRangeAt(0);
+  const anchor = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const existing = anchor?.closest('a') as HTMLAnchorElement | null;
+  if (existing) {
+    existing.href = url;
+    placeCursorAtEnd(existing);
+    return;
+  }
   if (!range.collapsed) {
     document.execCommand('createLink', false, url);
     return;
@@ -559,8 +748,142 @@ function insertLink(url: string) {
   selection.addRange(range);
 }
 
+function replaceImage(editor: HTMLDivElement, replacement: EditorImageReplacement) {
+  const image = Array.from(editor.querySelectorAll<HTMLImageElement>('img[data-media-id]'))
+    .find((candidate) => candidate.dataset.mediaId === replacement.previousId);
+  if (!image) return;
+  image.dataset.mediaId = replacement.id;
+  image.src = replacement.uri;
+  image.alt = replacement.alt;
+  const frame = image.closest<HTMLElement>('.media-frame');
+  if (frame) frame.dataset.mediaId = replacement.id;
+}
+
 function insertTable() {
-  insertHtml('<table><thead><tr><th>标题</th><th>标题</th><th>标题</th></tr></thead><tbody><tr><td>内容</td><td>内容</td><td>内容</td></tr><tr><td>内容</td><td>内容</td><td>内容</td></tr></tbody></table><p><br></p>');
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  const table = document.createElement('table');
+  const headerRow = table.createTHead().insertRow();
+  const body = table.createTBody();
+  for (let column = 0; column < 3; column += 1) headerRow.append(createEmptyTableCell('th'));
+  for (let row = 0; row < 2; row += 1) {
+    const bodyRow = body.insertRow();
+    for (let column = 0; column < 3; column += 1) bodyRow.append(createEmptyTableCell('td'));
+  }
+  const paragraph = document.createElement('p');
+  paragraph.append(document.createElement('br'));
+  const fragment = document.createDocumentFragment();
+  fragment.append(table, paragraph);
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(fragment);
+  placeCursorAtStart(headerRow.cells[0]);
+}
+
+function addTableRow(editor: HTMLDivElement) {
+  const cell = selectedTableCell(editor);
+  const row = cell?.parentElement as HTMLTableRowElement | null;
+  const table = row?.closest('table') as HTMLTableElement | null;
+  if (!cell || !row || !table) return;
+  const columnCount = Math.max(...Array.from(table.rows, (item) => item.cells.length));
+  let nextRow: HTMLTableRowElement;
+  if (row.parentElement?.tagName === 'THEAD') {
+    nextRow = (table.tBodies[0] ?? table.createTBody()).insertRow(0);
+  } else {
+    const section = row.parentElement as HTMLTableSectionElement;
+    nextRow = section.insertRow(Array.from(section.rows).indexOf(row) + 1);
+  }
+  for (let column = 0; column < columnCount; column += 1) nextRow.append(createEmptyTableCell('td'));
+  placeCursorAtStart(nextRow.cells[Math.min(cell.cellIndex, columnCount - 1)]);
+}
+
+function deleteTableRow(editor: HTMLDivElement) {
+  const cell = selectedTableCell(editor);
+  const row = cell?.parentElement as HTMLTableRowElement | null;
+  const table = row?.closest('table') as HTMLTableElement | null;
+  if (!cell || !row || !table) return;
+  if (table.rows.length === 1) {
+    removeTable(table);
+    return;
+  }
+  const rowIndex = row.rowIndex;
+  const columnIndex = cell.cellIndex;
+  const removedHeader = row.parentElement?.tagName === 'THEAD';
+  row.remove();
+  if (removedHeader) promoteFirstTableRow(table);
+  const targetRow = table.rows[Math.min(rowIndex, table.rows.length - 1)];
+  placeCursorAtStart(targetRow.cells[Math.min(columnIndex, targetRow.cells.length - 1)]);
+}
+
+function addTableColumn(editor: HTMLDivElement) {
+  const cell = selectedTableCell(editor);
+  const table = cell?.closest('table') as HTMLTableElement | null;
+  if (!cell || !table) return;
+  const columnIndex = cell.cellIndex + 1;
+  let selectedCell: HTMLTableCellElement | null = null;
+  for (const row of Array.from(table.rows)) {
+    const nextCell = createEmptyTableCell(row.parentElement?.tagName === 'THEAD' ? 'th' : 'td');
+    row.insertBefore(nextCell, row.cells[columnIndex] ?? null);
+    if (row === cell.parentElement) selectedCell = nextCell;
+  }
+  if (selectedCell) placeCursorAtStart(selectedCell);
+}
+
+function deleteTableColumn(editor: HTMLDivElement) {
+  const cell = selectedTableCell(editor);
+  const table = cell?.closest('table') as HTMLTableElement | null;
+  if (!cell || !table) return;
+  const columnIndex = cell.cellIndex;
+  if (Math.max(...Array.from(table.rows, (row) => row.cells.length)) === 1) {
+    removeTable(table);
+    return;
+  }
+  const rowIndex = (cell.parentElement as HTMLTableRowElement).rowIndex;
+  for (const row of Array.from(table.rows)) if (row.cells[columnIndex]) row.deleteCell(columnIndex);
+  const targetRow = table.rows[rowIndex];
+  const targetCell = targetRow?.cells[Math.min(columnIndex, targetRow.cells.length - 1)]
+    ?? Array.from(table.rows).find((row) => row.cells.length)?.cells[0];
+  if (targetCell) placeCursorAtStart(targetCell);
+}
+
+function deleteSelectedTable(editor: HTMLDivElement) {
+  const table = selectedTableCell(editor)?.closest('table') as HTMLTableElement | null;
+  if (table) removeTable(table);
+}
+
+function selectedTableCell(editor: HTMLDivElement): HTMLTableCellElement | null {
+  const selection = window.getSelection();
+  const element = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement;
+  const cell = element?.closest('td, th') as HTMLTableCellElement | null;
+  return cell && editor.contains(cell) ? cell : null;
+}
+
+function createEmptyTableCell(tagName: 'td' | 'th'): HTMLTableCellElement {
+  const cell = document.createElement(tagName);
+  cell.append(document.createElement('br'));
+  return cell;
+}
+
+function promoteFirstTableRow(table: HTMLTableElement) {
+  const row = table.rows[0];
+  if (!row) return;
+  const head = table.tHead ?? table.createTHead();
+  head.append(row);
+  for (const cell of Array.from(row.cells)) {
+    if (cell.tagName === 'TH') continue;
+    const header = document.createElement('th');
+    while (cell.firstChild) header.append(cell.firstChild);
+    cell.replaceWith(header);
+  }
+}
+
+function removeTable(table: HTMLTableElement) {
+  const next = table.nextElementSibling;
+  const paragraph = next?.tagName === 'P' ? next as HTMLElement : document.createElement('p');
+  if (!paragraph.hasChildNodes()) paragraph.append(document.createElement('br'));
+  if (!paragraph.parentElement) table.after(paragraph);
+  table.remove();
+  placeCursorAtStart(paragraph);
 }
 
 function insertImages(images: EditorImage[]) {
@@ -722,14 +1045,24 @@ function emitFormats(editor: HTMLDivElement, onFormatsChange: (formats: string[]
   const selection = window.getSelection();
   if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return;
   const formats: string[] = [];
+  const element = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+  const taskItem = element?.closest('li.task-list-item');
   if (document.queryCommandState('bold')) formats.push('bold');
   if (document.queryCommandState('italic')) formats.push('italic');
   if (document.queryCommandState('strikeThrough')) formats.push('strikethrough');
-  if (document.queryCommandState('insertUnorderedList')) formats.push('bulletList');
+  if (document.queryCommandState('insertUnorderedList') && !taskItem) formats.push('bulletList');
   if (document.queryCommandState('insertOrderedList')) formats.push('orderedList');
-  const element = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+  if (taskItem) formats.push('taskList');
   if (element?.closest('code')) formats.push('inlineCode');
   if (element?.closest('blockquote')) formats.push('quote');
+  if (element?.closest('pre')) formats.push('codeBlock');
+  if (element?.closest('a')) formats.push('link');
+  if (element?.closest('table')) formats.push('table');
+  const textBlock = element?.closest('p, h1, h2, h3');
+  if (textBlock?.tagName === 'P') formats.push('paragraph');
+  if (textBlock?.tagName === 'H1') formats.push('heading1');
+  if (textBlock?.tagName === 'H2') formats.push('heading2');
+  if (textBlock?.tagName === 'H3') formats.push('heading3');
   onFormatsChange(formats);
 }
 
@@ -739,17 +1072,19 @@ const editorCss = (theme: EditorTheme) => `
   html, body, #root { min-height: 100%; margin: 0; background: transparent; }
   body { overflow-y: auto; color: ${theme.ink}; -webkit-font-smoothing: antialiased; }
   .editor-shell { width: 100%; min-height: 100%; padding: 10px 22px 44px; }
-  .editor { position: relative; width: 100%; min-height: calc(100vh - 54px); outline: none; font-size: 19px; line-height: 1.85; caret-color: ${theme.life}; }
+  .editor { position: relative; min-height: calc(100vh - 54px); outline: none; caret-color: ${theme.life}; }
+  .editor[aria-disabled="true"] { opacity: 0.72; }
   .editor:empty::before { position: absolute; inset: 0 auto auto 0; content: attr(data-placeholder); color: ${theme.inkFaint}; line-height: inherit; white-space: pre-line; pointer-events: none; }
-  ${richTextContentCss(theme)}
+  ${richTextSurfaceCss(theme)}
   figure { margin: 1.2em 0; }
   .media-frame { display: block; position: relative; overflow: hidden; margin: 1.2em 0; border-radius: 4px; cursor: pointer; }
-  .media-frame::after { position: absolute; top: 10px; right: 10px; content: "轻触替换"; padding: 5px 8px; border-radius: 11px; background: ${theme.overlay}; color: ${theme.codeForeground}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10px; line-height: 1.2; pointer-events: none; }
+  .media-actions { position: absolute; top: 10px; right: 10px; display: flex; overflow: hidden; border-radius: 4px; background: ${theme.overlay}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
+  .media-actions button { min-width: 56px; height: 44px; padding: 0 10px; border: 0; background: transparent; color: ${theme.codeForeground}; font: inherit; font-size: 11px; }
+  .media-actions button + button { border-left: 1px solid rgba(255, 255, 255, 0.28); }
+  .media-actions .media-remove { color: #fff2ef; }
   .media-frame.is-media-error { min-height: 220px; border: 1px solid ${theme.line}; background: ${theme.paper}; }
   .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "图片暂时无法显示 轻触替换"; color: ${theme.inkSoft}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
-  .media-frame.is-media-error::after { display: none; }
   .media-frame.is-media-error img { visibility: hidden; }
-  img { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
   .mention { padding: 0.08em 0.22em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; }
   .audio-frame, .audio-recording-frame { min-height: 72px; display: flex; align-items: center; margin: 1.25em 0; padding: 14px; border-radius: 4px 22px 4px 22px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
   .audio-frame { background: ${theme.lifeLight}; }
