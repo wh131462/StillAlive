@@ -8,7 +8,7 @@ import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, St
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
 import { persistPickedImage } from '../../src/data/local-media';
-import type { Birthday, BirthdayCalendar, BirthdayReminderMode, Media } from '@still-alive/types';
+import type { Birthday, BirthdayCalendar, Media } from '@still-alive/types';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import { GenderPickerField } from '../../src/components/gender-picker';
 import { MbtiPickerField } from '../../src/components/mbti-picker';
@@ -30,7 +30,6 @@ export default function EditPersonScreen() {
   const [birthdayCalendar, setBirthdayCalendar] = useState<BirthdayCalendar>(person?.birthday?.calendar ?? 'solar');
   const [birthdayDate, setBirthdayDate] = useState<DateParts | null>(person?.birthday ? { year: person.birthday.year, month: person.birthday.month, day: person.birthday.day } : null);
   const [birthdayIsLeapMonth, setBirthdayIsLeapMonth] = useState(person?.birthday?.isLeapMonth ?? false);
-  const [birthdayReminderMode, setBirthdayReminderMode] = useState<BirthdayReminderMode>(person?.birthday?.reminderMode ?? person?.birthday?.calendar ?? 'solar');
   const initialAssignments = personTags.filter((item) => item.personId === person?.id);
   const [mbti, setMbti] = useState(initialAssignments.find((item) => item.kind === 'mbti')?.value ?? '');
   const [customTagIds, setCustomTagIds] = useState(initialAssignments.filter((item) => item.kind === 'custom').map((item) => item.value));
@@ -42,7 +41,7 @@ export default function EditPersonScreen() {
   const reminderEnabled = preferences.birthdayNotificationsEnabled;
   const reminderGranted = notificationPermission === 'granted';
   const reminderTime = `${String(preferences.birthdayReminderHour).padStart(2, '0')}:${String(preferences.birthdayReminderMinute).padStart(2, '0')}`;
-  const reminderModeLabel = birthdayReminderMode === 'solar' ? '公历' : birthdayReminderMode === 'lunar' ? '农历' : '公历与农历';
+  const reminderCalendarLabel = birthdayCalendar === 'solar' ? '公历' : '农历';
 
   const chooseAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -77,7 +76,7 @@ export default function EditPersonScreen() {
         gender,
         relationToMe: relation.trim() || null,
         impression: impression.trim() || null,
-        birthday: birthdayDate ? { calendar: birthdayCalendar, ...birthdayDate, isLeapMonth: birthdayCalendar === 'lunar' && birthdayIsLeapMonth, reminderMode: birthdayReminderMode } satisfies Birthday : null,
+        birthday: birthdayDate ? { calendar: birthdayCalendar, ...birthdayDate, isLeapMonth: birthdayCalendar === 'lunar' && birthdayIsLeapMonth, reminderMode: birthdayCalendar } satisfies Birthday : null,
       }, mbti || null, customTagIds);
       router.back();
     } catch (cause: unknown) {
@@ -124,28 +123,18 @@ export default function EditPersonScreen() {
           <RelationshipPicker onChange={setRelation} value={relation} />
           <Field label="一句话印象" maxLength={100} multiline onChangeText={setImpression} placeholder="不必完整，写下此刻最自然的一句话。" value={impression} />
 
-          <SectionHeader description="选择生日历法、日期，以及希望收到提醒的方式。" index="02" title="生日与提醒" />
+          <SectionHeader description="选择生日历法和日期，提醒会按该历法计算。" index="02" title="生日与提醒" />
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>生日历法</Text>
-            <View style={styles.segmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} onPress={() => { if (birthdayReminderMode === birthdayCalendar) setBirthdayReminderMode(calendar); setBirthdayCalendar(calendar); setBirthdayIsLeapMonth(false); }} style={[styles.segment, birthdayCalendar === calendar && styles.segmentActive]}><Text style={[styles.segmentText, birthdayCalendar === calendar && styles.segmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
+            <View style={styles.segmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} accessibilityRole="button" accessibilityState={{ selected: birthdayCalendar === calendar }} onPress={() => { setBirthdayCalendar(calendar); setBirthdayIsLeapMonth(false); }} style={[styles.segment, birthdayCalendar === calendar && styles.segmentActive]}><Text style={[styles.segmentText, birthdayCalendar === calendar && styles.segmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
           </View>
           <DatePickerField dayCount={birthdayCalendar === 'lunar' ? (value) => lunarMonthDayCount(value.year, value.month, birthdayIsLeapMonth) : undefined} enforceMaximum={birthdayCalendar === 'solar'} label={birthdayCalendar === 'solar' ? '公历生日' : '农历生日'} onChange={(value) => { setBirthdayDate(value); if (lunarLeapMonth(value.year) !== value.month) setBirthdayIsLeapMonth(false); }} onClear={() => { setBirthdayDate(null); setBirthdayIsLeapMonth(false); }} value={birthdayDate} />
          {birthdayCalendar === 'lunar' && birthdayDate && lunarLeapMonth(birthdayDate.year) === birthdayDate.month ? <Pressable accessibilityRole="switch" accessibilityState={{ checked: birthdayIsLeapMonth }} onPress={() => setBirthdayIsLeapMonth((value) => !value)} style={styles.optionRow}><Text style={styles.optionTitle}>这是闰{birthdayDate.month}月</Text><Text style={styles.optionAction}>{birthdayIsLeapMonth ? '已选择' : '选择'}</Text></Pressable> : null}
 
-          {birthdayDate ? <View style={styles.field}>
-            <Text style={styles.fieldLabel}>生日提醒方式</Text>
-            <View style={styles.segmented}>{([
-              { label: '公历', value: 'solar' },
-              { label: '农历', value: 'lunar' },
-              { label: '两个都提醒', value: 'both' },
-            ] as const).map((option) => <Pressable key={option.value} accessibilityRole="button" accessibilityState={{ selected: birthdayReminderMode === option.value }} onPress={() => setBirthdayReminderMode(option.value)} style={[styles.segment, birthdayReminderMode === option.value && styles.segmentActive]}><Text style={[styles.segmentText, birthdayReminderMode === option.value && styles.segmentTextActive]}>{option.label}</Text></Pressable>)}</View>
-            <Text style={styles.fieldHint}>另一历法的生日会根据出生日期自动换算。</Text>
-          </View> : null}
-
           {birthdayDate ? (
             reminderEnabled && reminderGranted ? (
               <Pressable onPress={() => router.push('/settings')} style={styles.reminderReady}>
-                <Text style={styles.reminderReadyText}>生日提醒已开启 · {reminderModeLabel} · {reminderTime}</Text>
+                <Text style={styles.reminderReadyText}>生日提醒已开启 · {reminderCalendarLabel} · {reminderTime}</Text>
                 <Text style={styles.reminderReadyAction}>调整</Text>
               </Pressable>
             ) : (
@@ -220,7 +209,6 @@ const styles = createThemedStyles(() => ({
   sectionDescription: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   field: { marginTop: spacing.lg },
   fieldLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
-  fieldHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   input: { minHeight: 52, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 15 },
   inputMultiline: { minHeight: 112, paddingTop: spacing.md, lineHeight: 23 },
   segmented: { flexDirection: 'row', padding: 3, borderRadius: radius.md, backgroundColor: colors.sheet },

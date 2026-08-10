@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from '@still-alive/storage';
-import type { AlbumMedia, AppThemeId, BirthdayNotificationSchedule, BirthdayReminderMode, CheckIn, DayKey, Draft, Gender, Media, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, CheckIn, DayKey, Draft, Gender, Media, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../domain/memory-notifications';
 
 interface CheckInRow {
@@ -80,6 +80,8 @@ export interface AppPreferences {
   selfNameStyle: NameStyleId;
   friendNameStyle: NameStyleId;
   birthDate: string;
+  birthDateCalendar: BirthdayCalendar;
+  birthDateIsLeapMonth: boolean;
   profileAvatarMediaId: string | null;
   profileMbti: string;
   profileCustomTagIds: string[];
@@ -660,7 +662,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.month ?? null,
       person.birthday?.day ?? null,
       person.birthday?.isLeapMonth ? 1 : 0,
-      person.birthday?.reminderMode ?? null,
+      person.birthday?.calendar ?? null,
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
@@ -684,7 +686,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.month ?? null,
       person.birthday?.day ?? null,
       person.birthday?.isLeapMonth ? 1 : 0,
-      person.birthday?.reminderMode ?? null,
+      person.birthday?.calendar ?? null,
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
@@ -920,6 +922,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       selfNameStyle: parseNameStyle(values.selfNameStyle, 'fresh'),
       friendNameStyle: parseNameStyle(values.friendNameStyle, 'journal'),
       birthDate: values.birthDate ?? '',
+      birthDateCalendar: values.birthDateCalendar === 'lunar' ? 'lunar' : 'solar',
+      birthDateIsLeapMonth: values.birthDateCalendar === 'lunar' && values.birthDateIsLeapMonth === 'true',
       profileAvatarMediaId: values.profileAvatarMediaId || null,
       profileMbti: values.profileMbti ?? '',
       profileCustomTagIds: parseStringList(values.profileCustomTagIds),
@@ -998,7 +1002,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const person of snapshot.people) {
         await transaction.runAsync(
           'INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          person.id, person.name, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.reminderMode ?? null, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
+          person.id, person.name, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.calendar ?? null, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
         );
       }
       for (const item of snapshot.media) {
@@ -1092,16 +1096,12 @@ function mapPerson(row: PersonRow): Person {
       month: row.birthday_month,
       day: row.birthday_day,
       isLeapMonth: row.birthday_is_leap_month === 1,
-      reminderMode: validBirthdayReminderMode(row.birthday_reminder_mode) ? row.birthday_reminder_mode : row.birthday_calendar,
+      reminderMode: row.birthday_calendar,
     } : null,
     memoryEnabled: row.memory_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-function validBirthdayReminderMode(value: BirthdayReminderMode | null): value is BirthdayReminderMode {
-  return value === 'solar' || value === 'lunar' || value === 'both';
 }
 
 function mapMedia(row: MediaRow): Media {

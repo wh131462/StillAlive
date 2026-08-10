@@ -5,7 +5,6 @@ export const MBTI_TYPES = ['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ
 
 export function validateBirthday(birthday: Birthday, today = new Date()): void {
   if (!Number.isInteger(birthday.year) || birthday.year < 1900 || birthday.year > today.getFullYear()) throw new Error('生日年份无效');
-  if (!['solar', 'lunar', 'both'].includes(birthday.reminderMode)) throw new Error('生日提醒方式无效');
   try {
     if (birthday.calendar === 'solar') {
       if (birthday.isLeapMonth) throw new Error('公历生日不能设置闰月');
@@ -21,6 +20,18 @@ export function validateBirthday(birthday: Birthday, today = new Date()): void {
   } catch (cause) {
     if (cause instanceof Error && (cause.message.includes('生日') || cause.message.includes('闰月'))) throw cause;
     throw new Error('生日日期不存在');
+  }
+}
+
+export function birthdayFromDateString(value: string, calendar: BirthdayCalendar, isLeapMonth: boolean): Birthday | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const birthday: Birthday = { calendar, day, isLeapMonth: calendar === 'lunar' && isLeapMonth, month, reminderMode: calendar, year };
+  try {
+    validateBirthday(birthday);
+    return birthday;
+  } catch {
+    return null;
   }
 }
 

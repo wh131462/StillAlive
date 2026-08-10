@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Image, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import type { CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
+import type { BirthdayCalendar, CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
 import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
 import { DatePickerField } from '../../src/components/date-time-picker';
@@ -14,7 +14,7 @@ import { StyledName } from '../../src/components/styled-name';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
-import { nextBirthday } from '../../src/domain/person-profile';
+import { birthdayFromDateString, lunarLeapMonth, lunarMonthDayCount, nextBirthday } from '../../src/domain/person-profile';
 import { resolveDeviceLocation } from '../../src/data/device-location';
 import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
@@ -40,6 +40,8 @@ export default function SpaceScreen() {
   const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, ready, shouldShowBackupReminder, today, todayCheckIn, updatePreferences } = useAppState();
   const [nickname, setNickname] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [birthDateCalendar, setBirthDateCalendar] = useState<BirthdayCalendar>('solar');
+  const [birthDateIsLeapMonth, setBirthDateIsLeapMonth] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [showMemoryTrace, setShowMemoryTrace] = useState(false);
   const todayPosts = posts.filter((post) => post.dayKey === today);
@@ -65,7 +67,9 @@ export default function SpaceScreen() {
   useEffect(() => {
     setNickname(preferences.nickname);
     setBirthDate(preferences.birthDate);
-  }, [preferences.birthDate, preferences.nickname]);
+    setBirthDateCalendar(preferences.birthDateCalendar);
+    setBirthDateIsLeapMonth(preferences.birthDateIsLeapMonth);
+  }, [preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth, preferences.nickname]);
 
   const handlePrimaryAction = async () => {
     if (!todayCheckIn) {
@@ -106,7 +110,11 @@ export default function SpaceScreen() {
   };
 
   const completeOnboarding = async () => {
-    await updatePreferences({ onboardingCompleted: true, nickname: nickname.trim(), birthDate });
+    if (birthDate && !birthdayFromDateString(birthDate, birthDateCalendar, birthDateIsLeapMonth)) {
+      Alert.alert('生日日期不存在');
+      return;
+    }
+    await updatePreferences({ onboardingCompleted: true, nickname: nickname.trim(), birthDate, birthDateCalendar, birthDateIsLeapMonth: birthDateCalendar === 'lunar' && birthDateIsLeapMonth });
   };
   const birthDateParts: DateParts | null = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? (() => { const [year, month, day] = birthDate.split('-').map(Number); return { year, month, day }; })() : null;
 
@@ -247,15 +255,20 @@ export default function SpaceScreen() {
 
       <Modal animationType="fade" transparent visible={ready && !preferences.onboardingCompleted}>
         <SafeAreaView style={styles.onboardingBackdrop}>
-          <View style={styles.onboardingSheet}>
+          <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingSheet}>
             <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
             <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
             <Text style={styles.onboardingText}>无需注册。日记、人物和图片默认只保存在这台设备，可以随时完整导出。</Text>
             <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
-            <DatePickerField label="出生日期 可跳过" onChange={({ year, month, day }) => setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)} onClear={() => setBirthDate('')} value={birthDateParts} />
+            <View style={styles.onboardingCalendar}>
+              <Text style={styles.onboardingCalendarLabel}>生日历法</Text>
+              <View style={styles.onboardingSegmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} accessibilityRole="button" accessibilityState={{ selected: birthDateCalendar === calendar }} onPress={() => { setBirthDateCalendar(calendar); setBirthDateIsLeapMonth(false); }} style={[styles.onboardingSegment, birthDateCalendar === calendar && styles.onboardingSegmentActive]}><Text style={[styles.onboardingSegmentText, birthDateCalendar === calendar && styles.onboardingSegmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
+            </View>
+            <DatePickerField dayCount={birthDateCalendar === 'lunar' ? (value) => lunarMonthDayCount(value.year, value.month, birthDateIsLeapMonth) : undefined} enforceMaximum={birthDateCalendar === 'solar'} label={`${birthDateCalendar === 'solar' ? '公历' : '农历'}生日 可跳过`} onChange={({ year, month, day }) => { setBirthDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`); if (lunarLeapMonth(year) !== month) setBirthDateIsLeapMonth(false); }} onClear={() => { setBirthDate(''); setBirthDateIsLeapMonth(false); }} value={birthDateParts} />
+            {birthDateCalendar === 'lunar' && birthDateParts && lunarLeapMonth(birthDateParts.year) === birthDateParts.month ? <Pressable accessibilityRole="switch" accessibilityState={{ checked: birthDateIsLeapMonth }} onPress={() => setBirthDateIsLeapMonth((value) => !value)} style={styles.onboardingOption}><Text style={styles.onboardingOptionTitle}>这是闰{birthDateParts.month}月</Text><Text style={styles.onboardingOptionAction}>{birthDateIsLeapMonth ? '已选择' : '选择'}</Text></Pressable> : null}
             <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入空间</Text></Pressable>
             <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -591,11 +604,22 @@ const styles = createThemedStyles(() => ({
   postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
   onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
-  onboardingSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  onboardingSheet: { maxHeight: '100%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  onboardingContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   onboardingTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 28, lineHeight: 39 },
   onboardingText: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 11, lineHeight: 20 },
   onboardingInput: { minHeight: 50, marginTop: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 14 },
+  onboardingCalendar: { marginTop: spacing.md },
+  onboardingCalendarLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
+  onboardingSegmented: { flexDirection: 'row', padding: 3, borderRadius: radius.md, backgroundColor: colors.paper },
+  onboardingSegment: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  onboardingSegmentActive: { backgroundColor: colors.sheet },
+  onboardingSegmentText: { color: colors.inkFaint, fontSize: 11 },
+  onboardingSegmentTextActive: { color: colors.life, fontWeight: '700' },
+  onboardingOption: { minHeight: 46, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.paper },
+  onboardingOptionTitle: { color: colors.ink, fontSize: 12 },
+  onboardingOptionAction: { color: colors.life, fontSize: 10 },
   onboardingButton: { minHeight: 50, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   onboardingButtonText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
   onboardingSkip: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },

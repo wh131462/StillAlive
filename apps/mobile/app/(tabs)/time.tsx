@@ -3,13 +3,13 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { BirthdayCalendar, CheckIn, DayKey, Person, Post } from '@still-alive/types';
+import type { Birthday, BirthdayCalendar, CheckIn, DayKey, Person, Post } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../src/state/app-state';
 import { extractAudioEmbeds } from '../../src/domain/embedded-media';
-import { birthdayForCalendar, birthdayInSolarYear, birthdaySolarDate, toLocalDayKey } from '../../src/domain/person-profile';
+import { birthdayFromDateString, birthdayInSolarYear, birthdaySolarDate, toLocalDayKey } from '../../src/domain/person-profile';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { createThemedStyles } from '../../src/theme/app-theme';
 
@@ -17,10 +17,14 @@ type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const { checkIns, people, posts, today, todayCheckIn } = useAppState();
+  const { checkIns, people, posts, preferences, today, todayCheckIn } = useAppState();
   const [activeMonth, setActiveMonth] = useState(today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const checkInDays = useMemo(() => new Set(checkIns.map((item) => item.dayKey)), [checkIns]);
+  const selfBirthday = useMemo(
+    () => birthdayFromDateString(preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth),
+    [preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth],
+  );
   const selectedCheckIn = checkIns.find((item) => item.dayKey === selectedDay);
   const selectedPosts = posts.filter((post) => post.dayKey === selectedDay).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
@@ -34,10 +38,13 @@ export default function CalendarScreen() {
 
   const changeMonth = (offset: number) => {
     const next = shiftMonth(activeMonth, offset);
-    if (next > today.slice(0, 7)) return;
     setActiveMonth(next);
-    const firstDay = `${next}-01` as DayKey;
-    setSelectedDay(firstDay > today ? today : firstDay);
+    setSelectedDay(`${next}-01` as DayKey);
+  };
+
+  const selectDay = (dayKey: DayKey) => {
+    setActiveMonth(dayKey.slice(0, 7));
+    setSelectedDay(dayKey);
   };
 
   return (
@@ -49,13 +56,14 @@ export default function CalendarScreen() {
           checkInDays={checkInDays}
           onChangeMonth={changeMonth}
           onOpenPost={(postId) => router.push(`/post/${postId}`)}
-          onSelectDay={setSelectedDay}
+          onSelectDay={selectDay}
           onWrite={openEditorForDay}
           people={people}
           posts={posts}
           selectedCheckIn={selectedCheckIn}
           selectedDay={selectedDay}
           selectedPosts={selectedPosts}
+          selfBirthday={selfBirthday}
           today={today}
         />
       </ScrollView>
@@ -75,10 +83,11 @@ interface CalendarViewProps {
   selectedCheckIn?: CheckIn;
   selectedDay: DayKey;
   selectedPosts: Post[];
+  selfBirthday: Birthday | null;
   today: DayKey;
 }
 
-function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, selectedCheckIn, selectedDay, selectedPosts, today }: CalendarViewProps) {
+function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
     return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
@@ -88,11 +97,22 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
     for (const post of posts) values.set(post.dayKey, [...(values.get(post.dayKey) ?? []), post]);
     return values;
   }, [posts]);
-  const birthdaysByDay = useMemo(() => calendarBirthdaysByDay(people, Number(activeMonth.slice(0, 4))), [activeMonth, people]);
+  const birthdaysByDay = useMemo(() => {
+    const values = new Map<DayKey, CalendarBirthday[]>();
+    const years = new Set(weeks.flat().map((dayKey) => Number(dayKey.slice(0, 4))));
+    const owners: CalendarBirthdayOwner[] = [
+      ...(selfBirthday ? [{ birthday: selfBirthday, id: 'self', name: '我' }] : []),
+      ...people,
+    ];
+    for (const year of years) {
+      for (const [dayKey, birthdays] of calendarBirthdaysByDay(owners, year)) values.set(dayKey, birthdays);
+    }
+    return values;
+  }, [people, selfBirthday, weeks]);
   const selectedLunarDate = lunarDateInfo(selectedDay);
+  const selectedAlmanac = almanacInfo(selectedDay);
   const selectedBirthdays = birthdaysByDay.get(selectedDay) ?? [];
   const selectedItemCount = selectedPosts.length + Number(Boolean(selectedCheckIn));
-  const canNext = activeMonth < today.slice(0, 7);
   const [year, month] = activeMonth.split('-');
 
   return (
@@ -104,7 +124,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
         </View>
         <View style={styles.monthArrows}>
           <Pressable accessibilityLabel="上一个月" accessibilityRole="button" onPress={() => onChangeMonth(-1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>‹</Text></Pressable>
-          <Pressable accessibilityLabel="下一个月" accessibilityRole="button" disabled={!canNext} onPress={() => onChangeMonth(1)} style={[styles.monthArrow, !canNext && styles.monthArrowDisabled]}><Text style={styles.monthArrowText}>›</Text></Pressable>
+          <Pressable accessibilityLabel="下一个月" accessibilityRole="button" onPress={() => onChangeMonth(1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>›</Text></Pressable>
         </View>
       </View>
       <View style={styles.weekRow}>{['一', '二', '三', '四', '五', '六', '日'].map((day, index) => <Text key={day} style={[styles.weekLabel, index > 4 && styles.weekLabelWeekend]}>周{day}</Text>)}</View>
@@ -113,7 +133,6 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           <View key={`week_${rowIndex}`} style={styles.calendarWeek}>
             {week.map((dayKey, columnIndex) => {
               const dividers = [columnIndex < 6 && styles.calendarCellColumnDivider, rowIndex < weeks.length - 1 && styles.calendarCellRowDivider];
-              if (!dayKey) return <View key={`empty_${rowIndex}_${columnIndex}`} style={[styles.calendarCell, ...dividers, styles.calendarCellEmpty]} />;
               const dayPosts = postsByDay.get(dayKey) ?? [];
               const dayBirthdays = birthdaysByDay.get(dayKey) ?? [];
               const itemCount = dayPosts.length + Number(checkInDays.has(dayKey));
@@ -121,7 +140,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                 ...(checkInDays.has(dayKey) ? ['check-in' as const] : []),
                 ...dayPosts.map((post) => postMarkerKind(post.bodyMarkdown)),
               ].slice(0, 3);
-              const future = dayKey > today;
+              const outsideMonth = !dayKey.startsWith(activeMonth);
               const selected = dayKey === selectedDay;
               const isToday = dayKey === today;
               const lunarDate = lunarDateInfo(dayKey);
@@ -130,15 +149,14 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                   key={dayKey}
                   accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}${dayBirthdays.length ? `，有 ${dayBirthdays.length} 个生日` : ''}${itemCount ? `，有 ${itemCount} 条内容` : ''}`}
                   accessibilityRole="button"
-                  disabled={future}
                   onPress={() => onSelectDay(dayKey)}
-                  style={[styles.calendarCell, ...dividers, selected && styles.calendarCellSelected, future && styles.calendarCellFuture]}
+                  style={[styles.calendarCell, ...dividers, outsideMonth && styles.calendarCellOutsideMonth, selected && styles.calendarCellSelected]}
                 >
                   <View style={styles.calendarDayRow}>
-                    <Text style={[styles.calendarDay, isToday && styles.calendarDayToday, selected && styles.calendarDaySelected]}>{Number(dayKey.slice(8))}</Text>
+                    <Text style={[styles.calendarDay, outsideMonth && styles.calendarDayOutsideMonth, isToday && styles.calendarDayToday, selected && styles.calendarDaySelected]}>{Number(dayKey.slice(8))}</Text>
                     {isToday ? <View style={styles.todayMark}><Text style={styles.todayMarkText}>今</Text></View> : null}
                   </View>
-                  {lunarDate ? <Text numberOfLines={1} style={[styles.lunarDay, lunarDate.emphasis && styles.lunarFestival, selected && styles.lunarDaySelected]}>{lunarDate.shortLabel}</Text> : null}
+                  {lunarDate ? <Text numberOfLines={1} style={[styles.lunarDay, outsideMonth && styles.lunarDayOutsideMonth, lunarDate.emphasis && styles.lunarFestival, selected && styles.lunarDaySelected]}>{lunarDate.shortLabel}</Text> : null}
                   {dayBirthdays.length ? <View style={styles.birthdayMark}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={11} tintColor={colors.sun} type="hierarchical" /></View> : null}
                   {markers.length ? (
                     <View style={[styles.calendarMarks, dayBirthdays.length > 0 && styles.calendarMarksWithBirthday]}>
@@ -161,6 +179,23 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
         <Text style={styles.legendText}>内容最多 3 个</Text>
       </View>
 
+      {selectedAlmanac ? (
+        <View accessibilityLabel={`黄历宜忌，宜：${selectedAlmanac.recommends.join('、')}，忌：${selectedAlmanac.avoids.join('、')}`} style={styles.almanacCard}>
+          <View style={styles.almanacHeader}>
+            <Text style={styles.almanacEyebrow}>DAILY ALMANAC</Text>
+            <Text style={styles.almanacTitle}>黄历宜忌</Text>
+          </View>
+          <View style={styles.almanacRow}>
+            <View style={[styles.almanacBadge, styles.almanacRecommendBadge]}><Text style={[styles.almanacBadgeText, styles.almanacRecommendBadgeText]}>宜</Text></View>
+            <Text style={styles.almanacText}>{selectedAlmanac.recommends.join('、') || '诸事不宜'}</Text>
+          </View>
+          <View style={[styles.almanacRow, styles.almanacAvoidRow]}>
+            <View style={[styles.almanacBadge, styles.almanacAvoidBadge]}><Text style={[styles.almanacBadgeText, styles.almanacAvoidBadgeText]}>忌</Text></View>
+            <Text style={styles.almanacText}>{selectedAlmanac.avoids.join('、') || '诸事不忌'}</Text>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.selectedPanel}>
         <View style={styles.selectedHeader}>
           <View style={styles.selectedDateBlock}>
@@ -168,7 +203,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
             {selectedLunarDate ? <Text style={styles.selectedLunar}>农历 {selectedLunarDate.fullLabel}{selectedLunarDate.term ? ` ${selectedLunarDate.term}` : ''}</Text> : null}
             <Text style={styles.selectedHint}>{selectedItemCount ? `这一天留下了 ${selectedItemCount} 个片段` : '这一天还没有内容'}</Text>
           </View>
-          <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable>
+          {selectedDay <= today ? <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable> : null}
         </View>
         {selectedBirthdays.length || selectedItemCount ? (
           <View style={styles.selectedList}>
@@ -176,8 +211,8 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               <View key={`${birthday.personId}_${birthday.calendar}`} style={styles.selectedEntry}>
                 <View style={styles.selectedEntryRail}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={14} tintColor={colors.sun} type="hierarchical" /></View>
                 <View style={styles.selectedEntryContent}>
-                  <Text style={styles.selectedEntryMeta}>人物生日</Text>
-                  <Text style={styles.selectedBirthdayTitle}>今天是{birthday.personName}的{birthdayCalendarLabel(birthday.calendar)}生日</Text>
+                  <Text style={styles.selectedEntryMeta}>{birthday.personId === 'self' ? '我的生日' : '人物生日'}</Text>
+                  <Text style={styles.selectedBirthdayTitle}>{selectedDay === today ? '今天' : '这一天'}是{birthday.personName}的{birthdayCalendarLabel(birthday.calendar)}生日</Text>
                 </View>
               </View>
             ))}
@@ -221,16 +256,18 @@ interface CalendarBirthday {
   personName: string;
 }
 
-function calendarBirthdaysByDay(people: Person[], solarYear: number): Map<DayKey, CalendarBirthday[]> {
+interface CalendarBirthdayOwner {
+  birthday: Birthday | null;
+  id: string;
+  name: string;
+}
+
+function calendarBirthdaysByDay(people: CalendarBirthdayOwner[], solarYear: number): Map<DayKey, CalendarBirthday[]> {
   const values = new Map<DayKey, CalendarBirthday[]>();
   for (const person of people) {
     if (!person.birthday || birthdaySolarDate(person.birthday).getFullYear() > solarYear) continue;
-    const reminderMode = person.birthday.reminderMode ?? person.birthday.calendar;
-    const calendars: BirthdayCalendar[] = reminderMode === 'both' ? ['solar', 'lunar'] : [reminderMode];
-    for (const calendar of calendars) {
-      const dayKey = toLocalDayKey(birthdayInSolarYear(birthdayForCalendar(person.birthday, calendar), solarYear));
-      values.set(dayKey, [...(values.get(dayKey) ?? []), { calendar, personId: person.id, personName: person.name }]);
-    }
+    const dayKey = toLocalDayKey(birthdayInSolarYear(person.birthday, solarYear));
+    values.set(dayKey, [...(values.get(dayKey) ?? []), { calendar: person.birthday.calendar, personId: person.id, personName: person.name }]);
   }
   for (const birthdays of values.values()) birthdays.sort((left, right) => left.personName.localeCompare(right.personName) || left.calendar.localeCompare(right.calendar));
   return values;
@@ -240,15 +277,13 @@ function birthdayCalendarLabel(calendar: BirthdayCalendar): string {
   return calendar === 'solar' ? '公历' : '农历';
 }
 
-function calendarCells(month: string): Array<DayKey | null> {
+function calendarCells(month: string): DayKey[] {
   const [year, value] = month.split('-').map(Number);
   const first = new Date(year, value - 1, 1);
   const offset = (first.getDay() + 6) % 7;
   const dayCount = new Date(year, value, 0).getDate();
-  const cells: Array<DayKey | null> = Array.from({ length: offset }, () => null);
-  for (let day = 1; day <= dayCount; day += 1) cells.push(toDayKey(new Date(year, value - 1, day)));
-  while (cells.length % 7) cells.push(null);
-  return cells;
+  const cellCount = Math.ceil((offset + dayCount) / 7) * 7;
+  return Array.from({ length: cellCount }, (_, index) => toDayKey(new Date(year, value - 1, index - offset + 1)));
 }
 
 function shiftMonth(month: string, offset: number): string {
@@ -267,6 +302,24 @@ interface LunarDateInfo {
   fullLabel: string;
   emphasis: boolean;
   term: string | null;
+}
+
+interface AlmanacInfo {
+  recommends: string[];
+  avoids: string[];
+}
+
+function almanacInfo(dayKey: DayKey): AlmanacInfo | null {
+  try {
+    const [year, month, day] = dayKey.split('-').map(Number);
+    const lunar = SolarDay.fromYmd(year, month, day).getLunarDay();
+    return {
+      recommends: lunar.getRecommends().map((item) => item.getName()),
+      avoids: lunar.getAvoids().map((item) => item.getName()),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function lunarDateInfo(dayKey: DayKey): LunarDateInfo | null {
@@ -332,7 +385,6 @@ const styles = createThemedStyles(() => ({
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
   monthArrows: { flexDirection: 'row', gap: spacing.sm },
   monthArrow: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 19, backgroundColor: colors.sheet },
-  monthArrowDisabled: { opacity: 0.2 },
   monthArrowText: { color: colors.life, fontFamily: typography.display, fontSize: 25, lineHeight: 29 },
   weekRow: { flexDirection: 'row', marginTop: spacing.md, paddingBottom: spacing.sm },
   weekLabel: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 0.3, textAlign: 'center' },
@@ -342,16 +394,17 @@ const styles = createThemedStyles(() => ({
   calendarCell: { flex: 1, aspectRatio: 0.72, paddingTop: 8, paddingHorizontal: 5, alignItems: 'center', overflow: 'hidden', backgroundColor: colors.sheet },
   calendarCellColumnDivider: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.line },
   calendarCellRowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  calendarCellEmpty: { backgroundColor: colors.paper, opacity: 0.46 },
+  calendarCellOutsideMonth: { backgroundColor: colors.paper },
   calendarCellSelected: { backgroundColor: colors.lifeLight },
-  calendarCellFuture: { opacity: 0.3 },
   calendarDayRow: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: 2 },
   calendarDay: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 16 },
+  calendarDayOutsideMonth: { color: colors.inkFaint },
   calendarDayToday: { color: colors.life, fontWeight: '700' },
   calendarDaySelected: { color: colors.life },
   todayMark: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: colors.life },
   todayMarkText: { color: colors.onLife, fontSize: typography.size.meta, fontWeight: '700' },
   lunarDay: { maxWidth: '100%', color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 13 },
+  lunarDayOutsideMonth: { opacity: 0.58 },
   lunarFestival: { color: colors.sun, fontWeight: '700' },
   lunarDaySelected: { color: colors.life },
   calendarMarks: { position: 'absolute', bottom: 7, flexDirection: 'row', gap: 3 },
@@ -362,6 +415,19 @@ const styles = createThemedStyles(() => ({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
   legendMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
+  almanacCard: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
+  almanacHeader: { paddingHorizontal: spacing.lg, paddingTop: 16, paddingBottom: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  almanacEyebrow: { color: colors.sun, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.1 },
+  almanacTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18, lineHeight: 24 },
+  almanacRow: { minHeight: 62, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  almanacAvoidRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
+  almanacBadge: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
+  almanacRecommendBadge: { backgroundColor: colors.lifeLight },
+  almanacAvoidBadge: { backgroundColor: colors.dangerLight },
+  almanacBadgeText: { fontFamily: typography.display, fontSize: 15, fontWeight: '700' },
+  almanacRecommendBadgeText: { color: colors.life },
+  almanacAvoidBadgeText: { color: colors.danger },
+  almanacText: { flex: 1, paddingTop: 4, color: colors.inkSoft, fontFamily: typography.display, fontSize: 14, lineHeight: 22 },
   selectedPanel: { marginTop: spacing.lg, padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },
   selectedHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectedDateBlock: { flex: 1, paddingRight: spacing.md },

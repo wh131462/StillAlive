@@ -26,6 +26,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   selfNameStyle: 'fresh',
   friendNameStyle: 'journal',
   birthDate: '',
+  birthDateCalendar: 'solar',
+  birthDateIsLeapMonth: false,
   profileAvatarMediaId: null,
   profileMbti: '',
   profileCustomTagIds: [],

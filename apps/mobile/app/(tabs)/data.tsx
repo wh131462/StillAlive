@@ -4,11 +4,13 @@ import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import type { Birthday } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
 import { formatGender } from '../../src/components/gender-picker';
 import { StyledName } from '../../src/components/styled-name';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { createThemedStyles } from '../../src/theme/app-theme';
+import { birthdayFromDateString, birthdaySolarDate, formatBirthday } from '../../src/domain/person-profile';
 
 export default function DataScreen() {
   const router = useRouter();
@@ -26,8 +28,9 @@ export default function DataScreen() {
   const albumCover = media.find((item) => item.id === firstPhotoId);
   const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
   const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
-  const age = currentAge(preferences.birthDate);
-  const profileValues = [age === null ? null : `${age} 岁`, preferences.profileGender ? formatGender(preferences.profileGender) : null, preferences.birthDate ? formatDate(preferences.birthDate) : null].filter((value): value is string => Boolean(value));
+  const selfBirthday = birthdayFromDateString(preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth);
+  const age = currentAge(selfBirthday);
+  const profileValues = [age === null ? null : `${age} 岁`, preferences.profileGender ? formatGender(preferences.profileGender) : null, selfBirthday ? formatBirthday(selfBirthday) : null].filter((value): value is string => Boolean(value));
 
   useEffect(() => setAvatarFailed(false), [avatarUri]);
 
@@ -82,13 +85,12 @@ export default function DataScreen() {
 
 function Stat({ label, value }: { label: string; value: number }) { return <View style={styles.stat}><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>; }
 
-function formatDate(value: string) { const [year, month, day] = value.split('-'); return `${year}年${Number(month)}月${Number(day)}日`; }
-
-function currentAge(value: string, today = new Date()): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [year, month, day] = value.split('-').map(Number);
-  const birthday = new Date(year, month - 1, day);
-  if (birthday.getFullYear() !== year || birthday.getMonth() !== month - 1 || birthday.getDate() !== day || birthday.getTime() > today.getTime()) return null;
+function currentAge(value: Birthday | null, today = new Date()): number | null {
+  if (!value) return null;
+  const birthday = birthdaySolarDate(value);
+  const year = birthday.getFullYear();
+  const month = birthday.getMonth() + 1;
+  const day = birthday.getDate();
   return today.getFullYear() - year - (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day) ? 1 : 0);
 }
 

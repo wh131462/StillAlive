@@ -1,5 +1,5 @@
 import type { BirthdayCalendar, BirthdayNotificationSchedule, Person } from '@still-alive/types';
-import { birthdayForCalendar, nextBirthday, toLocalDayKey } from './person-profile';
+import { nextBirthday, toLocalDayKey } from './person-profile';
 
 export interface PlannedBirthdayNotification {
   key: string;
@@ -29,22 +29,18 @@ export function planBirthdayNotifications(people: Person[], hour: number, minute
   const result = new Map<string, PlannedBirthdayNotification>();
   for (const person of people) {
     if (!person.birthday) continue;
-    const reminderMode = person.birthday.reminderMode ?? person.birthday.calendar;
-    const calendars: BirthdayCalendar[] = reminderMode === 'both' ? ['solar', 'lunar'] : [reminderMode];
-    for (const calendar of calendars) {
-      const birthday = nextBirthday(birthdayForCalendar(person.birthday, calendar), now);
-      const todayTrigger = atTime(birthday, hour, minute);
-      const advanceTrigger = new Date(todayTrigger);
-      advanceTrigger.setDate(advanceTrigger.getDate() - 3);
-      const dayKey = toLocalDayKey(birthday);
-      if (advanceTrigger.getTime() > now.getTime() && advanceTrigger.getTime() <= horizon.getTime()) {
-        const item = planned(person, calendar, 'advance', dayKey, advanceTrigger);
-        result.set(item.key, item);
-      }
-      if (todayTrigger.getTime() > now.getTime() && todayTrigger.getTime() <= horizon.getTime()) {
-        const item = planned(person, calendar, 'today', dayKey, todayTrigger);
-        result.set(item.key, item);
-      }
+    const birthday = nextBirthday(person.birthday, now);
+    const todayTrigger = atTime(birthday, hour, minute);
+    const advanceTrigger = new Date(todayTrigger);
+    advanceTrigger.setDate(advanceTrigger.getDate() - 3);
+    const dayKey = toLocalDayKey(birthday);
+    if (advanceTrigger.getTime() > now.getTime() && advanceTrigger.getTime() <= horizon.getTime()) {
+      const item = planned(person, person.birthday.calendar, 'advance', dayKey, advanceTrigger);
+      result.set(item.key, item);
+    }
+    if (todayTrigger.getTime() > now.getTime() && todayTrigger.getTime() <= horizon.getTime()) {
+      const item = planned(person, person.birthday.calendar, 'today', dayKey, todayTrigger);
+      result.set(item.key, item);
     }
   }
   return [...result.values()].sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime());
