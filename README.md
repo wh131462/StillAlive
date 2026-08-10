@@ -9,6 +9,7 @@
 ```text
 apps/
   mobile/       Expo React Native 主应用
+  portal/       静态产品门户与下载页
 
 packages/
   types/        共享数据类型
@@ -21,7 +22,7 @@ docs/           PRD 与 HTML 设计稿
 openspec/       产品变更规格
 ```
 
-MVP 不包含服务端、Web 客户端、微信小程序和 Docker 部署。Web 不属于支持平台，构建与验收以 iOS/Android 为准。
+MVP 不包含服务端、Web 客户端、微信小程序和 Docker 部署。门户仅用于产品介绍与应用下载，产品功能与验收以 iOS/Android 为准。
 
 ## 开发
 

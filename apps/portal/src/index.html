@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1D6B49" />
+    <meta name="description" content="仍在是一款本地优先的个人生命记录工具。每天留下一点，慢慢得到一份属于自己的生命档案。" />
+    <meta property="og:title" content="仍在 — 每天留下一点" />
+    <meta property="og:description" content="打卡、记录、关联重要的人，在时间里重新遇见生活。" />
+    <title>仍在 — 每天留下一点</title>
+    <link rel="icon" href="__BASE__assets/logo-mark.svg" />
+    <link rel="stylesheet" href="__BASE__styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="仍在首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="89 18" transform="rotate(-35 32 32)"/><circle cx="32" cy="32" r="3.5" fill="currentColor"/><circle cx="46" cy="22" r="4" class="brand-sun"/></svg>
+        </span>
+        <span>仍在</span>
+        <small>Still Alive</small>
+      </a>
+      <nav aria-label="主导航">
+        <a href="#why">为什么是仍在</a>
+        <a href="#how">如何使用</a>
+        <a href="#download">下载</a>
+        <a href="https://github.com/wh131462/StillAlive" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      <a class="header-download" href="#download">获取应用</a>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-copy">
+          <p class="eyebrow hero-enter hero-enter-1"><span></span>本地优先的个人生命档案</p>
+          <h1 class="hero-enter hero-enter-2">每天留下一点，<br /><em>慢慢看见一生。</em></h1>
+          <p class="hero-lead hero-enter hero-enter-3">不用认真写一篇日记。确认今天也在，记下一句话、一张照片或一段声音，时间会替你把它们连起来。</p>
+          <div class="hero-actions hero-enter hero-enter-4">
+            <a class="button button-primary" href="__APK_URL__">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2.5 2.5h5M10 18h4"/></svg>
+              <span><small>Android</small>下载 v__VERSION__</span>
+            </a>
+            <button class="button button-secondary" type="button" data-ios-download>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16.8 12.6c0-2.7 2.2-4 2.3-4.1A5 5 0 0 0 15.2 6c-1.7-.2-3.2 1-4.1 1-.9 0-2.2-1-3.6-1A5.3 5.3 0 0 0 3 8.8c-1.9 3.3-.5 8.2 1.3 10.9.9 1.3 2 2.8 3.4 2.7 1.3-.1 1.9-.9 3.5-.9s2.1.9 3.6.9 2.4-1.3 3.3-2.6a12 12 0 0 0 1.5-3.1 4.7 4.7 0 0 1-2.8-4.1ZM14.1 4.2A4.7 4.7 0 0 0 15.2.8a4.8 4.8 0 0 0-3.1 1.6A4.4 4.4 0 0 0 11 5.7a4 4 0 0 0 3.1-1.5Z"/></svg>
+              <span><small>iPhone</small>暂不支持</span>
+            </button>
+          </div>
+          <ul class="hero-trust hero-enter hero-enter-5" aria-label="产品特点">
+            <li>无需注册</li>
+            <li>默认本地保存</li>
+            <li>数据完整导出</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual hero-enter hero-enter-3" aria-label="仍在应用界面示意">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <span class="orbit-dot dot-one"></span>
+          <span class="orbit-dot dot-two"></span>
+          <article class="phone-card">
+            <div class="phone-status"><span>9:41</span><span>● ● ▰</span></div>
+            <div class="phone-title"><span>空间</span><span class="avatar">在</span></div>
+            <div class="today-card">
+              <div class="today-date"><small>8月10日 · 周一</small><span>上海 · 晴</span></div>
+              <div class="life-coordinate"><span class="coordinate-ring"></span><span class="coordinate-center"></span><span class="coordinate-sun"></span></div>
+              <h2>今天也在</h2>
+              <p>给今天留下一个小小的坐标</p>
+              <button type="button" tabindex="-1">确认今天也在</button>
+            </div>
+            <div class="memory-hint"><span>那年今日</span><p>两年前，你记下了一场傍晚的雨。</p></div>
+            <div class="phone-entry"><span class="entry-line wide"></span><span class="entry-line"></span><div><i></i><i></i><i></i></div></div>
+          </article>
+          <div class="floating-note note-one"><small>共同记忆</small><strong>和妈妈的 28 个片段</strong></div>
+          <div class="floating-note note-two"><span></span><div><small>生命坐标</small><strong>已留下 126 天</strong></div></div>
+        </div>
+      </section>
+
+      <section class="manifesto" id="why">
+        <div class="section-index" data-reveal><span>01</span><p>为什么是仍在</p></div>
+        <div class="manifesto-copy" data-reveal>
+          <p class="quote-mark">“</p>
+          <h2>记录不该成为另一件<br />需要坚持的事。</h2>
+          <p>「仍在」不计算失败，也不惩罚中断。写作永远可选，回来时，今天依然可以重新开始。</p>
+        </div>
+        <div class="principles" data-reveal>
+          <article><span>不施压</span><h3>五秒完成今天</h3><p>一次轻轻的确认，就足够给今天留下坐标。</p></article>
+          <article><span>不打扰</span><h3>过去自然回来</h3><p>那年今日与人物记忆，让旧片段在合适的时候出现。</p></article>
+          <article><span>不锁定</span><h3>记录始终属于你</h3><p>私密内容默认留在设备里，并可完整导出与迁移。</p></article>
+        </div>
+      </section>
+
+      <section class="flow" id="how">
+        <div class="section-index section-index-light" data-reveal><span>02</span><p>一条记录的旅程</p></div>
+        <div class="flow-heading" data-reveal>
+          <h2>从今天，走向很久以后。</h2>
+          <p>零散的文字、照片、声音和重要的人，会沿着时间慢慢形成你的生命脉络。</p>
+        </div>
+        <div class="timeline" data-reveal>
+          <span class="timeline-line"></span>
+          <article><b>01</b><div class="timeline-node"></div><small>今天</small><h3>确认「今天也在」</h3><p>不需要登录，不需要先写点什么。</p></article>
+          <article><b>02</b><div class="timeline-node"></div><small>此刻</small><h3>想留一点，就写一点</h3><p>文字、照片、语音和地点都可以成为记录。</p></article>
+          <article><b>03</b><div class="timeline-node"></div><small>以后</small><h3>重新遇见生活</h3><p>按日期和人物回看，让保存下来的内容继续产生价值。</p></article>
+        </div>
+      </section>
+
+      <section class="features">
+        <div class="feature-lead" data-reveal>
+          <span class="feature-number">03</span>
+          <p class="eyebrow"><span></span>你的生活，不是数据流</p>
+          <h2>一份可以带走的<br />私人档案。</h2>
+          <p>设计从克制开始：不做公开社区，不追踪你的表达，不用连续天数评价生活。</p>
+        </div>
+        <div class="feature-grid" data-reveal>
+          <article class="feature-card feature-card-large">
+            <div class="calendar-art" aria-hidden="true">
+              <div class="calendar-head"><span>2026 / 08</span><b>八月</b></div>
+              <div class="calendar-days"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="calendar-dates"><i></i><i></i><i></i><i></i><i></i><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i class="recorded">6</i><i>7</i><i>8</i><i>9</i><i class="today">10</i><i>11</i><i>12</i><i>13</i><i>14</i><i>15</i><i>16</i><i>17</i><i>18</i><i>19</i><i>20</i><i>21</i><i>22</i><i>23</i><i>24</i></div>
+            </div>
+            <div><small>时间沉淀</small><h3>日历记得每一个片段</h3><p>按月回看，不标记缺席，只呈现你真正留下的内容。</p></div>
+          </article>
+          <article class="feature-card local-card">
+            <div class="shield-art" aria-hidden="true"><span></span><i></i></div>
+            <small>本地优先</small><h3>不上传，也能完整使用</h3><p>记录默认保存在你的设备，隐私不是一个额外选项。</p>
+          </article>
+          <article class="feature-card people-card">
+            <div class="people-art" aria-hidden="true"><span>林</span><span>陈</span><span>周</span></div>
+            <small>人物记忆</small><h3>记住故事里的人</h3><p>关联重要的人，属于彼此的片段会自然聚在一起。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="download" id="download">
+        <div class="download-orbit" aria-hidden="true"></div>
+        <div class="download-copy" data-reveal>
+          <p class="eyebrow eyebrow-light"><span></span>从今天开始</p>
+          <h2>给生活留一个<br />不会消失的坐标。</h2>
+          <p>Android 版本已开放下载。安装包由 GitHub Release 提供，可核对来源并自由保存。</p>
+          <a class="source-link" href="https://github.com/wh131462/StillAlive/releases" target="_blank" rel="noreferrer">查看全部 Release <span>&rarr;</span></a>
+        </div>
+        <div class="download-options" data-reveal>
+          <article class="platform-card platform-android">
+            <div class="platform-top"><span class="platform-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 4 6.5 1.7M16 4l1.5-2.3M5 9h14v8.5A2.5 2.5 0 0 1 16.5 20h-9A2.5 2.5 0 0 1 5 17.5V9Zm-2 1v7m18-7v7M8 20v3m8-3v3M8.5 7h.01M15.5 7h.01"/></svg></span><span class="available-dot">现已提供</span></div>
+            <div><small>Android</small><h3>仍在 v__VERSION__</h3><p>APK 安装包 · 来自 GitHub Release</p></div>
+            <a class="platform-button" href="__APK_URL__">下载 Android 版 <span>&darr;</span></a>
+            <details><summary>本次更新</summary><p>__RELEASE_NOTES__</p></details>
+          </article>
+          <article class="platform-card platform-ios">
+            <div class="platform-top"><span class="platform-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16.8 12.6c0-2.7 2.2-4 2.3-4.1A5 5 0 0 0 15.2 6c-1.7-.2-3.2 1-4.1 1-.9 0-2.2-1-3.6-1A5.3 5.3 0 0 0 3 8.8c-1.9 3.3-.5 8.2 1.3 10.9.9 1.3 2 2.8 3.4 2.7 1.3-.1 1.9-.9 3.5-.9s2.1.9 3.6.9 2.4-1.3 3.3-2.6a12 12 0 0 0 1.5-3.1 4.7 4.7 0 0 1-2.8-4.1ZM14.1 4.2A4.7 4.7 0 0 0 15.2.8a4.8 4.8 0 0 0-3.1 1.6A4.4 4.4 0 0 0 11 5.7a4 4 0 0 0 3.1-1.5Z"/></svg></span><span class="soon-dot">暂不支持</span></div>
+            <div><small>iPhone</small><h3>iOS 版本</h3><p>我们仍在准备，当前暂不提供下载。</p></div>
+            <button class="platform-button platform-button-muted" type="button" data-ios-download>暂不支持 iOS</button>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand footer-brand" href="#top">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="89 18" transform="rotate(-35 32 32)"/><circle cx="32" cy="32" r="3.5" fill="currentColor"/><circle cx="46" cy="22" r="4" class="brand-sun"/></svg></span>
+        <span>仍在</span><small>Still Alive</small>
+      </a>
+      <p>每天留下一点，慢慢得到一份属于自己的生命档案。</p>
+      <div><a href="https://github.com/wh131462/StillAlive" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/wh131462/StillAlive/releases" target="_blank" rel="noreferrer">Releases</a><span>&copy; 2026 Still Alive</span></div>
+    </footer>
+
+    <div class="toast" role="status" aria-live="polite" data-toast hidden>
+      <span>iOS</span><p><strong>暂不支持 iOS</strong>版本仍在准备中，请先使用 Android 版。</p>
+    </div>
+    <script src="__BASE__app.js" defer></script>
+  </body>
+</html>
