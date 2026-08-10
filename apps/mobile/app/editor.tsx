@@ -232,7 +232,8 @@ export default function EditorScreen() {
       createdMediaRef.current = [];
       await Promise.all(created.map(discardMedia)).catch(() => undefined);
       allowExitRef.current = true;
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     } catch (cause: unknown) {
       Alert.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
     } finally {
