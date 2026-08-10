@@ -80,6 +80,15 @@ export async function initializeMemoryNotificationChannel(): Promise<void> {
   await ensureMemoryChannel(loadNotifications());
 }
 
+export async function requestNotificationPermission(): Promise<'granted' | 'denied' | 'undetermined'> {
+  const notifications = requireNotifications();
+  let permission = permissionStatus(await notifications.getPermissionsAsync(), notifications);
+  if (permission === 'undetermined') {
+    permission = permissionStatus(await notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: false, allowSound: true } }), notifications);
+  }
+  return permission;
+}
+
 export async function scheduleDebugNotification(): Promise<string> {
   const notifications = requireNotifications();
   await ensureDebugChannel(notifications);

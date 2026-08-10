@@ -12,7 +12,8 @@ import { cleanupOrphanedAlbumFiles, deletePersonAlbumDirectory } from '../data/l
 import { MBTI_TYPES, validateBirthday } from '../domain/person-profile';
 import { cancelBirthdayNotifications, reconcileBirthdayNotifications } from '../domain/birthday-notifications';
 import { cancelMemoryNotifications, reconcileMemoryNotifications } from '../domain/memory-notifications';
-import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter, initializeBirthdayNotificationChannel, initializeMemoryNotificationChannel } from '../data/expo-birthday-notifications';
+import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter, initializeBirthdayNotificationChannel, initializeMemoryNotificationChannel, requestNotificationPermission } from '../data/expo-birthday-notifications';
+import { getPersistentNotificationStatus, persistentNotificationSupported, refreshPersistentNotification, setPersistentNotificationEnabled } from '../data/android-persistent-notification';
 import { extractEmbeddedMediaIds, extractImageMediaIds } from '../domain/embedded-media';
 import { deletePasswordVaultStorage } from '../data/password-vault-storage';
 
@@ -41,6 +42,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   birthdayNotificationError: null,
   memoryNotificationsEnabled: false,
   memoryNotificationError: null,
+  persistentNotificationEnabled: false,
 };
 
 interface AppStateValue {
@@ -59,6 +61,8 @@ interface AppStateValue {
   homeMemory: HomeMemory | null;
   preferences: AppPreferences;
   notificationPermission: 'granted' | 'denied' | 'undetermined';
+  persistentNotificationRunning: boolean;
+  persistentNotificationSupported: boolean;
   shouldShowBackupReminder: boolean;
   ready: boolean;
   error: string | null;
@@ -98,6 +102,7 @@ interface AppStateValue {
   retryBirthdayNotifications(): Promise<void>;
   setMemoryNotificationsEnabled(enabled: boolean): Promise<void>;
   retryMemoryNotifications(): Promise<void>;
+  setPersistentNotificationsEnabled(enabled: boolean): Promise<void>;
   openNotificationSettings(): Promise<void>;
   recordBackupExport(): Promise<void>;
   dismissBackupReminder(): Promise<void>;
@@ -125,6 +130,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [homeMemory, setHomeMemory] = useState<HomeMemory | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(DEFAULT_PREFERENCES);
   const [notificationPermission, setNotificationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [persistentNotificationRunning, setPersistentNotificationRunning] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,13 +173,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch(() => undefined);
     const subscription = NativeAppState.addEventListener('change', (state) => {
       if (state === 'active' && databaseReadyRef.current) {
-        setToday(toDayKey(new Date()));
+        const activeToday = toDayKey(new Date());
+        setToday(activeToday);
         void (async () => {
-          const storedPeople = await repository.listPeople();
-          const storedPosts = await repository.listPosts();
-          const storedPreferences = await repository.getPreferences();
+          const [checkIn, storedCheckIns, storedPeople, storedPosts, storedPreferences] = await Promise.all([
+            repository.getCheckIn(activeToday),
+            repository.listCheckIns(),
+            repository.listPeople(),
+            repository.listPosts(),
+            repository.getPreferences(),
+          ]);
+          setTodayCheckIn(checkIn);
+          setCheckIns(storedCheckIns);
+          setPosts(storedPosts);
           await syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
           await syncMemoryNotifications(storedPosts, storedPreferences).catch(() => undefined);
+          if (storedPreferences.persistentNotificationEnabled) await refreshPersistentNotification().catch(() => undefined);
+          setPersistentNotificationRunning((await getPersistentNotificationStatus()).running);
         })().catch(() => undefined);
       }
     });
@@ -238,6 +254,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       });
     return () => { active = false; };
   }, [repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
+
+  useEffect(() => {
+    if (!ready || !persistentNotificationSupported) return;
+    void setPersistentNotificationEnabled(preferences.persistentNotificationEnabled)
+      .then(() => getPersistentNotificationStatus())
+      .then((status) => setPersistentNotificationRunning(status.running))
+      .catch(() => setPersistentNotificationRunning(false));
+  }, [preferences.persistentNotificationEnabled, ready]);
+
+  useEffect(() => {
+    if (!ready || !preferences.persistentNotificationEnabled) return;
+    void refreshPersistentNotification().catch(() => undefined);
+  }, [checkIns.length, posts.length, preferences.persistentNotificationEnabled, ready, today]);
 
   const checkInToday = useCallback(async (city: string | null) => {
     if (city && city.length > 40) throw new Error('城市名称不能超过 40 字');
@@ -595,6 +624,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await syncMemoryNotifications(await repository.listPosts(), stored, false);
   }, [repository, syncMemoryNotifications]);
 
+  const setPersistentNotificationsEnabled = useCallback(async (enabled: boolean) => {
+    if (!persistentNotificationSupported) throw new Error('当前环境不支持常驻快捷栏');
+    if (enabled) {
+      const permission = await requestNotificationPermission();
+      setNotificationPermission(permission);
+      if (permission !== 'granted') throw new Error('系统通知权限未开启');
+    }
+    try {
+      await setPersistentNotificationEnabled(enabled);
+      await repository.updatePreferences({ persistentNotificationEnabled: enabled });
+    } catch (cause) {
+      await setPersistentNotificationEnabled(!enabled).catch(() => undefined);
+      throw cause;
+    }
+    setPreferences(await repository.getPreferences());
+    setPersistentNotificationRunning((await getPersistentNotificationStatus()).running);
+  }, [repository]);
+
   const openNotificationSettings = useCallback(() => Linking.openSettings(), []);
 
   const recordBackupExport = useCallback(async () => {
@@ -667,6 +714,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const storedMedia = media;
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
+    await setPersistentNotificationEnabled(false).catch(() => undefined);
+    setPersistentNotificationRunning(false);
     const failures: unknown[] = [];
     let vaultDeleted = false;
     try {
@@ -741,6 +790,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     homeMemory,
     preferences,
     notificationPermission,
+    persistentNotificationRunning,
+    persistentNotificationSupported,
     shouldShowBackupReminder,
     ready,
     error,
@@ -780,11 +831,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     retryBirthdayNotifications,
     setMemoryNotificationsEnabled,
     retryMemoryNotifications,
+    setPersistentNotificationsEnabled,
     openNotificationSettings,
     recordBackupExport,
     dismissBackupReminder,
     deleteAllLocalData,
-  }), [addPhotoToAlbum, albumMedia, albums, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
+  }), [addPhotoToAlbum, albumMedia, albums, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, persistentNotificationRunning, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

@@ -95,6 +95,7 @@ export interface AppPreferences {
   birthdayNotificationError: string | null;
   memoryNotificationsEnabled: boolean;
   memoryNotificationError: string | null;
+  persistentNotificationEnabled: boolean;
 }
 
 export type HomeMemory =
@@ -937,6 +938,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       birthdayNotificationError: values.birthdayNotificationError || null,
       memoryNotificationsEnabled: values.memoryNotificationsEnabled === 'true',
       memoryNotificationError: values.memoryNotificationError || null,
+      persistentNotificationEnabled: values.persistentNotificationEnabled === 'true',
     };
   }
 

@@ -13,8 +13,8 @@ import { NAME_STYLE_OPTIONS, THEME_OPTIONS, createThemedStyles } from '../src/th
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { notificationPermission, openNotificationSettings, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, updatePreferences } = useAppState();
-  const showNotificationStatus = preferences.birthdayNotificationsEnabled || preferences.memoryNotificationsEnabled || Boolean(preferences.birthdayNotificationError) || Boolean(preferences.memoryNotificationError);
+  const { notificationPermission, openNotificationSettings, persistentNotificationRunning, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
+  const showNotificationStatus = preferences.birthdayNotificationsEnabled || preferences.memoryNotificationsEnabled || preferences.persistentNotificationEnabled || Boolean(preferences.birthdayNotificationError) || Boolean(preferences.memoryNotificationError);
 
   const savePreference = (changes: Parameters<typeof updatePreferences>[0]) => void updatePreferences(changes).catch((cause: unknown) => Alert.alert('设置失败', errorMessage(cause)));
 
@@ -54,12 +54,17 @@ export default function SettingsScreen() {
 
       <Text style={styles.eyebrow}>NOTIFICATIONS</Text>
       <View style={styles.group}>
+        {persistentNotificationSupported ? <>
+          <SwitchRow checked={preferences.persistentNotificationEnabled} hint="显示打卡状态和快捷入口" label="常驻快捷栏" onPress={() => void setPersistentNotificationsEnabled(!preferences.persistentNotificationEnabled).catch((cause: unknown) => Alert.alert('快捷栏设置失败', errorMessage(cause)))} />
+          <View style={styles.separator} />
+        </> : null}
         <SwitchRow checked={preferences.birthdayNotificationsEnabled} hint="提前 3 天和生日当天提醒" label="人物生日提醒" onPress={() => void setBirthdayNotificationsEnabled(!preferences.birthdayNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
         <View style={styles.separator} />
         <SwitchRow checked={preferences.memoryNotificationsEnabled} hint="默认 20:00，提醒间隔至少 7 天" label="回忆通知" onPress={() => void setMemoryNotificationsEnabled(!preferences.memoryNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
       </View>
       {preferences.birthdayNotificationsEnabled ? <TimePickerField hour={preferences.birthdayReminderHour} label="提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /> : null}
       {showNotificationStatus ? <Text style={styles.permissionState}>系统权限 {notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text> : null}
+      {preferences.persistentNotificationEnabled ? <Text style={styles.permissionState}>常驻服务 {persistentNotificationRunning ? '正在运行' : '等待系统启动'}</Text> : null}
       {showNotificationStatus && notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
       {preferences.birthdayNotificationError ? <><Pressable onPress={() => void retryBirthdayNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试通知调度</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
       {preferences.memoryNotificationError ? <><Pressable onPress={() => void retryMemoryNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试回忆通知</Text></Pressable><Text style={styles.error}>{preferences.memoryNotificationError}</Text></> : null}
