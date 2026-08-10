@@ -26,7 +26,7 @@ export function validateBirthday(birthday: Birthday, today = new Date()): void {
 export function birthdayFromDateString(value: string, calendar: BirthdayCalendar, isLeapMonth: boolean): Birthday | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
-  const birthday: Birthday = { calendar, day, isLeapMonth: calendar === 'lunar' && isLeapMonth, month, reminderMode: calendar, year };
+  const birthday: Birthday = { calendar, day, isLeapMonth: calendar === 'lunar' && isLeapMonth, month, reminderEnabled: true, reminderHour: null, reminderMinute: null, reminderMode: calendar, year };
   try {
     validateBirthday(birthday);
     return birthday;
@@ -73,6 +73,9 @@ export function birthdayForCalendar(birthday: Birthday, calendar: BirthdayCalend
       month: solarDate.getMonth() + 1,
       day: solarDate.getDate(),
       isLeapMonth: false,
+      reminderEnabled: birthday.reminderEnabled,
+      reminderHour: birthday.reminderHour,
+      reminderMinute: birthday.reminderMinute,
       reminderMode: birthday.reminderMode,
     };
   }
@@ -84,6 +87,9 @@ export function birthdayForCalendar(birthday: Birthday, calendar: BirthdayCalend
     month: Math.abs(monthWithLeap),
     day: lunar.getDay(),
     isLeapMonth: monthWithLeap < 0,
+    reminderEnabled: birthday.reminderEnabled,
+    reminderHour: birthday.reminderHour,
+    reminderMinute: birthday.reminderMinute,
     reminderMode: birthday.reminderMode,
   };
 }

@@ -62,7 +62,7 @@ export default function SettingsScreen() {
         <View style={styles.separator} />
         <SwitchRow checked={preferences.memoryNotificationsEnabled} hint="默认 20:00，提醒间隔至少 7 天" label="回忆通知" onPress={() => void setMemoryNotificationsEnabled(!preferences.memoryNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
       </View>
-      {preferences.birthdayNotificationsEnabled ? <TimePickerField hour={preferences.birthdayReminderHour} label="提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /> : null}
+      {preferences.birthdayNotificationsEnabled ? <TimePickerField hour={preferences.birthdayReminderHour} label="通用生日提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /> : null}
       {showNotificationStatus ? <Text style={styles.permissionState}>系统权限 {notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text> : null}
       {preferences.persistentNotificationEnabled ? <Text style={styles.permissionState}>常驻服务 {persistentNotificationRunning ? '正在运行' : '等待系统启动'}</Text> : null}
       {showNotificationStatus && notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}

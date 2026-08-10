@@ -28,9 +28,11 @@ export function planBirthdayNotifications(people: Person[], hour: number, minute
   horizon.setFullYear(horizon.getFullYear() + 1);
   const result = new Map<string, PlannedBirthdayNotification>();
   for (const person of people) {
-    if (!person.birthday) continue;
+    if (!person.birthday || !person.birthday.reminderEnabled) continue;
+    const reminderHour = person.birthday.reminderHour ?? hour;
+    const reminderMinute = person.birthday.reminderMinute ?? minute;
     const birthday = nextBirthday(person.birthday, now);
-    const todayTrigger = atTime(birthday, hour, minute);
+    const todayTrigger = atTime(birthday, reminderHour, reminderMinute);
     const advanceTrigger = new Date(todayTrigger);
     advanceTrigger.setDate(advanceTrigger.getDate() - 3);
     const dayKey = toLocalDayKey(birthday);

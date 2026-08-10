@@ -9,7 +9,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
 import { persistPickedImage } from '../../src/data/local-media';
 import type { Birthday, BirthdayCalendar, Media } from '@still-alive/types';
-import { DatePickerField } from '../../src/components/date-time-picker';
+import { DatePickerField, TimePickerField } from '../../src/components/date-time-picker';
 import { GenderPickerField } from '../../src/components/gender-picker';
 import { MbtiPickerField } from '../../src/components/mbti-picker';
 import { RelationshipPicker } from '../../src/components/relationship-picker';
@@ -30,6 +30,9 @@ export default function EditPersonScreen() {
   const [birthdayCalendar, setBirthdayCalendar] = useState<BirthdayCalendar>(person?.birthday?.calendar ?? 'solar');
   const [birthdayDate, setBirthdayDate] = useState<DateParts | null>(person?.birthday ? { year: person.birthday.year, month: person.birthday.month, day: person.birthday.day } : null);
   const [birthdayIsLeapMonth, setBirthdayIsLeapMonth] = useState(person?.birthday?.isLeapMonth ?? false);
+  const [birthdayReminderEnabled, setBirthdayReminderEnabled] = useState(person?.birthday?.reminderEnabled ?? true);
+  const [birthdayReminderHour, setBirthdayReminderHour] = useState<number | null>(person?.birthday?.reminderHour ?? null);
+  const [birthdayReminderMinute, setBirthdayReminderMinute] = useState<number | null>(person?.birthday?.reminderMinute ?? null);
   const initialAssignments = personTags.filter((item) => item.personId === person?.id);
   const [mbti, setMbti] = useState(initialAssignments.find((item) => item.kind === 'mbti')?.value ?? '');
   const [customTagIds, setCustomTagIds] = useState(initialAssignments.filter((item) => item.kind === 'custom').map((item) => item.value));
@@ -38,10 +41,10 @@ export default function EditPersonScreen() {
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [saving, setSaving] = useState(false);
  const avatarUri = pickedAsset?.uri ?? currentAvatar?.localPath;
-  const reminderEnabled = preferences.birthdayNotificationsEnabled;
-  const reminderGranted = notificationPermission === 'granted';
-  const reminderTime = `${String(preferences.birthdayReminderHour).padStart(2, '0')}:${String(preferences.birthdayReminderMinute).padStart(2, '0')}`;
-  const reminderCalendarLabel = birthdayCalendar === 'solar' ? '公历' : '农历';
+  const globalReminderEnabled = preferences.birthdayNotificationsEnabled;
+  const hasCustomReminderTime = birthdayReminderHour !== null && birthdayReminderMinute !== null;
+  const effectiveReminderHour = birthdayReminderHour ?? preferences.birthdayReminderHour;
+  const effectiveReminderMinute = birthdayReminderMinute ?? preferences.birthdayReminderMinute;
 
   const chooseAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -76,7 +79,7 @@ export default function EditPersonScreen() {
         gender,
         relationToMe: relation.trim() || null,
         impression: impression.trim() || null,
-        birthday: birthdayDate ? { calendar: birthdayCalendar, ...birthdayDate, isLeapMonth: birthdayCalendar === 'lunar' && birthdayIsLeapMonth, reminderMode: birthdayCalendar } satisfies Birthday : null,
+        birthday: birthdayDate ? { calendar: birthdayCalendar, ...birthdayDate, isLeapMonth: birthdayCalendar === 'lunar' && birthdayIsLeapMonth, reminderEnabled: birthdayReminderEnabled, reminderHour: birthdayReminderHour, reminderMinute: birthdayReminderMinute, reminderMode: birthdayCalendar } satisfies Birthday : null,
       }, mbti || null, customTagIds);
       router.back();
     } catch (cause: unknown) {
@@ -90,7 +93,7 @@ export default function EditPersonScreen() {
  };
 
   const handleReminderAction = async () => {
-    if (reminderEnabled && notificationPermission === 'denied') {
+    if (globalReminderEnabled && notificationPermission === 'denied') {
       await openNotificationSettings();
     } else {
       await setBirthdayNotificationsEnabled(true);
@@ -131,25 +134,25 @@ export default function EditPersonScreen() {
           <DatePickerField dayCount={birthdayCalendar === 'lunar' ? (value) => lunarMonthDayCount(value.year, value.month, birthdayIsLeapMonth) : undefined} enforceMaximum={birthdayCalendar === 'solar'} label={birthdayCalendar === 'solar' ? '公历生日' : '农历生日'} onChange={(value) => { setBirthdayDate(value); if (lunarLeapMonth(value.year) !== value.month) setBirthdayIsLeapMonth(false); }} onClear={() => { setBirthdayDate(null); setBirthdayIsLeapMonth(false); }} value={birthdayDate} />
          {birthdayCalendar === 'lunar' && birthdayDate && lunarLeapMonth(birthdayDate.year) === birthdayDate.month ? <Pressable accessibilityRole="switch" accessibilityState={{ checked: birthdayIsLeapMonth }} onPress={() => setBirthdayIsLeapMonth((value) => !value)} style={styles.optionRow}><Text style={styles.optionTitle}>这是闰{birthdayDate.month}月</Text><Text style={styles.optionAction}>{birthdayIsLeapMonth ? '已选择' : '选择'}</Text></Pressable> : null}
 
-          {birthdayDate ? (
-            reminderEnabled && reminderGranted ? (
-              <Pressable onPress={() => router.push('/settings')} style={styles.reminderReady}>
-                <Text style={styles.reminderReadyText}>生日提醒已开启 · {reminderCalendarLabel} · {reminderTime}</Text>
-                <Text style={styles.reminderReadyAction}>调整</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.reminderCard}>
-                <View style={styles.reminderHead}>
+          {birthdayDate ? <>
+            <View style={styles.reminderCard}>
+              <Pressable accessibilityRole="switch" accessibilityState={{ checked: birthdayReminderEnabled }} onPress={() => setBirthdayReminderEnabled((value) => !value)} style={styles.reminderHead}>
+                <View style={styles.reminderCopy}>
                   <Text style={styles.reminderTitle}>生日提醒</Text>
-                  <Text style={styles.reminderStatus}>{!reminderEnabled ? '提醒未开启' : notificationPermission === 'denied' ? '系统通知未允许' : '需要通知授权'}</Text>
+                  <Text style={styles.reminderStatus}>{!birthdayReminderEnabled ? '已为此人关闭' : !globalReminderEnabled ? '通用生日提醒未开启' : notificationPermission !== 'granted' ? '需要系统通知权限' : hasCustomReminderTime ? '使用个人提醒时间' : '使用通用默认时间'}</Text>
                 </View>
-                <Pressable onPress={() => void handleReminderAction().catch((cause: unknown) => Alert.alert('提醒设置失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.reminderAction}>
-                  <Text style={styles.reminderActionText}>{!reminderEnabled || notificationPermission === 'undetermined' ? '开启提醒' : '去系统设置'}</Text>
-                </Pressable>
-                {preferences.birthdayNotificationError ? <Text style={styles.reminderError}>{preferences.birthdayNotificationError}</Text> : null}
-              </View>
-            )
-          ) : null}
+                <View style={[styles.switchTrack, birthdayReminderEnabled && styles.switchTrackOn]}><View style={[styles.switchThumb, birthdayReminderEnabled && styles.switchThumbOn]} /></View>
+              </Pressable>
+              {birthdayReminderEnabled && (!globalReminderEnabled || notificationPermission !== 'granted') ? <Pressable onPress={() => void handleReminderAction().catch((cause: unknown) => Alert.alert('提醒设置失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.reminderAction}>
+                <Text style={styles.reminderActionText}>{globalReminderEnabled && notificationPermission === 'denied' ? '打开系统通知设置' : '开启通用提醒'}</Text>
+              </Pressable> : null}
+              {preferences.birthdayNotificationError ? <Text style={styles.reminderError}>{preferences.birthdayNotificationError}</Text> : null}
+            </View>
+            {birthdayReminderEnabled ? <>
+              <TimePickerField hour={effectiveReminderHour} label={hasCustomReminderTime ? '个人提醒时间' : '提醒时间 · 使用通用默认'} minute={effectiveReminderMinute} onChange={(hour, minute) => { setBirthdayReminderHour(hour); setBirthdayReminderMinute(minute); }} />
+              {hasCustomReminderTime ? <Pressable accessibilityRole="button" onPress={() => { setBirthdayReminderHour(null); setBirthdayReminderMinute(null); }} style={styles.useDefaultTime}><Text style={styles.useDefaultTimeText}>恢复通用默认时间</Text></Pressable> : null}
+            </> : null}
+          </> : null}
 
           <SectionHeader description="用 MBTI 和自定义标签，更快找到关于 ta 的记录。" index="03" title="人物标签" />
           {tagSystemSettings.find((item) => item.system === 'mbti')?.enabled !== false ? <MbtiPickerField onChange={setMbti} value={mbti} /> : null}
@@ -220,15 +223,19 @@ const styles = createThemedStyles(() => ({
   optionTitle: { color: colors.ink, fontSize: 12 },
   optionAction: { color: colors.life, fontSize: 10 },
   reminderCard: { marginTop: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet },
-  reminderHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reminderHead: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reminderCopy: { flex: 1, paddingRight: spacing.md },
   reminderTitle: { color: colors.ink, fontSize: 12, fontWeight: '600' },
-  reminderStatus: { color: colors.inkFaint, fontSize: 10 },
+  reminderStatus: { marginTop: 5, color: colors.inkFaint, fontSize: 10 },
+  switchTrack: { width: 42, height: 24, padding: 2, borderRadius: 12, backgroundColor: colors.line },
+  switchTrackOn: { backgroundColor: colors.life },
+  switchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.paper },
+  switchThumbOn: { transform: [{ translateX: 18 }] },
   reminderAction: { marginTop: spacing.sm, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
   reminderActionText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
   reminderError: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 16 },
-  reminderReady: { marginTop: spacing.sm, paddingHorizontal: spacing.md, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
-  reminderReadyText: { color: colors.inkSoft, fontSize: 10 },
-  reminderReadyAction: { color: colors.life, fontSize: 10, fontWeight: '700' },
+  useDefaultTime: { minHeight: 40, alignItems: 'flex-end', justifyContent: 'center' },
+  useDefaultTimeText: { color: colors.life, fontSize: 10, fontWeight: '700' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minHeight: 34, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.sheet },
   chipActive: { backgroundColor: colors.life },

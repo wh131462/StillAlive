@@ -13,6 +13,9 @@ export interface Birthday {
   day: number;
   isLeapMonth: boolean;
   reminderMode: BirthdayReminderMode;
+  reminderEnabled: boolean;
+  reminderHour: number | null;
+  reminderMinute: number | null;
 }
 
 export interface CheckIn {

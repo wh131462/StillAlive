@@ -249,6 +249,7 @@ function validateSnapshot(value: BackupSnapshot): void {
     if (person.avatarMediaId && !mediaIds.has(person.avatarMediaId)) throw new Error('备份中的人物头像关联无效');
     if (person.gender && !['female', 'male', 'other'].includes(person.gender)) throw new Error('备份中的人物性别无效');
     if (person.birthday && !['solar', 'lunar', 'both'].includes(person.birthday.reminderMode)) throw new Error('备份中的生日提醒方式无效');
+    if (person.birthday && (typeof person.birthday.reminderEnabled !== 'boolean' || !validReminderTime(person.birthday.reminderHour, person.birthday.reminderMinute))) throw new Error('备份中的生日提醒设置无效');
   }
   if (!value.settings || typeof value.settings !== 'object' || Array.isArray(value.settings)) value.settings = {};
   for (const setting of Object.values(value.settings)) if (typeof setting !== 'string') throw new Error('备份中的设置数据无效');
@@ -297,7 +298,12 @@ function migrateSnapshot(value: BackupSnapshot): void {
   if (Array.isArray(value.people)) for (const person of value.people) {
     person.gender ??= null;
     person.birthday ??= null;
-    if (person.birthday) person.birthday.reminderMode ??= person.birthday.calendar;
+    if (person.birthday) {
+      person.birthday.reminderMode ??= person.birthday.calendar;
+      person.birthday.reminderEnabled ??= true;
+      person.birthday.reminderHour ??= null;
+      person.birthday.reminderMinute ??= null;
+    }
   }
   if (Array.isArray(value.checkIns)) for (const checkIn of value.checkIns) checkIn.city ??= null;
   if (Array.isArray(value.posts)) for (const post of value.posts) {
@@ -305,6 +311,11 @@ function migrateSnapshot(value: BackupSnapshot): void {
     migrateLegacyAudio(post);
   }
   if (Array.isArray(value.drafts)) for (const draft of value.drafts) migrateLegacyAudio(draft);
+}
+
+function validReminderTime(hour: number | null, minute: number | null): boolean {
+  if (hour === null || minute === null) return hour === null && minute === null;
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 && Number.isInteger(minute) && minute >= 0 && minute <= 59;
 }
 
 function migrateLegacyAudio(value: { bodyMarkdown: string; audioMediaId?: unknown; audioDurationMs?: unknown }): void {

@@ -39,6 +39,9 @@ interface PersonRow {
   birthday_day: number | null;
   birthday_is_leap_month: number;
   birthday_reminder_mode: BirthdayReminderMode | null;
+  birthday_reminder_enabled: number;
+  birthday_reminder_hour: number | null;
+  birthday_reminder_minute: number | null;
   memory_enabled: number;
   created_at: string;
   updated_at: string;
@@ -347,6 +350,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'posts', 'location_name', 'TEXT');
     await db.execAsync('PRAGMA user_version = 14;');
   }
+
+  if (currentVersion < 15) {
+    await addColumnIfMissing(db, 'persons', 'birthday_reminder_enabled', 'INTEGER NOT NULL DEFAULT 1');
+    await addColumnIfMissing(db, 'persons', 'birthday_reminder_hour', 'INTEGER');
+    await addColumnIfMissing(db, 'persons', 'birthday_reminder_minute', 'INTEGER');
+    await db.execAsync('PRAGMA user_version = 15;');
+  }
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {
@@ -642,6 +652,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     const rows = await this.db.getAllAsync<PersonRow>(
       `SELECT id, name, avatar_media_id, gender, relation_to_me, impression,
               birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode,
+              birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute,
               memory_enabled, created_at, updated_at
        FROM persons ORDER BY updated_at DESC`,
     );
@@ -650,8 +661,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async createPerson(person: Person): Promise<void> {
     await this.db.runAsync(
-      `INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, memory_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, memory_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       person.id,
       person.name,
       person.avatarMediaId,
@@ -664,6 +675,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.day ?? null,
       person.birthday?.isLeapMonth ? 1 : 0,
       person.birthday?.calendar ?? null,
+      person.birthday?.reminderEnabled === false ? 0 : 1,
+      person.birthday?.reminderHour ?? null,
+      person.birthday?.reminderMinute ?? null,
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
@@ -675,6 +689,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       `UPDATE persons
        SET name = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?,
            birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?,
+           birthday_reminder_enabled = ?, birthday_reminder_hour = ?, birthday_reminder_minute = ?,
            memory_enabled = ?, updated_at = ?
        WHERE id = ?`,
       person.name,
@@ -688,6 +703,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.day ?? null,
       person.birthday?.isLeapMonth ? 1 : 0,
       person.birthday?.calendar ?? null,
+      person.birthday?.reminderEnabled === false ? 0 : 1,
+      person.birthday?.reminderHour ?? null,
+      person.birthday?.reminderMinute ?? null,
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
@@ -1003,8 +1021,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(
-          'INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          person.id, person.name, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.calendar ?? null, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
+          'INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          person.id, person.name, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.calendar ?? null, person.birthday?.reminderEnabled === false ? 0 : 1, person.birthday?.reminderHour ?? null, person.birthday?.reminderMinute ?? null, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
         );
       }
       for (const item of snapshot.media) {
@@ -1098,6 +1116,9 @@ function mapPerson(row: PersonRow): Person {
       month: row.birthday_month,
       day: row.birthday_day,
       isLeapMonth: row.birthday_is_leap_month === 1,
+      reminderEnabled: row.birthday_reminder_enabled === 1,
+      reminderHour: row.birthday_reminder_hour,
+      reminderMinute: row.birthday_reminder_minute,
       reminderMode: row.birthday_calendar,
     } : null,
     memoryEnabled: row.memory_enabled === 1,
