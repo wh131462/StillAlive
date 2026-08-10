@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "1.0.2",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.2.apk",
-  "releaseNotes": "新增人物独立生日提醒设置，支持单独开启、关闭及配置专属提醒时间；完善生日提醒数据的备份、恢复与旧版本兼容；优化人物、日记、相册、标签、备份和密码本等输入界面的键盘适配，修复键盘遮挡表单、按钮及弹窗的问题。"
+  "versionCode": 5,
+  "versionName": "1.0.3",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.3.apk",
+  "releaseNotes": "优化常驻通知数据库并发访问"
 }
