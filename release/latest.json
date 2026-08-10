@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "1.0.0",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.0.apk",
-  "releaseNotes": "首次发布：支持本地文字、图片和语音日记；每日打卡及城市记录；日记地点记录；人物关联与公历、农历生日展示；本地数据备份与恢复。"
+  "versionCode": 3,
+  "versionName": "1.0.1",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.1.apk",
+  "releaseNotes": "新增产品门户与下载页；Android 新增常驻快捷栏，支持快速打卡和写日记；日记编辑器新增拍照插图、字号、链接及表格操作，并优化草稿保存与内容预览；生日支持公历、农历和闰月，日历新增个人生日、未来日期及黄历宜忌；新增品牌启动动画，并优化应用回到前台后的数据与通知同步。"
 }
