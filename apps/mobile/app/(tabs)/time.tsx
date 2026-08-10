@@ -8,12 +8,15 @@ import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../src/state/app-state';
-import { extractAudioEmbeds } from '../../src/domain/embedded-media';
+import MarkdownView from '../../src/components/markdown-view.dom';
+import { extractAudioEmbeds, withoutEmbeddedAttachments } from '../../src/domain/embedded-media';
 import { birthdayFromDateString, birthdayInSolarYear, birthdaySolarDate, toLocalDayKey } from '../../src/domain/person-profile';
 import { TabPageHeader } from '../../src/components/tab-page-header';
-import { createThemedStyles } from '../../src/theme/app-theme';
+import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
+
+const CALENDAR_POST_PREVIEW_MAX_HEIGHT = 106;
 
 export default function CalendarScreen() {
   const router = useRouter();
@@ -118,10 +121,10 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
   return (
     <View style={styles.calendarSection}>
       <View style={styles.calendarHeader}>
-        <View>
+        <Pressable accessibilityLabel="回到当前月份" accessibilityRole="button" hitSlop={8} onPress={() => onSelectDay(today)} style={({ pressed }) => [styles.monthJump, pressed && styles.monthJumpPressed]}>
           <Text style={styles.calendarYear}>{year} MONTH {month}</Text>
           <Text style={styles.calendarTitle}>{Number(month)} 月</Text>
-        </View>
+        </Pressable>
         <View style={styles.monthArrows}>
           <Pressable accessibilityLabel="上一个月" accessibilityRole="button" onPress={() => onChangeMonth(-1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>‹</Text></Pressable>
           <Pressable accessibilityLabel="下一个月" accessibilityRole="button" onPress={() => onChangeMonth(1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>›</Text></Pressable>
@@ -227,13 +230,16 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
             ) : null}
             {selectedPosts.map((post) => {
               const attachmentLabel = postAttachmentLabel(post.bodyMarkdown);
+              const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
               const markerKind = postMarkerKind(post.bodyMarkdown);
               return (
                 <Pressable key={post.id} accessibilityLabel={`打开 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedEntry, pressed && styles.selectedEntryPressed]}>
                   <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor(markerKind) }]} /></View>
                   <View style={styles.selectedEntryContent}>
                     <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} · {post.locationName ? `${post.locationName} · ` : ''}{formatTime(post.createdAt)}{attachmentLabel ? ` · ${attachmentLabel}` : ''}</Text>
-                    <Text numberOfLines={3} style={styles.selectedPostText}>{markdownToPlainText(post.bodyMarkdown) || attachmentLabel || '记录了一些内容'}</Text>
+                    {displayMarkdown
+                      ? <View pointerEvents="none" style={styles.selectedPostMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.selectedPostMarkdown, matchContents: true, scrollEnabled: false, style: styles.selectedPostMarkdown }} markdown={displayMarkdown} maxHeight={CALENDAR_POST_PREVIEW_MAX_HEIGHT} media={[]} theme={editorTheme()} /></View>
+                      : <Text style={styles.selectedPostFallback}>{attachmentLabel || '记录了一些内容'}</Text>}
                   </View>
                   <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
                 </Pressable>
@@ -341,10 +347,6 @@ function lunarDateInfo(dayKey: DayKey): LunarDateInfo | null {
   }
 }
 
-function markdownToPlainText(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/^#{1,3}\s+/gm, '').replace(/^[-*>]\s+/gm, '').replace(/[*_`]/g, '').trim();
-}
-
 function formatTime(iso: string): string {
   const value = new Date(iso);
   return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
@@ -381,6 +383,8 @@ const styles = createThemedStyles(() => ({
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   calendarSection: { marginTop: 0 },
   calendarHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  monthJump: { borderRadius: radius.sm },
+  monthJumpPressed: { opacity: 0.55 },
   calendarYear: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
   monthArrows: { flexDirection: 'row', gap: spacing.sm },
@@ -445,6 +449,8 @@ const styles = createThemedStyles(() => ({
   selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
   selectedCheckInTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
   selectedBirthdayTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 24 },
-  selectedPostText: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
+  selectedPostMarkdownFrame: { width: '100%' },
+  selectedPostMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
+  selectedPostFallback: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
   selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
 }));

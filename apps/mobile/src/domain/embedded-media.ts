@@ -25,6 +25,10 @@ export function extractEmbeddedMediaIds(markdown: string): string[] {
   return [...new Set([...extractImageMediaIds(markdown), ...extractAudioEmbeds(markdown).map((item) => item.id)])];
 }
 
+export function withoutEmbeddedAttachments(markdown: string): string {
+  return markdown.replace(/!\[[^\]]*\]\((?:media|audio):\/\/[^)]+\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function formatAudioDuration(durationMs: number | null): string {
   const totalSeconds = Math.max(0, Math.round((durationMs ?? 0) / 1000));
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;

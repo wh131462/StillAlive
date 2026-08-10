@@ -13,7 +13,7 @@ import MarkdownView from '../../src/components/markdown-view.dom';
 import { StyledName } from '../../src/components/styled-name';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { TabPageHeader } from '../../src/components/tab-page-header';
-import { extractAudioEmbeds, formatAudioDuration } from '../../src/domain/embedded-media';
+import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } from '../../src/domain/embedded-media';
 import { birthdayFromDateString, lunarLeapMonth, lunarMonthDayCount, nextBirthday } from '../../src/domain/person-profile';
 import { resolveDeviceLocation } from '../../src/data/device-location';
 import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
@@ -470,10 +470,6 @@ function markdownToPlainText(markdown: string): string {
     .replace(/<[^>]+>/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-function withoutEmbeddedAttachments(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\((?:media|audio):\/\/[^)]+\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function extractMediaIds(markdown: string): string[] {
