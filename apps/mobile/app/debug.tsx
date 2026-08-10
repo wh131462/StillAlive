@@ -6,15 +6,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { getLastBirthdayNotificationResponse, expoBirthdayNotificationAdapter, scheduleDebugNotification } from '../src/data/expo-birthday-notifications';
+import { AndroidUpdateDialog } from '../src/components/android-update-dialog';
 import { createThemedStyles } from '../src/theme/app-theme';
+import type { AndroidUpdateManifest } from '../src/update/android-update';
 
 type Permission = 'granted' | 'denied' | 'undetermined';
+
+const DEBUG_UPDATE_MANIFEST: AndroidUpdateManifest = {
+  versionCode: 999_999,
+  versionName: '9.9.9',
+  apkUrl: '',
+  releaseNotes: '全新更新下载面板\n实时展示下载进度、速度与剩余时间\n优化安装授权和失败重试提示',
+};
 
 export default function DebugScreen() {
   const router = useRouter();
   const [permission, setPermission] = useState<Permission>('undetermined');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [updatePreviewVisible, setUpdatePreviewVisible] = useState(false);
 
   const refreshPermission = async () => setPermission(await expoBirthdayNotificationAdapter.getPermission());
   useEffect(() => { void refreshPermission(); }, []);
@@ -62,7 +72,12 @@ export default function DebugScreen() {
       </Pressable>
       {message ? <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text> : null}
       <Text style={styles.detail}>最近一次通知响应：{lastResponse ? '有记录' : '暂无记录'}</Text>
+
+      <Pressable accessibilityRole="button" onPress={() => setUpdatePreviewVisible(true)} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
+        <Text style={styles.secondaryButtonText}>模拟更新流程</Text>
+      </Pressable>
     </ScrollView>
+    <AndroidUpdateDialog manifest={updatePreviewVisible ? DEBUG_UPDATE_MANIFEST : null} onDismiss={() => setUpdatePreviewVisible(false)} simulateDownload />
   </SafeAreaView>;
 }
 

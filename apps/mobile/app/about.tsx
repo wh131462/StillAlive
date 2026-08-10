@@ -1,20 +1,43 @@
 import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import * as Sharing from 'expo-sharing';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../src/theme/app-theme';
-import { checkForAndroidUpdate, downloadAndInstallAndroidUpdate, getCurrentAndroidVersion } from '../src/update/android-update';
+import { AndroidUpdateDialog } from '../src/components/android-update-dialog';
+import { checkForAndroidUpdate, getCurrentAndroidVersion, type AndroidUpdateManifest } from '../src/update/android-update';
+import { getPersistentLogFile, writePersistentError, writePersistentLog } from '../src/data/persistent-log';
 
 export default function AboutScreen() {
   const router = useRouter();
-  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'downloading'>('idle');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateManifest, setUpdateManifest] = useState<AndroidUpdateManifest | null>(null);
+  const [sharingLog, setSharingLog] = useState(false);
   const currentVersion = getCurrentAndroidVersion();
 
+  const shareLog = async () => {
+    setSharingLog(true);
+    try {
+      writePersistentLog('INFO', 'diagnostic.share.requested', { platform: Platform.OS, versionCode: currentVersion.versionCode, versionName: currentVersion.versionName });
+      if (!await Sharing.isAvailableAsync()) {
+        Alert.alert('当前设备不支持分享', '诊断日志已保存在应用目录中，但无法打开系统分享面板。');
+        return;
+      }
+      await Sharing.shareAsync(getPersistentLogFile().uri, { dialogTitle: '分享“仍在”诊断日志', mimeType: 'text/plain', UTI: 'public.plain-text' });
+      writePersistentLog('INFO', 'diagnostic.share.finished');
+    } catch (cause) {
+      writePersistentError('diagnostic.share.failed', cause);
+      Alert.alert('分享日志失败', errorMessage(cause));
+    } finally {
+      setSharingLog(false);
+    }
+  };
+
   const checkUpdate = async () => {
-    setUpdateState('checking');
+    setCheckingUpdate(true);
     try {
       const result = await checkForAndroidUpdate();
       if (result.status === 'not-configured') {
@@ -24,28 +47,12 @@ export default function AboutScreen() {
       } else if (result.status === 'current') {
         Alert.alert('已是最新版本', `当前版本 ${currentVersion.versionName}`);
       } else {
-        const { manifest } = result;
-        Alert.alert(`发现新版本 ${manifest.versionName}`, manifest.releaseNotes || '新版本已经可以下载。', [
-          { text: '取消', style: 'cancel' },
-          { text: '下载更新', onPress: () => void installUpdate(manifest) },
-        ]);
+        setUpdateManifest(result.manifest);
       }
     } catch (cause) {
       Alert.alert('检查更新失败', errorMessage(cause));
     } finally {
-      setUpdateState('idle');
-    }
-  };
-
-  const installUpdate = async (manifest: Parameters<typeof downloadAndInstallAndroidUpdate>[0]) => {
-    setUpdateState('downloading');
-    try {
-      const result = await downloadAndInstallAndroidUpdate(manifest);
-      if (result === 'permission-required') Alert.alert('需要安装权限', '请允许“仍在”安装未知应用，返回后再次检查更新。');
-    } catch (cause) {
-      Alert.alert('更新失败', errorMessage(cause));
-    } finally {
-      setUpdateState('idle');
+      setCheckingUpdate(false);
     }
   };
 
@@ -71,11 +78,20 @@ export default function AboutScreen() {
         <Text style={styles.aboutText}>“仍在”是一款面向个人的生活记录应用。你可以用打卡、日记、人物和相册，留下值得记住的日子。</Text>
       </View>
       <View style={styles.links}>
-        <Pressable accessibilityRole="button" disabled={updateState !== 'idle'} onPress={() => void checkUpdate()} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="button" disabled={checkingUpdate} onPress={() => void checkUpdate()} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
           <View style={styles.linkIcon}><SymbolView name={{ android: 'system_update', ios: 'arrow.down.circle', web: 'system_update' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
           <View style={styles.linkCopy}>
-            <Text style={styles.linkText}>{updateState === 'checking' ? '正在检查更新…' : updateState === 'downloading' ? '正在下载更新…' : '检查更新'}</Text>
-            <Text style={styles.linkHint}>{Platform.OS === 'android' ? '启动时也会自动检查' : '仅 Android APK 支持'}</Text>
+            <Text style={styles.linkText}>{checkingUpdate ? '正在检查更新…' : '检查更新'}</Text>
+            <Text style={styles.linkHint}>{checkingUpdate ? '正在连接更新服务' : Platform.OS === 'android' ? '启动时也会自动检查' : '仅 Android APK 支持'}</Text>
+          </View>
+          {checkingUpdate ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />}
+        </Pressable>
+        <View style={styles.separator} />
+        <Pressable accessibilityRole="button" disabled={sharingLog} onPress={() => void shareLog()} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
+          <View style={styles.linkIcon}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
+          <View style={styles.linkCopy}>
+            <Text style={styles.linkText}>{sharingLog ? '正在准备日志…' : '分享诊断日志'}</Text>
+            <Text style={styles.linkHint}>仅包含运行状态，不包含你的记录内容</Text>
           </View>
           <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
         </Pressable>
@@ -87,6 +103,7 @@ export default function AboutScreen() {
         </Pressable>
       </View>
     </ScrollView>
+    <AndroidUpdateDialog manifest={updateManifest} onDismiss={() => setUpdateManifest(null)} />
   </SafeAreaView>;
 }
 

@@ -1,7 +1,11 @@
+import { writePersistentLog } from './persistent-log';
+
 type DiagnosticValue = boolean | number | string | null | undefined;
 
 export function logPasswordVaultDiagnostic(event: string, details: Record<string, DiagnosticValue> = {}): void {
   const safeDetails = Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined));
+  const level = /failed|invalid|rejected/.test(event) ? 'WARN' : 'INFO';
+  writePersistentLog(level, `password-vault.${event}`, safeDetails);
   console.warn(`[PasswordVault] ${event}`, safeDetails);
 }
 
