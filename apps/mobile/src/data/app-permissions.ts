@@ -27,7 +27,7 @@ export async function ensureAppPermission(permission: AppPermission, extraAction
   try {
     const handler = permissionHandler(permission);
     response = await handler.get();
-    if (!response.granted && response.status === 'undetermined' && response.canAskAgain) {
+    if (!response.granted && response.canAskAgain) {
       response = await handler.request();
     }
   } catch (cause) {

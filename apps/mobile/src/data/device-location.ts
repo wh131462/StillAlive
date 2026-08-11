@@ -6,6 +6,8 @@ export interface ResolvedDeviceLocation {
   city: string;
 }
 
+let currentPositionTask: Promise<Location.LocationObject> | null = null;
+
 export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
   if (Platform.OS === 'web') throw new Error('网页端暂不支持记录实际地址');
 
@@ -14,19 +16,19 @@ export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
   if (!await Location.hasServicesEnabledAsync()) throw new Error('系统定位服务未开启');
 
   const cachedPosition = await withTimeout(
-    Location.getLastKnownPositionAsync({ maxAge: 2 * 60 * 1000, requiredAccuracy: 500 }),
-    1_000,
+    Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000, requiredAccuracy: 1_000 }),
+    800,
     '缓存位置读取超时',
   ).catch(() => null);
   const position = cachedPosition ?? await withTimeout(
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, mayShowUserSettingsDialog: false }),
-    8_000,
+    getCurrentPosition(),
+    6_000,
     '定位超时，请移到开阔处后重试',
   );
   const [place] = await withTimeout(Location.reverseGeocodeAsync({
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
-  }), 5_000, '位置解析超时，请稍后重试');
+  }), 4_000, '位置解析超时，请稍后重试');
   if (!place) throw new Error('暂时无法识别当前位置');
 
   const city = normalizeCity(place.city ?? place.subregion ?? place.region);
@@ -40,6 +42,14 @@ export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
   ]);
   if (!city || !address) throw new Error('暂时无法识别当前位置');
   return { address: address.slice(0, 80), city: city.slice(0, 40) };
+}
+
+function getCurrentPosition(): Promise<Location.LocationObject> {
+  if (!currentPositionTask) {
+    currentPositionTask = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, mayShowUserSettingsDialog: false });
+    void currentPositionTask.finally(() => { currentPositionTask = null; }).catch(() => undefined);
+  }
+  return currentPositionTask;
 }
 
 function normalizeCity(value: string | null): string {
