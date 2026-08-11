@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../theme/app-theme';
 import {
@@ -11,9 +11,18 @@ import {
 } from '../update/android-update';
 
 interface AndroidUpdateDialogProps {
+  checking?: boolean;
   manifest: AndroidUpdateManifest | null;
+  notice?: AndroidUpdateNotice | null;
   onDismiss(): void;
   simulateDownload?: boolean;
+}
+
+export interface AndroidUpdateNotice {
+  error?: boolean;
+  message: string;
+  status: string;
+  title: string;
 }
 
 type Phase = 'ready' | 'downloading' | 'permission' | 'error';
@@ -24,7 +33,7 @@ interface ProgressView extends AndroidUpdateDownloadProgress {
 
 const EMPTY_PROGRESS: ProgressView = { bytesWritten: 0, totalBytes: null, bytesPerSecond: null };
 
-export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = false }: AndroidUpdateDialogProps) {
+export function AndroidUpdateDialog({ checking = false, manifest, notice = null, onDismiss, simulateDownload = false }: AndroidUpdateDialogProps) {
   const [phase, setPhase] = useState<Phase>('ready');
   const [progress, setProgress] = useState<ProgressView>(EMPTY_PROGRESS);
   const [error, setError] = useState('');
@@ -41,7 +50,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
     setContentUri(null);
   }, [manifest]);
 
-  if (!manifest) return null;
+  if (!manifest && !checking && !notice) return null;
 
   const handleProgress = (next: AndroidUpdateDownloadProgress) => {
     const now = Date.now();
@@ -54,6 +63,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
   };
 
   const startDownload = async () => {
+    if (!manifest) return;
     const controller = new AbortController();
     abortController.current = controller;
     speedSample.current = { bytes: 0, time: 0 };
@@ -94,7 +104,11 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
     abortController.current?.abort();
     onDismiss();
   };
-  const dismiss = () => phase === 'downloading' ? pauseDownload() : onDismiss();
+  const dismiss = () => {
+    if (checking) return;
+    if (phase === 'downloading') pauseDownload();
+    else onDismiss();
+  };
   const currentVersion = getCurrentAndroidVersion();
   const fraction = progress.totalBytes ? Math.min(1, progress.bytesWritten / progress.totalBytes) : progress.bytesWritten === 0 ? 0 : null;
   const remainingSeconds = progress.totalBytes && progress.bytesPerSecond
@@ -106,7 +120,22 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
       <Pressable accessible={false} onPress={phase === 'downloading' ? undefined : dismiss} style={styles.backdrop}>
         <Pressable accessibilityRole="none" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.sheet}>
           <View style={styles.handle} />
-          {phase === 'ready' ? (
+          {checking ? (
+            <>
+              <View style={styles.downloadHeader}><Text style={styles.title}>正在检查更新</Text><Text style={styles.progressPercent}>检查中</Text></View>
+              <View style={styles.checkingStatus}><ActivityIndicator color={colors.life} size="small" /><Text style={styles.checkingText}>正在连接更新服务，请稍候。</Text></View>
+            </>
+          ) : null}
+
+          {!checking && notice ? (
+            <>
+              <View style={styles.downloadHeader}><Text style={styles.title}>{notice.title}</Text><Text style={[styles.progressPercent, notice.error && styles.noticeStatusError]}>{notice.status}</Text></View>
+              <Text style={styles.phaseText}>{notice.message}</Text>
+              <PrimaryButton label="知道了" onPress={onDismiss} />
+            </>
+          ) : null}
+
+          {!checking && !notice && manifest && phase === 'ready' ? (
             <>
               <Text style={styles.title}>发现新版本 v{manifest.versionName}</Text>
               <Text style={styles.subtitle}>当前版本 v{currentVersion.versionName}</Text>
@@ -116,7 +145,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
             </>
           ) : null}
 
-          {phase === 'downloading' ? (
+          {!checking && !notice && manifest && phase === 'downloading' ? (
             <>
               <View style={styles.downloadHeader}><Text style={styles.title}>正在下载更新</Text><Text style={styles.progressPercent}>{fraction === null ? '下载中' : `${Math.round(fraction * 100)}%`}</Text></View>
               <Text style={styles.subtitle}>v{manifest.versionName}</Text>
@@ -128,7 +157,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
             </>
           ) : null}
 
-          {phase === 'permission' ? (
+          {!checking && !notice && phase === 'permission' ? (
             <>
               <Text style={styles.title}>需要安装权限</Text>
               <Text style={styles.phaseText}>请允许“仍在”安装未知应用，返回后继续安装。无需重新下载。</Text>
@@ -137,7 +166,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
             </>
           ) : null}
 
-          {phase === 'error' ? (
+          {!checking && !notice && phase === 'error' ? (
             <>
               <Text style={styles.title}>更新失败</Text>
               <Text style={styles.errorText}>{error}</Text>
@@ -215,12 +244,15 @@ const styles = createThemedStyles(() => ({
   buttonPressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
   downloadHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   progressPercent: { color: colors.life, fontFamily: typography.mono, fontSize: 16, fontWeight: '700' },
+  noticeStatusError: { color: colors.danger },
   progressMeta: { flexShrink: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   progressMetaEnd: { textAlign: 'right' },
   progressTrack: { height: 8, marginTop: spacing.lg, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderRadius: 4, backgroundColor: colors.lifeLight },
   progressFill: { height: '100%', alignSelf: 'flex-start', borderRadius: 4, backgroundColor: colors.life },
   progressUnknown: { width: '34%', opacity: 0.72 },
   downloadStats: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
+  checkingStatus: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  checkingText: { flex: 1, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 19 },
   phaseText: { marginTop: spacing.md, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 19 },
   errorText: { marginTop: spacing.md, color: colors.danger, fontSize: typography.size.caption, lineHeight: 18 },
 }));

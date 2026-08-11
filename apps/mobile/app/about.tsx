@@ -7,7 +7,7 @@ import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, Style
 import { useState } from 'react';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../src/theme/app-theme';
-import { AndroidUpdateDialog } from '../src/components/android-update-dialog';
+import { AndroidUpdateDialog, type AndroidUpdateNotice } from '../src/components/android-update-dialog';
 import { checkForAndroidUpdate, getCurrentAndroidVersion, type AndroidUpdateManifest } from '../src/update/android-update';
 import { getPersistentLogFile, writePersistentError, writePersistentLog } from '../src/data/persistent-log';
 
@@ -15,6 +15,7 @@ export default function AboutScreen() {
   const router = useRouter();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateManifest, setUpdateManifest] = useState<AndroidUpdateManifest | null>(null);
+  const [updateNotice, setUpdateNotice] = useState<AndroidUpdateNotice | null>(null);
   const [sharingLog, setSharingLog] = useState(false);
   const currentVersion = getCurrentAndroidVersion();
 
@@ -37,20 +38,22 @@ export default function AboutScreen() {
   };
 
   const checkUpdate = async () => {
+    setUpdateManifest(null);
+    setUpdateNotice(null);
     setCheckingUpdate(true);
     try {
       const result = await checkForAndroidUpdate();
       if (result.status === 'not-configured') {
-        Alert.alert('暂未配置更新服务器', '请先填写 Android 更新清单地址。');
+        setUpdateNotice({ title: '更新服务未配置', status: '不可用', message: '请先填写 Android 更新清单地址。' });
       } else if (result.status === 'unsupported') {
-        Alert.alert('当前平台不支持', 'APK 自动更新仅支持 Android 安装包。');
+        setUpdateNotice({ title: '当前平台不支持', status: '不可用', message: 'APK 自动更新仅支持 Android 安装包。' });
       } else if (result.status === 'current') {
-        Alert.alert('已是最新版本', `当前版本 ${currentVersion.versionName}`);
+        setUpdateNotice({ title: '已是最新版本', status: '最新', message: `当前版本 v${currentVersion.versionName}，暂无可用更新。` });
       } else {
         setUpdateManifest(result.manifest);
       }
     } catch (cause) {
-      Alert.alert('检查更新失败', errorMessage(cause));
+      setUpdateNotice({ title: '检查更新失败', status: '失败', message: errorMessage(cause), error: true });
     } finally {
       setCheckingUpdate(false);
     }
@@ -103,7 +106,7 @@ export default function AboutScreen() {
         </Pressable>
       </View>
     </ScrollView>
-    <AndroidUpdateDialog manifest={updateManifest} onDismiss={() => setUpdateManifest(null)} />
+    <AndroidUpdateDialog checking={checkingUpdate} manifest={updateManifest} notice={updateNotice} onDismiss={() => { setUpdateManifest(null); setUpdateNotice(null); }} />
   </SafeAreaView>;
 }
 
