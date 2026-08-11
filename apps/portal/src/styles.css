@@ -175,7 +175,8 @@ nav a:hover::after, nav a:focus-visible::after { right: 0; }
 .platform-top { display: flex; align-items: center; justify-content: space-between; }
 .platform-icon { display: grid; place-items: center; width: 51px; height: 51px; border: 1px solid currentColor; border-radius: 50%; }
 .platform-icon svg { width: 24px; fill: currentColor; stroke: currentColor; stroke-width: 1.4; }
-.platform-android .platform-icon svg { fill: none; }
+.platform-android .platform-icon { border-color: transparent; background: var(--life); color: var(--sheet); box-shadow: 0 0 0 6px rgba(29,107,73,.09); }
+.platform-android .platform-icon svg { width: 25px; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .available-dot, .soon-dot { display: flex; align-items: center; gap: 7px; color: var(--life); font-size: 9px; font-weight: 700; letter-spacing: .08em; }
 .available-dot::before, .soon-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px rgba(29,107,73,.11); }
 .soon-dot { color: rgba(244,246,239,.5); }

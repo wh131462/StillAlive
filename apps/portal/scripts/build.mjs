@@ -7,7 +7,6 @@ const rootDir = path.resolve(portalDir, '../..');
 const sourceDir = path.join(portalDir, 'src');
 const outputDir = path.join(portalDir, 'dist');
 const releasePath = path.join(rootDir, 'release/latest.json');
-const logoPath = path.join(rootDir, 'apps/mobile/assets/branding/logo-mark.svg');
 const base = normalizeBase(process.env.PORTAL_BASE || '/');
 
 const release = JSON.parse(await readFile(releasePath, 'utf8'));
@@ -27,7 +26,7 @@ await Promise.all([
   writeFile(path.join(outputDir, 'index.html'), html),
   cp(path.join(sourceDir, 'styles.css'), path.join(outputDir, 'styles.css')),
   cp(path.join(sourceDir, 'app.js'), path.join(outputDir, 'app.js')),
-  cp(logoPath, path.join(outputDir, 'assets/logo-mark.svg')),
+  cp(path.join(sourceDir, 'favicon.svg'), path.join(outputDir, 'assets/favicon.svg')),
   mkdir(path.join(outputDir, 'release'), { recursive: true }).then(() => cp(releasePath, path.join(outputDir, 'release/latest.json'))),
 ]);
 

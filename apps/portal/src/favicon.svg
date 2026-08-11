@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">仍在</title>
+  <circle cx="32" cy="32" r="30" fill="#1D6B49"/>
+  <circle cx="32" cy="32" r="17" fill="none" stroke="#F4F6EF" stroke-width="5.5" stroke-linecap="round" stroke-dasharray="89 18" transform="rotate(-35 32 32)"/>
+  <circle cx="32" cy="32" r="3.5" fill="#F4F6EF"/>
+  <circle cx="46" cy="22" r="4.25" fill="#D4A84F"/>
+</svg>
