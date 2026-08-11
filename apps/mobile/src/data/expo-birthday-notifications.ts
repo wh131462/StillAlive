@@ -139,7 +139,6 @@ async function ensureBirthdayChannel(notifications: typeof ExpoNotifications | n
     name: '人物生日提醒',
     description: '人物生日提前三天和当天的本地提醒',
     importance: notifications.AndroidImportance.HIGH,
-    sound: 'default',
     vibrationPattern: [0, 250, 180, 250],
   });
 }
@@ -150,7 +149,6 @@ async function ensureMemoryChannel(notifications: typeof ExpoNotifications | nul
     name: '旧日回忆',
     description: '偶尔推荐以前留下的本地记录',
     importance: notifications.AndroidImportance.DEFAULT,
-    sound: 'default',
   });
 }
 
@@ -160,7 +158,6 @@ async function ensureDebugChannel(notifications: typeof ExpoNotifications | null
     name: '通知调试',
     description: '仅用于验证本机通知是否正常工作',
     importance: notifications.AndroidImportance.HIGH,
-    sound: 'default',
     vibrationPattern: [0, 200, 120, 200],
   });
 }

@@ -51,6 +51,7 @@ export function planBirthdayNotifications(people: Person[], hour: number, minute
 export async function reconcileBirthdayNotifications(store: BirthdayScheduleStore, adapter: BirthdayNotificationAdapter, people: Person[], enabled: boolean, hour: number, minute: number, requestPermission = false): Promise<void> {
   const existing = await store.listBirthdayNotificationSchedules();
   if (!enabled) {
+    if (existing.length === 0) return;
     for (const item of existing) await adapter.cancel(item.platformIdentifier);
     await store.replaceBirthdayNotificationSchedules([]);
     return;

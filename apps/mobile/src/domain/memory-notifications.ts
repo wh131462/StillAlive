@@ -73,6 +73,7 @@ export async function reconcileMemoryNotifications(store: MemoryNotificationSche
   for (const item of delivered) await store.recordMemoryNotificationExposure(item.postId, item.scheduledAt);
 
   if (!enabled) {
+    if (existing.length === 0) return;
     for (const item of existing) if (!delivered.includes(item)) await adapter.cancel(item.platformIdentifier);
     await store.replaceMemoryNotificationSchedules([]);
     return;
