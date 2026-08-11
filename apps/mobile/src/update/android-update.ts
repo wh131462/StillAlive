@@ -93,8 +93,6 @@ export async function downloadAndInstallAndroidUpdate(
   manifest: AndroidUpdateManifest,
   options: AndroidUpdateDownloadOptions = {},
 ): Promise<AndroidUpdateInstallResult> {
-  let incompleteDownload: { destination: string; marker: string } | null = null;
-  let downloadCompleted = false;
   try {
     if (Platform.OS !== 'android' || !apkInstaller) throw new Error('当前环境不支持 APK 更新');
     writePersistentLog('INFO', 'update.install.started', { versionCode: manifest.versionCode, versionName: manifest.versionName });
@@ -103,6 +101,7 @@ export async function downloadAndInstallAndroidUpdate(
 
     const destination = `${FileSystem.cacheDirectory}still-alive-${manifest.versionCode}.apk`;
     const marker = `${destination}.complete.json`;
+    const partialMarker = `${destination}.partial.json`;
     if (options.signal?.aborted) throw cancelledError();
     const cachedContentUri = await getCachedUpdateContentUri(destination, marker, manifest);
     if (options.signal?.aborted) throw cancelledError();
@@ -113,27 +112,53 @@ export async function downloadAndInstallAndroidUpdate(
       return { status: installResult, contentUri: cachedContentUri };
     }
 
-    await deleteUpdateFiles(destination, marker);
-    incompleteDownload = { destination, marker };
-    const download = FileSystem.createDownloadResumable(manifest.apkUrl, destination, {}, (progress) => {
-      options.onProgress?.({
-        bytesWritten: progress.totalBytesWritten,
-        totalBytes: progress.totalBytesExpectedToWrite > 0 ? progress.totalBytesExpectedToWrite : null,
-      });
-    });
-    const cancelDownload = () => void download.cancelAsync().catch(() => undefined);
-    options.signal?.addEventListener('abort', cancelDownload, { once: true });
+    let resumeData = await getPartialUpdateResumeData(destination, partialMarker, manifest);
     let result;
-    try {
-      result = await download.downloadAsync();
-    } finally {
-      options.signal?.removeEventListener('abort', cancelDownload);
-    }
-    if (!result || options.signal?.aborted) {
-      throw cancelledError();
-    }
-    if (result.status < 200 || result.status >= 300) {
-      throw new Error(`APK 下载失败，服务器返回 ${result.status}`);
+    while (true) {
+      if (resumeData) {
+        await FileSystem.deleteAsync(marker, { idempotent: true });
+        const bytesWritten = Number(resumeData);
+        options.onProgress?.({ bytesWritten, totalBytes: null });
+        writePersistentLog('INFO', 'update.download.resumed', { bytesWritten, versionCode: manifest.versionCode });
+      } else {
+        await deleteUpdateFiles(destination, marker, partialMarker);
+        await writePartialUpdateMarker(partialMarker, manifest);
+      }
+      if (options.signal?.aborted) throw cancelledError();
+
+      const resumed = Boolean(resumeData);
+      const download = FileSystem.createDownloadResumable(manifest.apkUrl, destination, {}, (progress) => {
+        options.onProgress?.({
+          bytesWritten: progress.totalBytesWritten,
+          totalBytes: progress.totalBytesExpectedToWrite > 0 ? progress.totalBytesExpectedToWrite : null,
+        });
+      }, resumeData);
+      let pausePromise: Promise<void> | null = null;
+      const pauseDownload = () => {
+        pausePromise ??= download.pauseAsync()
+          .then(() => undefined)
+          .catch(() => download.cancelAsync().catch(() => undefined));
+      };
+      options.signal?.addEventListener('abort', pauseDownload, { once: true });
+      try {
+        result = await download.downloadAsync();
+      } finally {
+        options.signal?.removeEventListener('abort', pauseDownload);
+      }
+      if (!result) {
+        await pausePromise;
+        throw cancelledError();
+      }
+      if (resumed && (result.status === 200 || result.status === 416)) {
+        if (options.signal?.aborted) throw cancelledError();
+        resumeData = undefined;
+        continue;
+      }
+      if (result.status < 200 || result.status >= 300) {
+        await deleteUpdateFiles(destination, marker, partialMarker);
+        throw new Error(`APK 下载失败，服务器返回 ${result.status}`);
+      }
+      break;
     }
 
     const fileInfo = await FileSystem.getInfoAsync(result.uri);
@@ -143,14 +168,13 @@ export async function downloadAndInstallAndroidUpdate(
       size: fileInfo.size,
       versionCode: manifest.versionCode,
     }));
-    downloadCompleted = true;
+    await FileSystem.deleteAsync(partialMarker, { idempotent: true });
     const contentUri = await FileSystem.getContentUriAsync(result.uri);
     if (options.signal?.aborted) throw cancelledError();
     const installResult = await apkInstaller.installApkAsync(contentUri);
     writePersistentLog('INFO', 'update.install.finished', { result: installResult });
     return { status: installResult, contentUri };
   } catch (cause) {
-    if (incompleteDownload && !downloadCompleted) await deleteUpdateFiles(incompleteDownload.destination, incompleteDownload.marker).catch(() => undefined);
     const normalizedCause = options.signal?.aborted ? cancelledError() : cause;
     if (normalizedCause instanceof Error && normalizedCause.name === 'AbortError') {
       writePersistentLog('INFO', 'update.install.cancelled', { versionCode: manifest.versionCode, versionName: manifest.versionName });
@@ -159,6 +183,30 @@ export async function downloadAndInstallAndroidUpdate(
     }
     throw normalizedCause;
   }
+}
+
+async function getPartialUpdateResumeData(destination: string, marker: string, manifest: AndroidUpdateManifest) {
+  try {
+    const [fileInfo, markerInfo] = await Promise.all([
+      FileSystem.getInfoAsync(destination),
+      FileSystem.getInfoAsync(marker),
+    ]);
+    if (!fileInfo.exists || fileInfo.isDirectory || fileInfo.size <= 0 || !markerInfo.exists || markerInfo.isDirectory) return undefined;
+    const metadata: unknown = JSON.parse(await FileSystem.readAsStringAsync(marker));
+    if (!isRecord(metadata)
+      || metadata.versionCode !== manifest.versionCode
+      || metadata.apkUrl !== manifest.apkUrl) return undefined;
+    return String(fileInfo.size);
+  } catch {
+    return undefined;
+  }
+}
+
+async function writePartialUpdateMarker(marker: string, manifest: AndroidUpdateManifest) {
+  await FileSystem.writeAsStringAsync(marker, JSON.stringify({
+    apkUrl: manifest.apkUrl,
+    versionCode: manifest.versionCode,
+  }));
 }
 
 export async function installDownloadedAndroidUpdate(contentUri: string) {
@@ -209,11 +257,8 @@ async function getCachedUpdateContentUri(destination: string, marker: string, ma
   }
 }
 
-async function deleteUpdateFiles(destination: string, marker: string) {
-  await Promise.all([
-    FileSystem.deleteAsync(destination, { idempotent: true }),
-    FileSystem.deleteAsync(marker, { idempotent: true }),
-  ]);
+async function deleteUpdateFiles(...uris: string[]) {
+  await Promise.all(uris.map((uri) => FileSystem.deleteAsync(uri, { idempotent: true })));
 }
 
 function cancelledError() {

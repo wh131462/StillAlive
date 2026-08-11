@@ -90,13 +90,13 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
     }
   };
 
-  const cancelDownload = () => {
+  const pauseDownload = () => {
     abortController.current?.abort();
     onDismiss();
   };
-  const dismiss = () => phase === 'downloading' ? cancelDownload() : onDismiss();
+  const dismiss = () => phase === 'downloading' ? pauseDownload() : onDismiss();
   const currentVersion = getCurrentAndroidVersion();
-  const fraction = progress.totalBytes ? Math.min(1, progress.bytesWritten / progress.totalBytes) : null;
+  const fraction = progress.totalBytes ? Math.min(1, progress.bytesWritten / progress.totalBytes) : progress.bytesWritten === 0 ? 0 : null;
   const remainingSeconds = progress.totalBytes && progress.bytesPerSecond
     ? Math.max(0, (progress.totalBytes - progress.bytesWritten) / progress.bytesPerSecond)
     : null;
@@ -124,7 +124,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
                 <View style={[styles.progressFill, fraction === null ? styles.progressUnknown : { width: `${fraction * 100}%` }]} />
               </View>
               <View style={styles.downloadStats}><Text numberOfLines={1} style={styles.progressMeta}>{formatProgress(progress)}</Text><Text numberOfLines={1} style={[styles.progressMeta, styles.progressMetaEnd]}>{progress.bytesPerSecond ? `${formatBytes(progress.bytesPerSecond)}/秒${remainingSeconds === null ? '' : ` · 约 ${formatDuration(remainingSeconds)}`}` : '正在计算速度'}</Text></View>
-              <SecondaryButton label="取消下载" onPress={cancelDownload} />
+              <SecondaryButton label="暂停下载" onPress={pauseDownload} />
             </>
           ) : null}
 
@@ -141,7 +141,7 @@ export function AndroidUpdateDialog({ manifest, onDismiss, simulateDownload = fa
             <>
               <Text style={styles.title}>更新失败</Text>
               <Text style={styles.errorText}>{error}</Text>
-              <PrimaryButton label="重新下载" onPress={() => void startDownload()} />
+              <PrimaryButton label="继续下载" onPress={() => void startDownload()} />
               <SecondaryButton label="关闭" onPress={onDismiss} />
             </>
           ) : null}
