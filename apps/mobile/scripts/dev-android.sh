@@ -32,7 +32,6 @@ export NODE_ENV=development
 export STILL_ALIVE_APP_VARIANT=development
 
 cd "$MOBILE_DIR"
-if ! grep -q "applicationId 'com.wh131462.stillalive.dev'" android/app/build.gradle 2>/dev/null; then
-  pnpm exec expo prebuild --platform android --no-install
-fi
+# 每次启动前重新生成自动链接清单，确保新增的 Expo 原生模块（包括 DOM WebView）进入开发 APK。
+pnpm exec expo prebuild --platform android --no-install --no-clean
 exec pnpm exec expo run:android "$@"
