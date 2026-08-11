@@ -43,7 +43,7 @@ jobs:
 
       - name: Build portal
         env:
-          PORTAL_BASE: /${{ github.event.repository.name }}/
+          PORTAL_BASE: /
         run: pnpm --filter @still-alive/portal build
 
       - name: Configure Pages
