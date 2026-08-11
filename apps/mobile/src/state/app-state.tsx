@@ -115,6 +115,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const database = useSQLiteContext();
   const repository = useMemo(() => new SQLiteStillAliveRepository(database), [database]);
   const databaseReadyRef = useRef(false);
+  const notificationSyncQueueRef = useRef(Promise.resolve());
   const [today, setToday] = useState<DayKey>(() => toDayKey(new Date()));
   const [todayCheckIn, setTodayCheckIn] = useState<CheckIn | null>(null);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
@@ -134,7 +135,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const syncBirthdayNotifications = useCallback(async (storedPeople: Person[], storedPreferences: AppPreferences, requestPermission = false) => {
+  const enqueueNotificationSync = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
+    const task = notificationSyncQueueRef.current.catch(() => undefined).then(operation);
+    notificationSyncQueueRef.current = task.then(() => undefined, () => undefined);
+    return task;
+  }, []);
+
+  const syncBirthdayNotifications = useCallback((storedPeople: Person[], storedPreferences: AppPreferences, requestPermission = false) => enqueueNotificationSync(async () => {
     try {
       await reconcileBirthdayNotifications(repository, expoBirthdayNotificationAdapter, storedPeople, storedPreferences.birthdayNotificationsEnabled, storedPreferences.birthdayReminderHour, storedPreferences.birthdayReminderMinute, requestPermission);
       const permission = await expoBirthdayNotificationAdapter.getPermission();
@@ -150,9 +157,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       setPreferences((current) => ({ ...current, birthdayNotificationError: message }));
       throw cause;
     }
-  }, [repository]);
+  }), [enqueueNotificationSync, repository]);
 
-  const syncMemoryNotifications = useCallback(async (storedPosts: Post[], storedPreferences: AppPreferences, requestPermission = false) => {
+  const syncMemoryNotifications = useCallback((storedPosts: Post[], storedPreferences: AppPreferences, requestPermission = false) => enqueueNotificationSync(async () => {
     try {
       await reconcileMemoryNotifications(repository, expoMemoryNotificationAdapter, storedPosts, storedPreferences.memoryNotificationsEnabled, requestPermission);
       setNotificationPermission(await expoMemoryNotificationAdapter.getPermission());
@@ -167,7 +174,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       setPreferences((current) => ({ ...current, memoryNotificationError: message }));
       throw cause;
     }
-  }, [repository]);
+  }), [enqueueNotificationSync, repository]);
 
   useEffect(() => {
     void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch(() => undefined);

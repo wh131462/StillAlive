@@ -443,7 +443,19 @@ async function addColumnIfMissing(db: SQLiteDatabase, table: string, column: str
 }
 
 export class SQLiteStillAliveRepository implements StillAliveRepository {
+  private writeQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly db: SQLiteDatabase) {}
+
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const task = this.writeQueue.catch(() => undefined).then(operation);
+    this.writeQueue = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  private withExclusiveTransaction(operation: Parameters<SQLiteDatabase['withExclusiveTransactionAsync']>[0]): Promise<void> {
+    return this.enqueueWrite(() => this.db.withExclusiveTransactionAsync(operation));
+  }
 
   async checkIn(dayKey: DayKey, city: string | null): Promise<CheckIn> {
     const existing = await this.getCheckIn(dayKey);
@@ -455,13 +467,13 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       city,
       createdAt: new Date().toISOString(),
     };
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       'INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)',
       checkIn.id,
       checkIn.dayKey,
       checkIn.city,
       checkIn.createdAt,
-    );
+    ));
     return checkIn;
   }
 
@@ -481,7 +493,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async createPost(post: Post, personIds: string[] = []): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync(
         'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
         post.id,
@@ -503,7 +515,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async updatePost(post: Post, personIds: string[] = []): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync(
         'UPDATE posts SET body_markdown = ?, location_name = ?, updated_at = ? WHERE id = ?',
         post.bodyMarkdown,
@@ -523,7 +535,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async deletePost(postId: string): Promise<void> {
-    await this.db.runAsync('DELETE FROM posts WHERE id = ?', postId);
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM posts WHERE id = ?', postId));
   }
 
   async listPersonIdsByPost(postId: string): Promise<string[]> {
@@ -562,7 +574,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async saveDraft(draft: Draft): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       `INSERT INTO drafts (id, day_key, body_markdown, updated_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(day_key) DO UPDATE SET body_markdown = excluded.body_markdown, updated_at = excluded.updated_at`,
@@ -570,7 +582,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       draft.dayKey,
       draft.bodyMarkdown,
       draft.updatedAt,
-    );
+    ));
   }
 
   async getDraft(dayKey: DayKey): Promise<Draft | null> {
@@ -589,7 +601,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async createMedia(media: Media): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       media.id,
       media.localPath,
@@ -598,11 +610,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       media.height,
       media.checksum,
       media.createdAt,
-    );
+    ));
   }
 
   async updateMedia(media: Media): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       'UPDATE media SET local_path = ?, mime_type = ?, width = ?, height = ?, checksum = ?, created_at = ? WHERE id = ?',
       media.localPath,
       media.mimeType,
@@ -611,11 +623,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       media.checksum,
       media.createdAt,
       media.id,
-    );
+    ));
   }
 
   async deleteMedia(mediaId: string): Promise<void> {
-    await this.db.runAsync('DELETE FROM media WHERE id = ?', mediaId);
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM media WHERE id = ?', mediaId));
   }
 
   async isMediaReferenced(mediaId: string): Promise<boolean> {
@@ -660,7 +672,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async createPerson(person: Person): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       `INSERT INTO persons (id, name, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, memory_enabled, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       person.id,
@@ -681,11 +693,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
-    );
+    ));
   }
 
   async updatePerson(person: Person): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       `UPDATE persons
        SET name = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?,
            birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?,
@@ -709,20 +721,20 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
-    );
+    ));
   }
 
   async deletePerson(personId: string): Promise<void> {
-    await this.db.runAsync('DELETE FROM persons WHERE id = ?', personId);
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM persons WHERE id = ?', personId));
   }
 
   async setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       'UPDATE persons SET memory_enabled = ?, updated_at = ? WHERE id = ?',
       enabled ? 1 : 0,
       new Date().toISOString(),
       personId,
-    );
+    ));
   }
 
   async listTagDefinitions(): Promise<TagDefinition[]> {
@@ -731,11 +743,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async createTagDefinition(tag: TagDefinition): Promise<void> {
-    await this.db.runAsync('INSERT INTO tag_definitions (id, name, normalized_name, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', tag.id, tag.name, tag.normalizedName, tag.groupId, tag.createdAt, tag.updatedAt);
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO tag_definitions (id, name, normalized_name, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', tag.id, tag.name, tag.normalizedName, tag.groupId, tag.createdAt, tag.updatedAt));
   }
 
   async updateTagDefinition(tag: TagDefinition): Promise<void> {
-    await this.db.runAsync('UPDATE tag_definitions SET name = ?, normalized_name = ?, group_id = ?, updated_at = ? WHERE id = ?', tag.name, tag.normalizedName, tag.groupId, tag.updatedAt, tag.id);
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE tag_definitions SET name = ?, normalized_name = ?, group_id = ?, updated_at = ? WHERE id = ?', tag.name, tag.normalizedName, tag.groupId, tag.updatedAt, tag.id));
   }
 
   async listTagGroups(): Promise<TagGroup[]> {
@@ -744,15 +756,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async createTagGroup(group: TagGroup): Promise<void> {
-    await this.db.runAsync('INSERT INTO tag_groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)', group.id, group.name, group.createdAt, group.updatedAt);
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO tag_groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)', group.id, group.name, group.createdAt, group.updatedAt));
   }
 
   async updateTagGroup(group: TagGroup): Promise<void> {
-    await this.db.runAsync('UPDATE tag_groups SET name = ?, updated_at = ? WHERE id = ?', group.name, group.updatedAt, group.id);
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE tag_groups SET name = ?, updated_at = ? WHERE id = ?', group.name, group.updatedAt, group.id));
   }
 
   async deleteTagGroup(groupId: string): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync("DELETE FROM person_tag_assignments WHERE kind = 'custom' AND value IN (SELECT id FROM tag_definitions WHERE group_id = ?)", groupId);
       await transaction.runAsync('DELETE FROM tag_definitions WHERE group_id = ?', groupId);
       await transaction.runAsync('DELETE FROM tag_groups WHERE id = ?', groupId);
@@ -760,7 +772,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async deleteTagDefinition(tagId: string): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync("DELETE FROM person_tag_assignments WHERE kind = 'custom' AND value = ?", tagId);
       await transaction.runAsync('DELETE FROM tag_definitions WHERE id = ?', tagId);
     });
@@ -777,7 +789,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async updateTagSystemSettings(settings: TagSystemSetting[]): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       for (const setting of settings) await transaction.runAsync('UPDATE tag_system_settings SET enabled = ?, sort_order = ? WHERE system = ?', setting.enabled ? 1 : 0, setting.sortOrder, setting.system);
     });
   }
@@ -788,7 +800,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async setPersonTags(personId: string, mbti: string | null, customTagIds: string[]): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync('DELETE FROM person_tag_assignments WHERE person_id = ?', personId);
       if (mbti) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'mbti', ?)", personId, mbti);
       for (const tagId of new Set(customTagIds)) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'custom', ?)", personId, tagId);
@@ -801,16 +813,16 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async createAlbum(album: PersonAlbum): Promise<void> {
-    await this.db.runAsync('INSERT INTO person_albums (id, person_id, name, cover_media_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', album.id, album.personId, album.name, album.coverMediaId, album.sortOrder, album.createdAt, album.updatedAt);
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO person_albums (id, person_id, name, cover_media_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', album.id, album.personId, album.name, album.coverMediaId, album.sortOrder, album.createdAt, album.updatedAt));
   }
 
   async updateAlbum(album: PersonAlbum): Promise<void> {
-    await this.db.runAsync('UPDATE person_albums SET name = ?, cover_media_id = ?, sort_order = ?, updated_at = ? WHERE id = ?', album.name, album.coverMediaId, album.sortOrder, album.updatedAt, album.id);
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE person_albums SET name = ?, cover_media_id = ?, sort_order = ?, updated_at = ? WHERE id = ?', album.name, album.coverMediaId, album.sortOrder, album.updatedAt, album.id));
   }
 
   async deleteAlbum(albumId: string): Promise<void> {
     const rows = await this.db.getAllAsync<{ media_id: string }>('SELECT media_id FROM album_media WHERE album_id = ?', albumId);
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync('DELETE FROM person_albums WHERE id = ?', albumId);
       for (const row of rows) await transaction.runAsync('DELETE FROM media WHERE id = ?', row.media_id);
     });
@@ -822,20 +834,20 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async addAlbumMedia(item: AlbumMedia, media: Media): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync('INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', media.id, media.localPath, media.mimeType, media.width, media.height, media.checksum, media.createdAt);
       await transaction.runAsync('INSERT INTO album_media (album_id, media_id, sort_order, added_at) VALUES (?, ?, ?, ?)', item.albumId, item.mediaId, item.sortOrder, item.addedAt);
     });
   }
 
   async updateAlbumMedia(albumId: string, items: AlbumMedia[]): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       for (const item of items) await transaction.runAsync('UPDATE album_media SET sort_order = ? WHERE album_id = ? AND media_id = ?', item.sortOrder, albumId, item.mediaId);
     });
   }
 
   async removeAlbumMedia(albumId: string, mediaId: string): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync('DELETE FROM album_media WHERE album_id = ? AND media_id = ?', albumId, mediaId);
       await transaction.runAsync('UPDATE person_albums SET cover_media_id = NULL WHERE id = ? AND cover_media_id = ?', albumId, mediaId);
       await transaction.runAsync('DELETE FROM media WHERE id = ?', mediaId);
@@ -848,7 +860,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async replaceBirthdayNotificationSchedules(items: BirthdayNotificationSchedule[]): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync('DELETE FROM birthday_notification_schedules');
       for (const item of items) await transaction.runAsync('INSERT INTO birthday_notification_schedules (id, person_id, event_type, birthday_day_key, scheduled_at, platform_identifier) VALUES (?, ?, ?, ?, ?, ?)', item.id, item.personId, item.eventType, item.birthdayDayKey, item.scheduledAt, item.platformIdentifier);
     });
@@ -860,7 +872,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async replaceMemoryNotificationSchedules(items: MemoryNotificationSchedule[]): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.runAsync('DELETE FROM memory_notification_schedules');
       for (const item of items) await transaction.runAsync('INSERT INTO memory_notification_schedules (id, post_id, scheduled_at, platform_identifier) VALUES (?, ?, ?, ?)', item.id, item.postId, item.scheduledAt, item.platformIdentifier);
     });
@@ -872,14 +884,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async recordMemoryNotificationExposure(postId: string, shownAt: string): Promise<void> {
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       `INSERT INTO memory_exposures (post_id, kind, shown_at, review_count) VALUES (?, 'notification', ?, 1)
        ON CONFLICT(post_id, kind) DO UPDATE SET
          review_count = memory_exposures.review_count + CASE WHEN excluded.shown_at > memory_exposures.shown_at THEN 1 ELSE 0 END,
          shown_at = MAX(memory_exposures.shown_at, excluded.shown_at)`,
       postId,
       shownAt,
-    );
+    ));
   }
 
   async getHomeMemory(today: DayKey): Promise<HomeMemory | null> {
@@ -920,12 +932,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async markMemoryShown(memory: HomeMemory): Promise<void> {
     if (memory.kind !== 'person') return;
-    await this.db.runAsync(
+    await this.enqueueWrite(() => this.db.runAsync(
       `INSERT INTO memory_exposures (post_id, kind, shown_at) VALUES (?, 'person', ?)
        ON CONFLICT(post_id, kind) DO UPDATE SET shown_at = excluded.shown_at`,
       memory.post.id,
       new Date().toISOString(),
-    );
+    ));
   }
 
   async getPreferences(): Promise<AppPreferences> {
@@ -961,7 +973,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async updatePreferences(changes: Partial<AppPreferences>): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       for (const [key, rawValue] of Object.entries(changes)) {
         const value = rawValue === null ? '' : Array.isArray(rawValue) ? JSON.stringify(rawValue) : String(rawValue);
         await transaction.runAsync(
@@ -975,7 +987,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async deleteAllData(): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.execAsync("DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
     });
   }
@@ -1014,7 +1026,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async (transaction) => {
+    await this.withExclusiveTransaction(async (transaction) => {
       await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
