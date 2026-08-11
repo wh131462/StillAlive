@@ -138,9 +138,6 @@ export async function enablePasswordVaultBiometrics(dek: Uint8Array): Promise<vo
   if (!canUsePasswordVaultBiometrics()) throw new Error('当前设备未配置可用的生物识别');
   try {
     await SecureStore.setItemAsync(BIOMETRIC_KEY, encodePasswordVaultKey(dek), BIOMETRIC_OPTIONS);
-    const verified = await SecureStore.getItemAsync(BIOMETRIC_KEY, BIOMETRIC_OPTIONS);
-    if (!verified) throw new Error('未能验证快捷解锁材料');
-    decodePasswordVaultKey(verified).fill(0);
     await SecureStore.setItemAsync(BIOMETRIC_MARKER_KEY, '1', BIOMETRIC_MARKER_OPTIONS);
     logPasswordVaultDiagnostic('biometric.enable.success');
   } catch (cause) {
