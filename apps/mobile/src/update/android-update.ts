@@ -3,12 +3,32 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { writePersistentError, writePersistentLog } from '../data/persistent-log';
 
-export const ANDROID_UPDATE_MANIFEST_URL = 'https://github.com/wh131462/StillAlive/releases/latest/download/latest.json';
+const GITHUB_RELEASE_BASE_URL = 'https://github.com/wh131462/StillAlive/releases/latest/download';
+
+interface AndroidUpdateSource {
+  name: string;
+  manifestUrl: string;
+  resolveApkUrl(manifest: AndroidUpdateManifest): string;
+}
+
+export const ANDROID_UPDATE_SOURCES: readonly AndroidUpdateSource[] = [
+  {
+    name: 'GitHub Proxy',
+    manifestUrl: `https://gh-proxy.com/${GITHUB_RELEASE_BASE_URL}/latest.json`,
+    resolveApkUrl: (manifest) => `https://gh-proxy.com/${GITHUB_RELEASE_BASE_URL}/still-alive-pro-v${manifest.versionName}.apk`,
+  },
+  {
+    name: 'GitHub',
+    manifestUrl: `${GITHUB_RELEASE_BASE_URL}/latest.json`,
+    resolveApkUrl: (manifest) => `${GITHUB_RELEASE_BASE_URL}/still-alive-pro-v${manifest.versionName}.apk`,
+  },
+];
 
 export interface AndroidUpdateManifest {
   versionCode: number;
   versionName: string;
   apkUrl: string;
+  apkUrls?: string[];
   releaseNotes?: string;
 }
 
@@ -56,36 +76,36 @@ export async function checkForAndroidUpdate(): Promise<AndroidUpdateCheckResult>
     writePersistentLog('INFO', 'update.check.finished', { status: 'unsupported' });
     return { status: 'unsupported' };
   }
-  if (!ANDROID_UPDATE_MANIFEST_URL.trim()) {
+  const sources = ANDROID_UPDATE_SOURCES.filter((source) => source.manifestUrl.trim());
+  if (!sources.length) {
     writePersistentLog('WARN', 'update.check.finished', { status: 'not-configured' });
     return { status: 'not-configured' };
   }
 
-  assertHttpsUrl(ANDROID_UPDATE_MANIFEST_URL, '更新服务器地址');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const response = await fetch(ANDROID_UPDATE_MANIFEST_URL, {
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`更新服务器返回 ${response.status}`);
-    const manifest = parseManifest(await response.json());
+    const checks = await Promise.all(sources.map(async (source) => {
+      try {
+        return { manifest: await fetchAndroidUpdateManifest(source), source };
+      } catch (cause) {
+        writePersistentLog('WARN', 'update.check.source-failed', { error: errorMessage(cause), source: source.name });
+        return { cause, source };
+      }
+    }));
+    const successfulChecks = checks.filter((check): check is { manifest: AndroidUpdateManifest; source: AndroidUpdateSource } => 'manifest' in check);
+    if (!successfulChecks.length) {
+      const lastCause = checks.at(-1)?.cause;
+      throw lastCause instanceof Error ? lastCause : new Error('所有更新源均不可用');
+    }
+    const selectedCheck = successfulChecks.reduce((selected, check) => check.manifest.versionCode > selected.manifest.versionCode ? check : selected);
+    const manifest = resolveManifestDownloadSources(selectedCheck.manifest, selectedCheck.source, sources);
     const result: AndroidUpdateCheckResult = manifest.versionCode > getCurrentAndroidVersion().versionCode
       ? { status: 'available', manifest }
       : { status: 'current' };
-    writePersistentLog('INFO', 'update.check.finished', { status: result.status, versionCode: manifest.versionCode, versionName: manifest.versionName });
+    writePersistentLog('INFO', 'update.check.finished', { source: selectedCheck.source.name, status: result.status, versionCode: manifest.versionCode, versionName: manifest.versionName });
     return result;
   } catch (cause) {
-    if (cause instanceof Error && cause.name === 'AbortError') {
-      const timeoutError = new Error('检查更新超时');
-      writePersistentError('update.check.failed', timeoutError);
-      throw timeoutError;
-    }
     writePersistentError('update.check.failed', cause);
     throw cause;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -96,7 +116,7 @@ export async function downloadAndInstallAndroidUpdate(
   try {
     if (Platform.OS !== 'android' || !apkInstaller) throw new Error('当前环境不支持 APK 更新');
     writePersistentLog('INFO', 'update.install.started', { versionCode: manifest.versionCode, versionName: manifest.versionName });
-    assertHttpsUrl(manifest.apkUrl, 'APK 下载地址');
+    const apkUrls = getManifestApkUrls(manifest);
     if (!FileSystem.cacheDirectory) throw new Error('无法访问应用缓存目录');
 
     const destination = `${FileSystem.cacheDirectory}still-alive-${manifest.versionCode}.apk`;
@@ -112,64 +132,32 @@ export async function downloadAndInstallAndroidUpdate(
       return { status: installResult, contentUri: cachedContentUri };
     }
 
-    let resumeData = await getPartialUpdateResumeData(destination, partialMarker, manifest);
-    let result;
-    while (true) {
-      if (resumeData) {
-        await FileSystem.deleteAsync(marker, { idempotent: true });
-        const bytesWritten = Number(resumeData);
-        options.onProgress?.({ bytesWritten, totalBytes: null });
-        writePersistentLog('INFO', 'update.download.resumed', { bytesWritten, versionCode: manifest.versionCode });
-      } else {
-        await deleteUpdateFiles(destination, marker, partialMarker);
-        await writePartialUpdateMarker(partialMarker, manifest);
-      }
-      if (options.signal?.aborted) throw cancelledError();
-
-      const resumed = Boolean(resumeData);
-      const download = FileSystem.createDownloadResumable(manifest.apkUrl, destination, {}, (progress) => {
-        options.onProgress?.({
-          bytesWritten: progress.totalBytesWritten,
-          totalBytes: progress.totalBytesExpectedToWrite > 0 ? progress.totalBytesExpectedToWrite : null,
-        });
-      }, resumeData);
-      let pausePromise: Promise<void> | null = null;
-      const pauseDownload = () => {
-        pausePromise ??= download.pauseAsync()
-          .then(() => undefined)
-          .catch(() => download.cancelAsync().catch(() => undefined));
-      };
-      options.signal?.addEventListener('abort', pauseDownload, { once: true });
+    let downloadedUri: string | null = null;
+    let downloadedApkUrl: string | null = null;
+    let lastCause: unknown;
+    for (const apkUrl of apkUrls) {
       try {
-        result = await download.downloadAsync();
-      } finally {
-        options.signal?.removeEventListener('abort', pauseDownload);
-      }
-      if (!result) {
-        await pausePromise;
-        throw cancelledError();
-      }
-      if (resumed && (result.status === 200 || result.status === 416)) {
-        if (options.signal?.aborted) throw cancelledError();
-        resumeData = undefined;
-        continue;
-      }
-      if (result.status < 200 || result.status >= 300) {
+        downloadedUri = await downloadAndroidUpdateApk(apkUrl, destination, marker, partialMarker, manifest, options);
+        downloadedApkUrl = apkUrl;
+        break;
+      } catch (cause) {
+        if (options.signal?.aborted || (cause instanceof Error && cause.name === 'AbortError')) throw cause;
+        lastCause = cause;
+        writePersistentLog('WARN', 'update.download.source-failed', { apkUrl, error: errorMessage(cause), versionCode: manifest.versionCode });
         await deleteUpdateFiles(destination, marker, partialMarker);
-        throw new Error(`APK 下载失败，服务器返回 ${result.status}`);
       }
-      break;
     }
+    if (!downloadedUri || !downloadedApkUrl) throw lastCause instanceof Error ? lastCause : new Error('所有 APK 下载源均不可用');
 
-    const fileInfo = await FileSystem.getInfoAsync(result.uri);
+    const fileInfo = await FileSystem.getInfoAsync(downloadedUri);
     if (!fileInfo.exists || fileInfo.isDirectory || fileInfo.size <= 0) throw new Error('下载的 APK 文件为空');
     await FileSystem.writeAsStringAsync(marker, JSON.stringify({
-      apkUrl: manifest.apkUrl,
+      apkUrl: downloadedApkUrl,
       size: fileInfo.size,
       versionCode: manifest.versionCode,
     }));
     await FileSystem.deleteAsync(partialMarker, { idempotent: true });
-    const contentUri = await FileSystem.getContentUriAsync(result.uri);
+    const contentUri = await FileSystem.getContentUriAsync(downloadedUri);
     if (options.signal?.aborted) throw cancelledError();
     const installResult = await apkInstaller.installApkAsync(contentUri);
     writePersistentLog('INFO', 'update.install.finished', { result: installResult });
@@ -185,7 +173,95 @@ export async function downloadAndInstallAndroidUpdate(
   }
 }
 
-async function getPartialUpdateResumeData(destination: string, marker: string, manifest: AndroidUpdateManifest) {
+async function fetchAndroidUpdateManifest(source: AndroidUpdateSource) {
+  assertHttpsUrl(source.manifestUrl, '更新服务器地址');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(source.manifestUrl, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`更新服务器返回 ${response.status}`);
+    return parseManifest(await response.json());
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === 'AbortError') throw new Error(`${source.name} 检查更新超时`);
+    throw cause;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function resolveManifestDownloadSources(manifest: AndroidUpdateManifest, preferredSource: AndroidUpdateSource, sources: AndroidUpdateSource[]): AndroidUpdateManifest {
+  const orderedSources = [preferredSource, ...sources.filter((source) => source !== preferredSource)];
+  const apkUrls = [...new Set(orderedSources.map((source) => source.resolveApkUrl(manifest)))];
+  apkUrls.forEach((apkUrl) => assertHttpsUrl(apkUrl, 'APK 下载地址'));
+  return { ...manifest, apkUrl: apkUrls[0], apkUrls };
+}
+
+function getManifestApkUrls(manifest: AndroidUpdateManifest) {
+  const apkUrls = [...new Set([...(manifest.apkUrls || []), manifest.apkUrl].filter(Boolean))];
+  if (!apkUrls.length) throw new Error('没有可用的 APK 下载地址');
+  apkUrls.forEach((apkUrl) => assertHttpsUrl(apkUrl, 'APK 下载地址'));
+  return apkUrls;
+}
+
+async function downloadAndroidUpdateApk(
+  apkUrl: string,
+  destination: string,
+  marker: string,
+  partialMarker: string,
+  manifest: AndroidUpdateManifest,
+  options: AndroidUpdateDownloadOptions,
+) {
+  let resumeData = await getPartialUpdateResumeData(destination, partialMarker, manifest, apkUrl);
+  while (true) {
+    if (resumeData) {
+      await FileSystem.deleteAsync(marker, { idempotent: true });
+      const bytesWritten = Number(resumeData);
+      options.onProgress?.({ bytesWritten, totalBytes: null });
+      writePersistentLog('INFO', 'update.download.resumed', { apkUrl, bytesWritten, versionCode: manifest.versionCode });
+    } else {
+      await deleteUpdateFiles(destination, marker, partialMarker);
+      await writePartialUpdateMarker(partialMarker, manifest, apkUrl);
+    }
+    if (options.signal?.aborted) throw cancelledError();
+
+    const resumed = Boolean(resumeData);
+    const download = FileSystem.createDownloadResumable(apkUrl, destination, {}, (progress) => {
+      options.onProgress?.({
+        bytesWritten: progress.totalBytesWritten,
+        totalBytes: progress.totalBytesExpectedToWrite > 0 ? progress.totalBytesExpectedToWrite : null,
+      });
+    }, resumeData);
+    let pausePromise: Promise<void> | null = null;
+    const pauseDownload = () => {
+      pausePromise ??= download.pauseAsync()
+        .then(() => undefined)
+        .catch(() => download.cancelAsync().catch(() => undefined));
+    };
+    options.signal?.addEventListener('abort', pauseDownload, { once: true });
+    let result;
+    try {
+      result = await download.downloadAsync();
+    } finally {
+      options.signal?.removeEventListener('abort', pauseDownload);
+    }
+    if (!result) {
+      await pausePromise;
+      throw cancelledError();
+    }
+    if (resumed && (result.status === 200 || result.status === 416)) {
+      if (options.signal?.aborted) throw cancelledError();
+      resumeData = undefined;
+      continue;
+    }
+    if (result.status < 200 || result.status >= 300) throw new Error(`APK 下载失败，服务器返回 ${result.status}`);
+    return result.uri;
+  }
+}
+
+async function getPartialUpdateResumeData(destination: string, marker: string, manifest: AndroidUpdateManifest, apkUrl: string) {
   try {
     const [fileInfo, markerInfo] = await Promise.all([
       FileSystem.getInfoAsync(destination),
@@ -195,16 +271,16 @@ async function getPartialUpdateResumeData(destination: string, marker: string, m
     const metadata: unknown = JSON.parse(await FileSystem.readAsStringAsync(marker));
     if (!isRecord(metadata)
       || metadata.versionCode !== manifest.versionCode
-      || metadata.apkUrl !== manifest.apkUrl) return undefined;
+      || metadata.apkUrl !== apkUrl) return undefined;
     return String(fileInfo.size);
   } catch {
     return undefined;
   }
 }
 
-async function writePartialUpdateMarker(marker: string, manifest: AndroidUpdateManifest) {
+async function writePartialUpdateMarker(marker: string, manifest: AndroidUpdateManifest, apkUrl: string) {
   await FileSystem.writeAsStringAsync(marker, JSON.stringify({
-    apkUrl: manifest.apkUrl,
+    apkUrl,
     versionCode: manifest.versionCode,
   }));
 }
@@ -239,6 +315,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function errorMessage(cause: unknown) {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
 async function getCachedUpdateContentUri(destination: string, marker: string, manifest: AndroidUpdateManifest) {
   try {
     const [fileInfo, markerInfo] = await Promise.all([
@@ -249,7 +329,8 @@ async function getCachedUpdateContentUri(destination: string, marker: string, ma
     const metadata: unknown = JSON.parse(await FileSystem.readAsStringAsync(marker));
     if (!isRecord(metadata)
       || metadata.versionCode !== manifest.versionCode
-      || metadata.apkUrl !== manifest.apkUrl
+      || typeof metadata.apkUrl !== 'string'
+      || !getManifestApkUrls(manifest).includes(metadata.apkUrl)
       || metadata.size !== fileInfo.size) return null;
     return FileSystem.getContentUriAsync(destination);
   } catch {
