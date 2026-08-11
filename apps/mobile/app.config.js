@@ -1,0 +1,15 @@
+const { expo } = require('./app.json');
+
+module.exports = () => {
+  const development = process.env.STILL_ALIVE_APP_VARIANT === 'development';
+
+  return {
+    ...expo,
+    name: development ? `${expo.name} Dev` : expo.name,
+    scheme: development ? 'stillalive-dev' : expo.scheme,
+    android: {
+      ...expo.android,
+      package: development ? 'com.wh131462.stillalive.dev' : expo.android.package,
+    },
+  };
+};

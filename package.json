@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @still-alive/mobile dev",
+    "dev:android": "pnpm --filter @still-alive/mobile dev:android",
     "build": "turbo run build",
     "build:apk": "./build-apk.sh",
     "release": "node ./scripts/release.mjs",
@@ -20,5 +21,10 @@
   "devDependencies": {
     "turbo": "2.10.5",
     "typescript": "~6.0.3"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@expo/dom-webview@57.0.1": "patches/@expo__dom-webview@57.0.1.patch"
+    }
   }
 }
