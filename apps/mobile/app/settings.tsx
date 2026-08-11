@@ -11,11 +11,10 @@ import { useAppState } from '../src/state/app-state';
 import { TimePickerField } from '../src/components/date-time-picker';
 import { StyledName } from '../src/components/styled-name';
 import { NAME_STYLE_OPTIONS, THEME_OPTIONS, createThemedStyles } from '../src/theme/app-theme';
-import { openAppSettings } from '../src/data/app-permissions';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { notificationPermission, openNotificationSettings, persistentNotificationRunning, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
+  const { notificationPermission, openNotificationSettings, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
   const [retryingNotification, setRetryingNotification] = useState<'birthday' | 'memory' | null>(null);
   const showNotificationStatus = preferences.birthdayNotificationsEnabled || preferences.memoryNotificationsEnabled || preferences.persistentNotificationEnabled || Boolean(preferences.birthdayNotificationError) || Boolean(preferences.memoryNotificationError);
 
@@ -77,15 +76,13 @@ export default function SettingsScreen() {
         <SwitchRow checked={preferences.memoryNotificationsEnabled} hint="默认 20:00，提醒间隔至少 7 天" label="回忆通知" onPress={() => void setMemoryNotificationsEnabled(!preferences.memoryNotificationsEnabled).catch((cause: unknown) => Alert.alert('提醒设置失败', errorMessage(cause)))} />
       </View>
       {preferences.birthdayNotificationsEnabled ? <TimePickerField hour={preferences.birthdayReminderHour} label="通用生日提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /> : null}
-      {showNotificationStatus ? <Text style={styles.permissionState}>系统权限 {notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text> : null}
-      {preferences.persistentNotificationEnabled ? <Text style={styles.permissionState}>常驻服务 {persistentNotificationRunning ? '正在运行' : '等待系统启动'}</Text> : null}
       {showNotificationStatus && notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
       {preferences.birthdayNotificationError ? <><Pressable disabled={Boolean(retryingNotification)} onPress={() => void retryNotification('birthday')} style={[styles.inlineButton, retryingNotification && styles.disabled]}><Text style={styles.inlineButtonText}>{retryingNotification === 'birthday' ? '重试中…' : '重试通知调度'}</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
       {preferences.memoryNotificationError ? <><Pressable disabled={Boolean(retryingNotification)} onPress={() => void retryNotification('memory')} style={[styles.inlineButton, retryingNotification && styles.disabled]}><Text style={styles.inlineButtonText}>{retryingNotification === 'memory' ? '重试中…' : '重试回忆通知'}</Text></Pressable><Text style={styles.error}>{preferences.memoryNotificationError}</Text></> : null}
 
       <Text style={styles.eyebrow}>PERMISSIONS</Text>
       <View style={styles.group}>
-        <Entry icon="lock.shield" androidIcon="shield" label="系统权限" hint="通知、位置、相机、照片与麦克风可在系统中统一管理" onPress={() => void openAppSettings()} />
+        <Entry icon="lock.shield" androidIcon="shield" label="系统权限" hint="查看各权限用途和逐步开启方法" onPress={() => router.push('/permissions' as RelativePathString)} />
       </View>
 
       <Text style={styles.eyebrow}>DATA</Text>
@@ -134,7 +131,7 @@ const styles = createThemedStyles(() => ({
   nameStyleSection: { padding: spacing.md }, nameStyleOptions: { marginTop: spacing.md, gap: spacing.sm }, nameStyleOption: { width: 96, minHeight: 70, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper }, nameStyleOptionSelected: { borderColor: colors.life, backgroundColor: colors.lifeLight }, nameStylePreview: { maxWidth: '100%', fontSize: 14 }, nameStyleLabel: { marginTop: 7, color: colors.inkFaint, fontSize: 9 }, nameStyleLabelSelected: { color: colors.life, fontWeight: '700' },
   group: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.line }, entry: { minHeight: 72, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryCompact: { minHeight: 64 }, entryIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, entryCopy: { flex: 1 }, entryTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' }, entryHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, switchTrack: { width: 44, height: 26, marginLeft: spacing.md, padding: 2, borderRadius: 13, backgroundColor: colors.line }, switchTrackOn: { backgroundColor: colors.life }, switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper }, switchThumbOn: { alignSelf: 'flex-end' },
-  permissionState: { marginTop: spacing.md, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta }, inlineButton: { minHeight: 44, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet }, inlineButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' }, error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 17 },
+  inlineButton: { minHeight: 44, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet }, inlineButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' }, error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 17 },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.7 },
 }));
