@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Birthday, BirthdayCalendar, CheckIn, DayKey, Person, Post } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
@@ -17,6 +17,7 @@ import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
 const CALENDAR_POST_PREVIEW_MAX_HEIGHT = 106;
+const birthdayCakeSource = require('../../assets/birthday-cake.png');
 
 export default function CalendarScreen() {
   const router = useRouter();
@@ -90,6 +91,10 @@ interface CalendarViewProps {
   today: DayKey;
 }
 
+function BirthdayCakeIcon({ size }: { size: number }) {
+  return <Image accessibilityIgnoresInvertColors accessible={false} resizeMode="contain" source={birthdayCakeSource} style={{ width: size, height: size, tintColor: colors.sun }} />;
+}
+
 function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
@@ -160,10 +165,10 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                     {isToday ? <View style={styles.todayMark}><Text style={styles.todayMarkText}>今</Text></View> : null}
                   </View>
                   {lunarDate ? <Text numberOfLines={1} style={[styles.lunarDay, outsideMonth && styles.lunarDayOutsideMonth, lunarDate.emphasis && styles.lunarFestival, selected && styles.lunarDaySelected]}>{lunarDate.shortLabel}</Text> : null}
-                  {dayBirthdays.length ? <View style={styles.birthdayMark}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={11} tintColor={colors.sun} type="hierarchical" /></View> : null}
-                  {markers.length ? (
-                    <View style={[styles.calendarMarks, dayBirthdays.length > 0 && styles.calendarMarksWithBirthday]}>
-                      {markers.map((kind, index) => <View key={`${dayKey}_mark_${index}`} style={[styles.calendarMark, { backgroundColor: markerColor(kind) }]} />)}
+                  {dayBirthdays.length || markers.length ? (
+                    <View style={styles.calendarIndicators}>
+                      {dayBirthdays.length ? <BirthdayCakeIcon size={11} /> : null}
+                      {markers.length ? <View style={styles.calendarMarks}>{markers.map((kind, index) => <View key={`${dayKey}_mark_${index}`} style={[styles.calendarMark, { backgroundColor: markerColor(kind) }]} />)}</View> : null}
                     </View>
                   ) : null}
                 </Pressable>
@@ -178,7 +183,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
         <LegendItem kind="text" label="文字" />
         <LegendItem kind="image" label="图片" />
         <LegendItem kind="audio" label="录音" />
-        <View style={styles.legendItem}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={11} tintColor={colors.sun} type="hierarchical" /><Text style={styles.legendText}>生日</Text></View>
+        <View style={styles.legendItem}><BirthdayCakeIcon size={11} /><Text style={styles.legendText}>生日</Text></View>
         <Text style={styles.legendText}>内容最多 3 个</Text>
       </View>
 
@@ -217,7 +222,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           <View style={styles.selectedList}>
             {selectedBirthdays.map((birthday) => (
               <View key={`${birthday.personId}_${birthday.calendar}`} style={styles.selectedEntry}>
-                <View style={styles.selectedEntryRail}><SymbolView name={{ android: 'cake', ios: 'birthday.cake.fill', web: 'cake' }} pointerEvents="none" size={14} tintColor={colors.sun} type="hierarchical" /></View>
+                <View style={styles.selectedEntryRail}><BirthdayCakeIcon size={14} /></View>
                 <View style={styles.selectedEntryContent}>
                   <Text style={styles.selectedEntryMeta}>{birthday.personId === 'self' ? '我的生日' : '人物生日'}</Text>
                   <Text style={styles.selectedBirthdayTitle}>{selectedDay === today ? '今天' : '这一天'}是{birthday.personName}的{birthdayCalendarLabel(birthday.calendar)}生日</Text>
@@ -418,10 +423,9 @@ const styles = createThemedStyles(() => ({
   lunarDayOutsideMonth: { opacity: 0.58 },
   lunarFestival: { color: colors.sun, fontWeight: '700' },
   lunarDaySelected: { color: colors.life },
-  calendarMarks: { position: 'absolute', bottom: 7, flexDirection: 'row', gap: 3 },
-  calendarMarksWithBirthday: { left: 6 },
+  calendarIndicators: { position: 'absolute', right: 0, bottom: 4, left: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  calendarMarks: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   calendarMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
-  birthdayMark: { position: 'absolute', right: 5, bottom: 4 },
   calendarLegend: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
