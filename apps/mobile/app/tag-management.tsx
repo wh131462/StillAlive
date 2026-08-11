@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { BuiltInTagSystem, TagGroup } from '@still-alive/types';
+import { AppKeyboardAvoidingView } from '../src/components/app-keyboard-avoiding-view';
 import { useAppState } from '../src/state/app-state';
 import { createThemedStyles } from '../src/theme/app-theme';
 import { MBTI_TYPES } from '../src/domain/person-profile';
@@ -60,7 +61,7 @@ export default function TagManagementScreen() {
 
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>标签管理</Text><View style={styles.headerButton} /></View>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+    <AppKeyboardAvoidingView style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.typeGuide}><View style={styles.typeItem}><View style={styles.typeIcon}><SymbolView name={{ android: 'label', ios: 'tag', web: 'label' }} size={18} tintColor={colors.life} type="hierarchical" /></View><View><Text style={styles.typeTitle}>单条标签</Text><Text style={styles.typeHint}>可同时选择多个</Text></View></View><View style={styles.typeDivider} /><View style={styles.typeItem}><View style={styles.typeIcon}><SymbolView name={{ android: 'folder_open', ios: 'folder', web: 'folder_open' }} size={18} tintColor={colors.life} type="hierarchical" /></View><View><Text style={styles.typeTitle}>标签组</Text><Text style={styles.typeHint}>同组只能选择一个</Text></View></View></View>
 
@@ -84,9 +85,9 @@ export default function TagManagementScreen() {
         return <View key={group.id} style={styles.groupCard}><View style={styles.groupHeader}><View style={styles.groupCopy}><Text style={styles.groupName}>{group.name}</Text><Text style={styles.rowHint}>{options.length} 个选项 · 单选</Text></View><Pressable accessibilityLabel="修改组名" onPress={() => { setEditingGroupId(group.id); setEditingName(group.name); }} style={styles.iconButton}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={17} tintColor={colors.life} type="hierarchical" /></Pressable><Pressable accessibilityLabel="删除标签组" onPress={() => void confirmDeleteGroup(group)} style={styles.iconButton}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={17} tintColor={colors.danger} type="hierarchical" /></Pressable></View><View style={styles.optionChips}>{options.map((option) => <Pressable key={option.id} onLongPress={() => void confirmDeleteTag(option.id, option.name)} onPress={() => { setEditingTagId(option.id); setEditingName(option.name); }} style={styles.optionChip}><Text style={styles.optionText}>{option.name}</Text><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={11} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>)}</View><View style={styles.optionCreate}><TextInput maxLength={24} onChangeText={(value) => setOptionDrafts((current) => ({ ...current, [group.id]: value }))} onSubmitEditing={() => addOption(group.id)} placeholder="添加固定选项" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.optionInput} value={draft} /><Pressable disabled={!draft.trim()} onPress={() => addOption(group.id)} style={[styles.optionAdd, !draft.trim() && styles.disabled]}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /></Pressable></View></View>;
       }) : <View style={styles.list}><Empty text="还没有自定义标签组" /></View>}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </AppKeyboardAvoidingView>
 
-    <Modal animationType="slide" onRequestClose={closeEditing} transparent visible={Boolean(editingTagId || editingGroupId)}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}><Pressable onPress={closeEditing} style={styles.backdrop}><Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}><View style={styles.handle} /><Text style={styles.sheetTitle}>{editingGroupId ? '修改标签组' : '修改标签'}</Text><TextInput autoFocus maxLength={24} onChangeText={setEditingName} onSubmitEditing={saveEditing} style={styles.editInput} value={editingName} /><Pressable disabled={!editingName.trim()} onPress={saveEditing} style={[styles.confirmButton, !editingName.trim() && styles.disabled]}><Text style={styles.confirmText}>保存修改</Text></Pressable></Pressable></Pressable></KeyboardAvoidingView></Modal>
+    <Modal animationType="slide" onRequestClose={closeEditing} transparent visible={Boolean(editingTagId || editingGroupId)}><AppKeyboardAvoidingView style={styles.flex}><Pressable onPress={closeEditing} style={styles.backdrop}><Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}><View style={styles.handle} /><Text style={styles.sheetTitle}>{editingGroupId ? '修改标签组' : '修改标签'}</Text><TextInput maxLength={24} onChangeText={setEditingName} onSubmitEditing={saveEditing} style={styles.editInput} value={editingName} /><Pressable disabled={!editingName.trim()} onPress={saveEditing} style={[styles.confirmButton, !editingName.trim() && styles.disabled]}><Text style={styles.confirmText}>保存修改</Text></Pressable></Pressable></Pressable></AppKeyboardAvoidingView></Modal>
   </SafeAreaView>;
 }
 

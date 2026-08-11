@@ -10,7 +10,6 @@ import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import {
   Alert,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -23,6 +22,7 @@ import {
 import type { DayKey, Media } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { AppKeyboardAvoidingView } from '../src/components/app-keyboard-avoiding-view';
 import RichTextEditor from '../src/components/rich-text-editor.dom';
 import type { EditorCommand, EditorCommandType, EditorMediaSource } from '../src/components/rich-text-editor.types';
 import { useAppState } from '../src/state/app-state';
@@ -233,12 +233,12 @@ export default function EditorScreen() {
       createdMediaRef.current = [];
       await Promise.all(created.map(discardMedia)).catch(() => undefined);
       allowExitRef.current = true;
-      if (router.canDismiss()) router.dismiss();
+      Keyboard.dismiss();
+      if (router.canGoBack()) router.back();
       else router.replace('/');
     } catch (cause: unknown) {
-      Alert.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
-    } finally {
       setSaving(false);
+      Alert.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
     }
   };
 
@@ -299,7 +299,10 @@ export default function EditorScreen() {
     else void startRecording();
   };
 
-  const openPersonPicker = () => setPersonPickerOpen(true);
+  const openPersonPicker = () => {
+    Keyboard.dismiss();
+    setPersonPickerOpen(true);
+  };
 
   const selectPerson = (person: { id: string; name: string }) => {
     const alreadySelected = selectedPersonIds.includes(person.id);
@@ -441,7 +444,13 @@ export default function EditorScreen() {
     setLinkPickerOpen(false);
   };
 
+  const openLinkPicker = () => {
+    Keyboard.dismiss();
+    setLinkPickerOpen(true);
+  };
+
   const openLocationPicker = () => {
+    Keyboard.dismiss();
     setCustomLocation(locationName ?? '');
     setLocationPickerOpen(true);
   };
@@ -476,7 +485,7 @@ export default function EditorScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <AppKeyboardAvoidingView style={styles.flex}>
         <View style={styles.header}>
           <View style={styles.headerSide}>
             <Pressable accessibilityLabel="返回" accessibilityRole="button" disabled={editorBusy} onPress={() => router.back()} style={[styles.headerButton, editorBusy && styles.disabledControl]}>
@@ -512,7 +521,7 @@ export default function EditorScreen() {
           />
         ) : <View style={styles.domEditor} />}
 
-        <View pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.meta, editorBusy && styles.disabledControl]}>
+        <View collapsable={false} pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.meta, editorBusy && styles.disabledControl]}>
           <Pressable accessibilityLabel={locationName ? `地点：${locationName}` : '添加地点'} accessibilityRole="button" onPress={openLocationPicker} style={({ pressed }) => [styles.locationButton, pressed && styles.locationButtonPressed]}>
             <SymbolView name={{ android: 'location_on', ios: 'mappin.and.ellipse', web: 'location_on' }} size={14} tintColor={locationName ? colors.life : colors.inkFaint} type="hierarchical" />
             <Text numberOfLines={1} style={[styles.locationButtonText, locationName && styles.locationButtonTextActive]}>{locationName ?? '所在位置'}</Text>
@@ -520,7 +529,7 @@ export default function EditorScreen() {
           <Text style={styles.metaText}>{markdownTextLength(body)} 字</Text>
         </View>
 
-        <View pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.toolbarStage, editorBusy && styles.disabledControl]}>
+        <View collapsable={false} pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.toolbarStage, editorBusy && styles.disabledControl]}>
           {activeFormats.includes('table') ? (
             <View accessibilityLabel="表格操作" style={styles.tableContextBar}>
               <TableActionButton androidIcon="add_row_below" icon="rectangle.split.1x2" label="添加行" text="+ 行" onPress={() => sendCommand('tableAddRow')} />
@@ -552,7 +561,7 @@ export default function EditorScreen() {
               <ToolButton active={activeFormats.includes('orderedList')} androidIcon="format_list_numbered" icon="list.number" label="有序列表" onPress={() => sendCommand('orderedList')} />
               <ToolButton active={activeFormats.includes('taskList')} androidIcon="checklist" icon="checklist" label={activeFormats.includes('taskList') ? '取消工作事项' : '工作事项'} onPress={() => sendCommand('taskList')} />
               <ToolButton active={activeFormats.includes('codeBlock')} androidIcon="data_object" icon="curlybraces" label="代码块" onPress={() => sendCommand('codeBlock')} />
-              <ToolButton active={activeFormats.includes('link')} androidIcon="link" icon="link" label={activeFormats.includes('link') ? '编辑链接' : '链接'} onPress={() => setLinkPickerOpen(true)} />
+              <ToolButton active={activeFormats.includes('link')} androidIcon="link" icon="link" label={activeFormats.includes('link') ? '编辑链接' : '链接'} onPress={openLinkPicker} />
               {activeFormats.includes('link') ? <ToolButton androidIcon="link" icon="link" label="取消链接" onPress={() => sendCommand('unlink')} /> : null}
               <ToolButton androidIcon="horizontal_rule" icon="minus" label="分隔线" onPress={() => sendCommand('horizontalRule')} />
               <ToolButton androidIcon="table" icon="tablecells" label="表格" onPress={() => sendCommand('table')} />
@@ -581,7 +590,7 @@ export default function EditorScreen() {
         </Modal>
 
         <Modal animationType="slide" onRequestClose={() => setPersonPickerOpen(false)} transparent visible={personPickerOpen}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+          <AppKeyboardAvoidingView style={styles.flex}>
             <Pressable style={styles.modalBackdrop} onPress={() => setPersonPickerOpen(false)}>
               <Pressable style={styles.personSheet} onPress={(event) => event.stopPropagation()}>
               <View style={styles.sheetHandle} />
@@ -608,11 +617,11 @@ export default function EditorScreen() {
               </View>
               </Pressable>
             </Pressable>
-          </KeyboardAvoidingView>
+          </AppKeyboardAvoidingView>
         </Modal>
 
         <Modal animationType="slide" onRequestClose={() => setLocationPickerOpen(false)} transparent visible={locationPickerOpen}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+          <AppKeyboardAvoidingView style={styles.flex}>
             <Pressable style={styles.modalBackdrop} onPress={() => setLocationPickerOpen(false)}>
               <Pressable style={styles.locationSheet} onPress={(event) => event.stopPropagation()}>
               <View style={styles.sheetHandle} />
@@ -629,11 +638,11 @@ export default function EditorScreen() {
               </View>
               </Pressable>
             </Pressable>
-          </KeyboardAvoidingView>
+          </AppKeyboardAvoidingView>
         </Modal>
 
         <Modal animationType="fade" onRequestClose={() => setLinkPickerOpen(false)} transparent visible={linkPickerOpen}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+          <AppKeyboardAvoidingView style={styles.flex}>
             <Pressable style={styles.centeredBackdrop} onPress={() => setLinkPickerOpen(false)}>
               <Pressable style={styles.linkCard} onPress={(event) => event.stopPropagation()}>
               <Text style={styles.linkTitle}>插入链接</Text>
@@ -645,9 +654,9 @@ export default function EditorScreen() {
               </View>
               </Pressable>
             </Pressable>
-          </KeyboardAvoidingView>
+          </AppKeyboardAvoidingView>
         </Modal>
-      </KeyboardAvoidingView>
+      </AppKeyboardAvoidingView>
     </SafeAreaView>
   );
 }

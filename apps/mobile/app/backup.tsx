@@ -5,8 +5,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { AppKeyboardAvoidingView } from '../src/components/app-keyboard-avoiding-view';
 import { useAppState } from '../src/state/app-state';
 import { createThemedStyles } from '../src/theme/app-theme';
 import { backupContainsPasswordVault, createBackupArchive, localPasswordVaultExists, materializeBackupMedia, parseBackupArchive, removeMaterializedMedia, restorePasswordVaultFromBackup } from '../src/data/local-backup';
@@ -105,7 +106,7 @@ export default function BackupScreen() {
   const disabled = busy !== null;
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>数据管理</Text><View style={styles.headerButton} /></View>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+    <AppKeyboardAvoidingView style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.summary}><View style={styles.summaryIcon}><SymbolView name={{ android: 'inventory_2', ios: 'archivebox', web: 'inventory_2' }} size={25} tintColor={colors.life} type="hierarchical" /></View><View style={styles.summaryCopy}><Text style={styles.summaryTitle}>当前本地数据</Text><Text style={styles.summaryMeta}>{posts.length} 篇日记 · {people.length} 个人物 · {media.length} 个媒体文件</Text><Text style={styles.summaryMeta}>预计 {formatBytes(estimatedBytes)}</Text></View></View>
 
@@ -132,7 +133,7 @@ export default function BackupScreen() {
       <Text style={styles.sectionTitle}>危险操作</Text>
       <Pressable accessibilityRole="button" disabled={disabled} onPress={confirmDeleteAll} style={({ pressed }) => [styles.deleteButton, disabled && styles.disabled, pressed && styles.pressed]}><Text style={styles.deleteTitle}>删除全部本地数据</Text><Text style={styles.deleteHint}>不可撤销；建议先导出备份</Text></Pressable>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </AppKeyboardAvoidingView>
   </SafeAreaView>;
 }
 

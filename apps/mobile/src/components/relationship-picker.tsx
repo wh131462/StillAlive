@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { AppKeyboardAvoidingView } from './app-keyboard-avoiding-view';
 import { createThemedStyles } from '../theme/app-theme';
 
 const RELATION_PRESETS = ['爸爸', '妈妈', '伴侣', '孩子', '兄弟姐妹', '亲人', '朋友', '挚友', '同学', '同事', '老师', '邻居'] as const;
@@ -40,7 +41,7 @@ export function RelationshipPicker({ onChange, value }: RelationshipPickerProps)
       </Pressable>
 
       <Modal animationType="slide" onRequestClose={() => setOpen(false)} transparent visible={open}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+        <AppKeyboardAvoidingView style={styles.flex}>
           <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.backdrop}>
             <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
               <View style={styles.handle} />
@@ -85,7 +86,7 @@ export function RelationshipPicker({ onChange, value }: RelationshipPickerProps)
               {normalizedValue ? <Pressable accessibilityRole="button" onPress={() => selectValue('')} style={styles.clearSelection}><Text style={styles.clearSelectionText}>暂不定义关系</Text></Pressable> : null}
             </Pressable>
           </Pressable>
-        </KeyboardAvoidingView>
+        </AppKeyboardAvoidingView>
       </Modal>
     </View>
   );

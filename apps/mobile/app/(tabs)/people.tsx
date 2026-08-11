@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { AppKeyboardAvoidingView } from '../../src/components/app-keyboard-avoiding-view';
 import { useAppState } from '../../src/state/app-state';
 import { TabPageHeader } from '../../src/components/tab-page-header';
 import { createThemedStyles, nameTextStyle } from '../../src/theme/app-theme';
@@ -59,7 +60,7 @@ export default function PeopleScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+      <AppKeyboardAvoidingView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <TabPageHeader
           action={(
@@ -142,22 +143,22 @@ export default function PeopleScreen() {
           </>
         )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AppKeyboardAvoidingView>
 
       <Modal animationType="slide" onRequestClose={() => setCreating(false)} transparent visible={creating}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+        <AppKeyboardAvoidingView style={styles.flex}>
           <Pressable style={styles.backdrop} onPress={() => setCreating(false)}>
             <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
               <View style={styles.handle} />
               <Text style={styles.sheetTitle}>先记下一个名字</Text>
               <Text style={styles.sheetHint}>其他信息以后再补，也可以一直不补。</Text>
-              <TextInput autoFocus maxLength={40} onChangeText={setName} onSubmitEditing={() => void handleCreate()} placeholder="名字" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.input} value={name} />
+              <TextInput maxLength={40} onChangeText={setName} onSubmitEditing={() => void handleCreate()} placeholder="名字" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.input} value={name} />
               <Pressable accessibilityRole="button" disabled={!name.trim()} onPress={() => void handleCreate()} style={({ pressed }) => [styles.confirmButton, !name.trim() && styles.confirmButtonDisabled, pressed && styles.confirmButtonPressed]}>
                 <Text style={styles.confirmButtonText}>创建人物</Text>
               </Pressable>
             </Pressable>
           </Pressable>
-        </KeyboardAvoidingView>
+        </AppKeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

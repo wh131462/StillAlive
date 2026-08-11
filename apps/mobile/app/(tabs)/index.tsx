@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { toDayKey } from '@still-alive/core';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { BirthdayCalendar, CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
 import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
+import { AppKeyboardAvoidingView } from '../../src/components/app-keyboard-avoiding-view';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
 import { StyledName } from '../../src/components/styled-name';
@@ -261,7 +262,7 @@ export default function SpaceScreen() {
       />
 
       <Modal animationType="fade" transparent visible={ready && !preferences.onboardingCompleted}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.onboardingKeyboardAvoidingView}>
+        <AppKeyboardAvoidingView style={styles.onboardingKeyboardAvoidingView}>
           <SafeAreaView style={styles.onboardingBackdrop}>
             <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingSheet}>
               <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
@@ -278,7 +279,7 @@ export default function SpaceScreen() {
               <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
             </ScrollView>
           </SafeAreaView>
-        </KeyboardAvoidingView>
+        </AppKeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -605,7 +606,7 @@ const styles = createThemedStyles(() => ({
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
   onboardingKeyboardAvoidingView: { flex: 1 },
   onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
-  onboardingSheet: { maxHeight: '100%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  onboardingSheet: { flexGrow: 0, maxHeight: '100%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   onboardingContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   onboardingTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 28, lineHeight: 39 },
