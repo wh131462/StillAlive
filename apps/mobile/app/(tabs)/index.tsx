@@ -9,7 +9,6 @@ import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../src/state/app-state';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
-import MarkdownView from '../../src/components/markdown-view.dom';
 import { StyledName } from '../../src/components/styled-name';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { TabPageHeader } from '../../src/components/tab-page-header';
@@ -17,7 +16,7 @@ import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } f
 import { birthdayFromDateString, lunarLeapMonth, lunarMonthDayCount, nextBirthday } from '../../src/domain/person-profile';
 import { resolveDeviceLocation } from '../../src/data/device-location';
 import { ensureAppPermission } from '../../src/data/app-permissions';
-import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
+import { createThemedStyles } from '../../src/theme/app-theme';
 
 type TimelineItem =
   | { kind: 'check-in'; checkIn: CheckIn }
@@ -34,7 +33,7 @@ interface BirthdayPrompt {
 }
 
 const AUDIO_WAVE_HEIGHTS = [7, 13, 19, 11, 23, 15, 9, 20, 12, 17, 8, 14];
-const POST_PREVIEW_MAX_HEIGHT = 211;
+const POST_PREVIEW_MAX_LENGTH = 240;
 
 export default function SpaceScreen() {
   const router = useRouter();
@@ -313,13 +312,9 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
+  const displayText = markdownToPlainText(displayMarkdown);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
-  const [markdownOverflow, setMarkdownOverflow] = useState({ markdown: displayMarkdown, overflowed: false });
-  const markdownOverflowed = markdownOverflow.markdown === displayMarkdown && markdownOverflow.overflowed;
-  const hasHiddenContent = markdownOverflowed || images.length > 9 || audioEmbeds.length > 2;
-  const handleMarkdownOverflowChange = useCallback((overflowed: boolean) => {
-    setMarkdownOverflow((current) => current.markdown === displayMarkdown && current.overflowed === overflowed ? current : { markdown: displayMarkdown, overflowed });
-  }, [displayMarkdown]);
+  const hasHiddenContent = displayText.length > POST_PREVIEW_MAX_LENGTH || images.length > 9 || audioEmbeds.length > 2;
 
   return (
     <Pressable accessibilityLabel={`打开 ${post.dayKey} ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.postCard, pressed && styles.feedPressed]}>
@@ -329,7 +324,7 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
           <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
           {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
-        {displayMarkdown ? <View pointerEvents="none" style={styles.postMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }} markdown={displayMarkdown} maxHeight={POST_PREVIEW_MAX_HEIGHT} media={[]} onOverflowChange={handleMarkdownOverflowChange} theme={editorTheme()} /></View> : null}
+        {displayText ? <Text numberOfLines={7} style={styles.postExcerpt}>{displayText}</Text> : null}
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
         {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
         {hasHiddenContent ? <Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>更多</Text></Pressable> : null}
@@ -585,8 +580,7 @@ const styles = createThemedStyles(() => ({
   postHeader: { minHeight: 24, alignItems: 'flex-start', justifyContent: 'center' },
   postAuthor: { color: colors.life, fontFamily: typography.body, fontSize: 14, fontWeight: '700' },
   postSignature: { maxWidth: '100%', marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
-  postMarkdownFrame: { width: '100%', marginTop: spacing.sm },
-  postMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
+  postExcerpt: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 24 },
   postSingleImage: { width: '92%', marginTop: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   postImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   postImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.lifeLight },
