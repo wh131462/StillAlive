@@ -4,8 +4,9 @@ import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { AppKeyboardAvoidingView } from '../../src/components/app-keyboard-avoiding-view';
 import { usePasswordVaultState } from '../../src/state/password-vault-state';
 import { createThemedStyles } from '../../src/theme/app-theme';
 
@@ -14,9 +15,10 @@ export default function PasswordVaultScreen() {
   const vault = usePasswordVaultState();
   const [masterPassword, setMasterPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'create' | 'unlock' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const creating = !vault.hasVault;
   const normalizedSearchQuery = normalizeSearchText(searchQuery);
   const searching = normalizedSearchQuery.length > 0;
   const entries = useMemo(() => {
@@ -35,10 +37,10 @@ export default function PasswordVaultScreen() {
     setSearchFocused(false);
   }, [vault.phase]);
 
-  const run = async (action: () => Promise<void>) => {
-    try { setBusy(true); await action(); setMasterPassword(''); setConfirmation(''); }
+  const run = async (operation: 'create' | 'unlock', action: () => Promise<void>) => {
+    try { Keyboard.dismiss(); setBusy(operation); await action(); setMasterPassword(''); setConfirmation(''); }
     catch (cause: unknown) { Alert.alert('无法继续', errorMessage(cause)); }
-    finally { setBusy(false); }
+    finally { setBusy(null); }
   };
 
   if (vault.phase === 'loading') return <SafeAreaView style={styles.safeArea}><View style={styles.loading}><Text style={styles.loadingMark}>仍在</Text><Text style={styles.loadingText}>正在确认密码本状态…</Text></View></SafeAreaView>;
@@ -46,7 +48,7 @@ export default function PasswordVaultScreen() {
   if (vault.phase === 'unlocked') {
     return <SafeAreaView style={styles.safeArea}>
       <VaultHeader onBack={() => router.back()} right={<View style={styles.headerActions}><Pressable accessibilityLabel="立即锁定密码本" onPress={vault.lock} style={styles.headerButton}><SymbolView name={{ android: 'lock', ios: 'lock', web: 'lock' }} size={20} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Pressable accessibilityLabel="密码本安全设置" onPress={() => router.push('/vault/settings')} style={styles.headerButton}><SymbolView name={{ android: 'shield', ios: 'checkmark.shield', web: 'shield' }} size={20} tintColor={colors.life} type="hierarchical" /></Pressable></View>} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+      <AppKeyboardAvoidingView key="unlocked" mode="system" style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}><View style={styles.heroSeal}><SymbolView name={{ android: 'key', ios: 'key', web: 'key' }} size={25} tintColor={colors.sun} type="hierarchical" /></View><Text style={styles.heroEyebrow}>PASSWORD VAULT</Text><Text style={styles.heroTitle}>密码本</Text><Text style={styles.heroText}>账号和密码会加密存储在本机。离开密码本后会立即锁定。</Text><View style={styles.heroRule} /></View>
         <View style={[styles.searchField, searchFocused && styles.searchFieldFocused]}>
@@ -57,27 +59,26 @@ export default function PasswordVaultScreen() {
         <View style={styles.listHeading}><View><Text style={styles.sectionEyebrow}>{searching ? 'SEARCH RESULTS' : 'PASSWORDS'}</Text><Text accessibilityLiveRegion="polite" style={styles.sectionTitle}>{searching ? `${entries.length} 条匹配结果` : entries.length ? `${entries.length} 条密码记录` : '尚无密码记录'}</Text></View><Pressable accessibilityLabel="新建密码记录" onPress={() => router.push('/vault/entry')} style={styles.addButton}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={21} tintColor={colors.onLife} type="hierarchical" /></Pressable></View>
         {entries.length ? <View style={styles.entryList}>{entries.map((entry, index) => <Pressable key={entry.id} accessible accessibilityLabel="打开密码记录" accessibilityRole="button" onPress={() => router.push({ pathname: '/vault/entry', params: { id: entry.id } })} style={({ pressed }) => [styles.entryCard, index > 0 && styles.entryBorder, pressed && styles.pressed]}><View style={styles.entryMonogram}><Text style={styles.entryMonogramText}>{entry.name.slice(0, 1).toUpperCase()}</Text></View><View style={styles.entryCopy}><Text numberOfLines={1} style={styles.entryName}>{entry.name}</Text><Text numberOfLines={1} style={styles.entryUsername}>{entry.username || '未填写账号'}</Text></View><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>)}</View> : <View style={styles.empty}><View style={styles.emptyIcon}><SymbolView name={searching ? { android: 'search_off', ios: 'magnifyingglass', web: 'search_off' } : { android: 'key', ios: 'key', web: 'key' }} size={32} tintColor={colors.life} type="hierarchical" /></View><Text style={styles.emptyTitle}>{searching ? '没有匹配的密码记录' : '密码本还是空的'}</Text><Text style={styles.emptyText}>{searching ? '支持按名称、账号或网址模糊匹配，可以尝试缩短关键词。' : '添加一条密码记录。名称、账号、密码、网址和备注都会加密存储。'}</Text><Pressable accessibilityRole="button" onPress={() => searching ? setSearchQuery('') : router.push('/vault/entry')} style={styles.emptyButton}><Text style={styles.emptyButtonText}>{searching ? '清除搜索' : '添加第一条密码'}</Text></Pressable></View>}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </AppKeyboardAvoidingView>
     </SafeAreaView>;
   }
 
-  const creating = !vault.hasVault;
   return <SafeAreaView style={styles.safeArea}>
     <VaultHeader onBack={() => router.back()} />
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+    <AppKeyboardAvoidingView key="auth" mode="system" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.lockIllustration}><View style={styles.lockRing}><SymbolView name={{ android: 'lock', ios: 'lock.fill', web: 'lock' }} size={31} tintColor={colors.life} type="hierarchical" /></View></View>
         <Text style={styles.authTitle}>{creating ? '创建主密码' : '输入主密码'}</Text>
         <Text style={styles.authHint}>{creating ? '至少 6 个字符，忘记后无法找回。' : '解锁后即可查看密码记录。'}</Text>
         <View style={styles.authForm}>
-          <TextInput accessibilityLabel="主密码" autoCapitalize="none" autoCorrect={false} editable={!busy} importantForAutofill="no" onChangeText={setMasterPassword} placeholder="主密码" placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} textContentType="none" value={masterPassword} />
-          {creating ? <TextInput accessibilityLabel="再次输入主密码" autoCapitalize="none" autoCorrect={false} editable={!busy} importantForAutofill="no" onChangeText={setConfirmation} placeholder="再次输入主密码" placeholderTextColor={colors.inkFaint} secureTextEntry style={[styles.input, styles.confirmationInput]} textContentType="none" value={confirmation} /> : null}
-          <Pressable accessibilityRole="button" disabled={busy} onPress={() => void run(() => creating ? vault.create(masterPassword, confirmation) : vault.unlock(masterPassword))} style={({ pressed }) => [styles.primaryButton, busy && styles.disabled, pressed && styles.pressed]}><Text style={styles.primaryButtonText}>{busy ? '正在处理…' : creating ? '创建密码本' : '解锁'}</Text></Pressable>
-          {!creating && vault.biometricAvailable && vault.biometricEnabled ? <Pressable accessibilityRole="button" disabled={busy} onPress={() => void run(vault.unlockWithBiometrics)} style={({ pressed }) => [styles.secondaryButton, busy && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'fingerprint', ios: 'faceid', web: 'fingerprint' }} size={21} tintColor={colors.life} type="hierarchical" /><Text style={styles.secondaryButtonText}>使用生物识别</Text></Pressable> : null}
+          <TextInput accessibilityLabel="主密码" autoCapitalize="none" autoCorrect={false} editable={busy === null} importantForAutofill="no" onChangeText={setMasterPassword} placeholder="主密码" placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} textContentType="none" value={masterPassword} />
+          {creating ? <TextInput accessibilityLabel="再次输入主密码" autoCapitalize="none" autoCorrect={false} editable={busy === null} importantForAutofill="no" onChangeText={setConfirmation} placeholder="再次输入主密码" placeholderTextColor={colors.inkFaint} secureTextEntry style={[styles.input, styles.confirmationInput]} textContentType="none" value={confirmation} /> : null}
+          <Pressable accessibilityRole="button" disabled={busy !== null} onPress={() => void run(creating ? 'create' : 'unlock', () => creating ? vault.create(masterPassword, confirmation) : vault.unlock(masterPassword))} style={({ pressed }) => [styles.primaryButton, busy !== null && styles.disabled, pressed && styles.pressed]}><Text style={styles.primaryButtonText}>{busy === 'create' ? '正在创建…' : busy === 'unlock' ? '正在解锁…' : creating ? '创建密码本' : '解锁'}</Text></Pressable>
+          {!creating && vault.biometricAvailable && vault.biometricEnabled ? <Pressable accessibilityRole="button" disabled={busy !== null} onPress={() => void run('unlock', vault.unlockWithBiometrics)} style={({ pressed }) => [styles.secondaryButton, busy !== null && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'fingerprint', ios: 'faceid', web: 'fingerprint' }} size={21} tintColor={colors.life} type="hierarchical" /><Text style={styles.secondaryButtonText}>{busy === 'unlock' ? '正在解锁…' : '使用生物识别'}</Text></Pressable> : null}
         </View>
         {!creating ? <Pressable accessibilityRole="button" onPress={() => router.push('/vault/forgot-password' as RelativePathString)} style={styles.forgotButton}><Text style={styles.forgotText}>忘记主密码？</Text></Pressable> : null}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </AppKeyboardAvoidingView>
   </SafeAreaView>;
 }
 

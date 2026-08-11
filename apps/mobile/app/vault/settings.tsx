@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { AppKeyboardAvoidingView } from '../../src/components/app-keyboard-avoiding-view';
 import { usePasswordVaultState } from '../../src/state/password-vault-state';
 import { createThemedStyles } from '../../src/theme/app-theme';
 
@@ -18,12 +19,12 @@ export default function PasswordVaultSettingsScreen() {
   const [busy, setBusy] = useState<'biometric' | 'password' | 'delete' | null>(null);
 
   useEffect(() => {
-    if (vault.phase === 'unlocked') return;
+    if (vault.phase === 'unlocked' || busy === 'delete') return;
     setCurrentPassword(''); setNextPassword(''); setNextConfirmation(''); setDeletePassword(''); setDeleteConfirmation('');
     router.replace('/vault');
-  }, [router, vault.phase]);
+  }, [busy, router, vault.phase]);
 
-  if (vault.phase !== 'unlocked') return null;
+  if (vault.phase !== 'unlocked' && busy !== 'delete') return null;
 
   const toggleBiometrics = async () => {
     try { setBusy('biometric'); await vault.setBiometricsEnabled(!vault.biometricEnabled); }
@@ -43,6 +44,7 @@ export default function PasswordVaultSettingsScreen() {
 
   const deleteVault = async () => {
     try {
+      Keyboard.dismiss();
       setBusy('delete');
       await vault.deleteVault(deletePassword);
       setDeletePassword(''); setDeleteConfirmation('');
@@ -52,8 +54,8 @@ export default function PasswordVaultSettingsScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}><Pressable accessibilityLabel="返回密码本" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>密码本安全</Text><View style={styles.headerButton} /></View>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+    <View style={styles.header}><Pressable accessibilityLabel="返回密码本" disabled={busy !== null} onPress={() => router.back()} style={[styles.headerButton, busy !== null && styles.disabled]}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>密码本安全</Text><View style={styles.headerButton} /></View>
+    <AppKeyboardAvoidingView mode="system" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.securitySummary}><View style={styles.summaryIcon}><SymbolView name={{ android: 'verified_user', ios: 'checkmark.shield', web: 'verified_user' }} size={27} tintColor={colors.sun} type="hierarchical" /></View><Text style={styles.summaryEyebrow}>PASSWORD SECURITY</Text><Text style={styles.summaryTitle}>密码本始终由主密码保护</Text><Text style={styles.summaryText}>生物识别只是这台设备的快捷解锁方式。修改主密码或恢复备份时，仍必须提供正确主密码。</Text></View>
 
@@ -64,25 +66,25 @@ export default function PasswordVaultSettingsScreen() {
 
       <Text style={styles.eyebrow}>MASTER PASSWORD</Text>
       <View style={styles.cardForm}><Text style={styles.cardTitle}>修改主密码</Text><Text style={styles.cardHint}>需要再次验证当前主密码。只重新保护数据密钥，不生成明文副本。</Text>
-        <PasswordInput label="当前主密码" onChangeText={setCurrentPassword} placeholder="输入当前主密码" value={currentPassword} />
-        <PasswordInput label="新主密码" onChangeText={setNextPassword} placeholder="至少 6 个字符" value={nextPassword} />
-        <PasswordInput label="再次输入新主密码" onChangeText={setNextConfirmation} placeholder="完整重复一次" value={nextConfirmation} />
+        <PasswordInput editable={busy === null} label="当前主密码" onChangeText={setCurrentPassword} placeholder="输入当前主密码" value={currentPassword} />
+        <PasswordInput editable={busy === null} label="新主密码" onChangeText={setNextPassword} placeholder="至少 6 个字符" value={nextPassword} />
+        <PasswordInput editable={busy === null} label="再次输入新主密码" onChangeText={setNextConfirmation} placeholder="完整重复一次" value={nextConfirmation} />
         <Pressable disabled={busy !== null} onPress={() => void changePassword()} style={[styles.primaryButton, busy !== null && styles.disabled]}><Text style={styles.primaryButtonText}>{busy === 'password' ? '正在修改…' : '修改主密码'}</Text></Pressable>
       </View>
 
       <Text style={styles.eyebrow}>DANGER ZONE</Text>
       <View style={styles.dangerCard}><Text style={styles.dangerTitle}>永久删除密码本</Text><Text style={styles.dangerHint}>所有账号、密码、网址和备注都将不可恢复。日记、人物与媒体不会被删除。</Text>
-        <PasswordInput label="再次输入主密码" onChangeText={setDeletePassword} placeholder="验证当前主密码" value={deletePassword} />
-        <Text style={styles.fieldLabel}>输入“永久删除”确认</Text><TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setDeleteConfirmation} placeholder="永久删除" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.dangerInput]} value={deleteConfirmation} />
+        <PasswordInput editable={busy === null} label="再次输入主密码" onChangeText={setDeletePassword} placeholder="验证当前主密码" value={deletePassword} />
+        <Text style={styles.fieldLabel}>输入“永久删除”确认</Text><TextInput autoCapitalize="none" autoCorrect={false} editable={busy === null} onChangeText={setDeleteConfirmation} placeholder="永久删除" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.dangerInput]} value={deleteConfirmation} />
         <Pressable disabled={busy !== null || deleteConfirmation !== '永久删除'} onPress={() => Alert.alert('最后确认', '密码本删除后无法恢复。确定继续吗？', [{ text: '取消', style: 'cancel' }, { text: '永久删除', style: 'destructive', onPress: () => void deleteVault() }])} style={[styles.deleteButton, (busy !== null || deleteConfirmation !== '永久删除') && styles.disabled]}><Text style={styles.deleteButtonText}>{busy === 'delete' ? '正在删除…' : '永久删除密码本'}</Text></Pressable>
       </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </AppKeyboardAvoidingView>
   </SafeAreaView>;
 }
 
-function PasswordInput({ label, onChangeText, placeholder, value }: { label: string; onChangeText(value: string): void; placeholder: string; value: string }) {
-  return <><Text style={styles.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} autoCapitalize="none" autoCorrect={false} importantForAutofill="no" onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} textContentType="none" value={value} /></>;
+function PasswordInput({ editable, label, onChangeText, placeholder, value }: { editable: boolean; label: string; onChangeText(value: string): void; placeholder: string; value: string }) {
+  return <><Text style={styles.fieldLabel}>{label}</Text><TextInput accessibilityLabel={label} autoCapitalize="none" autoCorrect={false} editable={editable} importantForAutofill="no" onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} textContentType="none" value={value} /></>;
 }
 
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
