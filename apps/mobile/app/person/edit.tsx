@@ -4,7 +4,7 @@ import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../src/components/app-keyboard-avoiding-view';
 import { useAppState } from '../../src/state/app-state';
@@ -40,6 +40,7 @@ export default function EditPersonScreen() {
   const [customTagIds, setCustomTagIds] = useState(initialAssignments.filter((item) => item.kind === 'custom').map((item) => item.value));
   const [newTagName, setNewTagName] = useState('');
   const [pickedAsset, setPickedAsset] = useState<ImagePickerAsset | null>(null);
+  const [avatarSourcePickerOpen, setAvatarSourcePickerOpen] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [saving, setSaving] = useState(false);
  const avatarUri = pickedAsset?.uri ?? currentAvatar?.localPath;
@@ -48,7 +49,17 @@ export default function EditPersonScreen() {
   const effectiveReminderHour = birthdayReminderHour ?? preferences.birthdayReminderHour;
   const effectiveReminderMinute = birthdayReminderMinute ?? preferences.birthdayReminderMinute;
 
-  const chooseAvatar = async () => {
+  const takeAvatarPhoto = async () => {
+    setAvatarSourcePickerOpen(false);
+    if (!await ensureAppPermission('camera')) return;
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    if (result.canceled) return;
+    setPickedAsset(result.assets[0]);
+    setAvatarFailed(false);
+  };
+
+  const pickAvatarPhoto = async () => {
+    setAvatarSourcePickerOpen(false);
     if (!await ensureAppPermission('photos')) return;
     const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
@@ -110,7 +121,7 @@ export default function EditPersonScreen() {
         </View>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.avatarCard}>
-            <Pressable accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => void chooseAvatar()} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="人物头像预览" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{name.trim().slice(0, 1) || '人'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={14} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
+            <Pressable accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(true)} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="人物头像预览" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{name.trim().slice(0, 1) || '人'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={14} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
             <View style={styles.avatarCopy}>
               <Text style={styles.avatarTitle}>人物头像</Text>
               <Text style={styles.avatarHint}>选择一张容易认出的照片，也可以只保留名字首字。</Text>
@@ -157,6 +168,16 @@ export default function EditPersonScreen() {
           {tagSystemSettings.find((item) => item.system === 'custom')?.enabled !== false ? <><View style={styles.field}><Text style={styles.fieldLabel}>单条标签 · 可多选</Text><View style={styles.chips}>{tagDefinitions.filter((tag) => !tag.groupId).map((tag) => <Pressable key={tag.id} onPress={() => setCustomTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} style={[styles.chip, customTagIds.includes(tag.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(tag.id) && styles.chipTextActive]}>{tag.name}</Text></Pressable>)}</View><View style={styles.inlineCreate}><TextInput maxLength={24} onChangeText={setNewTagName} placeholder="输入新标签" placeholderTextColor={colors.inkFaint} style={styles.inlineInput} value={newTagName} /><Pressable onPress={() => void createTag(newTagName).then((tag) => { setCustomTagIds((current) => [...current, tag.id]); setNewTagName(''); }, (cause: unknown) => Alert.alert('创建失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>添加</Text></Pressable></View></View>{tagGroups.map((group) => { const options = tagDefinitions.filter((tag) => tag.groupId === group.id); if (!options.length) return null; return <View key={group.id} style={styles.field}><Text style={styles.fieldLabel}>{group.name} · 单选</Text><View style={styles.chips}>{options.map((option) => <Pressable key={option.id} onPress={() => setCustomTagIds((current) => { const groupOptionIds = options.map((item) => item.id); const withoutGroup = current.filter((id) => !groupOptionIds.includes(id)); return current.includes(option.id) ? withoutGroup : [...withoutGroup, option.id]; })} style={[styles.chip, customTagIds.includes(option.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(option.id) && styles.chipTextActive]}>{option.name}</Text></Pressable>)}</View></View>; })}</> : null}
           <View style={styles.note}><Text style={styles.noteText}>资料只用于整理你的本地记忆，不会上传。</Text></View>
         </ScrollView>
+        <Modal animationType="slide" onRequestClose={() => setAvatarSourcePickerOpen(false)} transparent visible={avatarSourcePickerOpen}>
+          <Pressable onPress={() => setAvatarSourcePickerOpen(false)} style={styles.modalBackdrop}>
+            <Pressable accessibilityLabel="选择头像来源" accessibilityRole="menu" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.sourceSheet}>
+              <View style={styles.sheetHandle} />
+              <AvatarSourceOption label="拍摄" onPress={() => void takeAvatarPhoto()} />
+              <AvatarSourceOption label="从手机相册选择" onPress={() => void pickAvatarPhoto()} />
+              <Pressable accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(false)} style={styles.sourceCancel}><Text style={styles.sourceCancelText}>取消</Text></Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </AppKeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -169,6 +190,10 @@ function Field({ label, ...props }: { label: string } & React.ComponentProps<typ
       <TextInput {...props} placeholderTextColor={colors.inkFaint} style={[styles.input, props.multiline && styles.inputMultiline]} textAlignVertical={props.multiline ? 'top' : 'center'} />
     </View>
   );
+}
+
+function AvatarSourceOption({ label, onPress }: { label: string; onPress(): void }) {
+  return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.sourceOption, pressed && styles.sourceOptionPressed]}><Text style={styles.sourceOptionText}>{label}</Text></Pressable>;
 }
 
 function SectionHeader({ description, index, title }: { description: string; index: string; title: string }) {
@@ -203,6 +228,14 @@ const styles = createThemedStyles(() => ({
   avatarTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
   avatarHint: { marginTop: spacing.xs, color: colors.inkSoft, fontSize: typography.size.meta, lineHeight: 17 },
   avatarAction: { marginTop: spacing.sm, color: colors.life, fontSize: typography.size.meta, fontWeight: '700' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },
+  sourceSheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  sheetHandle: { width: 38, height: 4, alignSelf: 'center', marginVertical: spacing.md, borderRadius: 2, backgroundColor: colors.line },
+  sourceOption: { minHeight: 60, alignItems: 'center', justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  sourceOptionPressed: { opacity: 0.58 },
+  sourceOptionText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
+  sourceCancel: { minHeight: 54, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
+  sourceCancelText: { color: colors.inkSoft, fontSize: 14, fontWeight: '600' },
   sectionHeader: { marginTop: spacing.xxl, paddingTop: spacing.md, flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   sectionIndex: { width: 36, paddingTop: 3, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1 },
   sectionCopy: { flex: 1 },

@@ -55,6 +55,8 @@ export default function EditorScreen() {
   const [showMore, setShowMore] = useState(false);
   const [showTextSize, setShowTextSize] = useState(false);
   const [imageSourcePickerOpen, setImageSourcePickerOpen] = useState(false);
+  const [replaceImageSourcePickerOpen, setReplaceImageSourcePickerOpen] = useState(false);
+  const [replaceImageId, setReplaceImageId] = useState<string | null>(null);
   const [personPickerOpen, setPersonPickerOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
@@ -408,11 +410,22 @@ export default function EditorScreen() {
     await importPickedImages(result.assets, remaining);
   };
 
-  const handleReplaceImage = async (mediaId: string) => {
+  const handleReplaceImage = (mediaId: string) => {
     if (editorBusy) return;
+    setReplaceImageId(mediaId);
+    setReplaceImageSourcePickerOpen(true);
+  };
+
+  const replaceImageFromSource = async (source: 'camera' | 'photos') => {
+    const mediaId = replaceImageId;
+    setReplaceImageSourcePickerOpen(false);
+    setReplaceImageId(null);
+    if (!mediaId || editorBusy) return;
     let replacement: Media | null = null;
-    if (!await ensureAppPermission('photos')) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
+    if (!await ensureAppPermission(source)) return;
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     try {
       setMediaSaving(true);
@@ -585,6 +598,17 @@ export default function EditorScreen() {
               <ImageSourceOption label="拍摄" onPress={() => void handleTakePhoto()} />
               <ImageSourceOption label="从手机相册选择" onPress={() => void handlePickImages()} />
               <Pressable accessibilityRole="button" onPress={() => setImageSourcePickerOpen(false)} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal animationType="slide" onRequestClose={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} transparent visible={replaceImageSourcePickerOpen}>
+          <Pressable style={styles.modalBackdrop} onPress={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }}>
+            <Pressable accessibilityLabel="选择替换图片来源" accessibilityRole="menu" accessibilityViewIsModal style={styles.imageSourceSheet} onPress={(event) => event.stopPropagation()}>
+              <View style={styles.sheetHandle} />
+              <ImageSourceOption label="拍摄" onPress={() => void replaceImageFromSource('camera')} />
+              <ImageSourceOption label="从手机相册选择" onPress={() => void replaceImageFromSource('photos')} />
+              <Pressable accessibilityRole="button" onPress={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
             </Pressable>
           </Pressable>
         </Modal>
