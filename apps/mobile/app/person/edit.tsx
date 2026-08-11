@@ -16,6 +16,7 @@ import { RelationshipPicker } from '../../src/components/relationship-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
 import { lunarLeapMonth, lunarMonthDayCount } from '../../src/domain/person-profile';
 import { createThemedStyles } from '../../src/theme/app-theme';
+import { ensureAppPermission } from '../../src/data/app-permissions';
 
 export default function EditPersonScreen() {
   const router = useRouter();
@@ -47,11 +48,7 @@ export default function EditPersonScreen() {
   const effectiveReminderMinute = birthdayReminderMinute ?? preferences.birthdayReminderMinute;
 
   const chooseAvatar = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('无法访问照片', '请在系统设置中允许“仍在”访问照片。');
-      return;
-    }
+    if (!await ensureAppPermission('photos')) return;
     const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     setPickedAsset(result.assets[0]);

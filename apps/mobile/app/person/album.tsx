@@ -10,6 +10,7 @@ import { persistAlbumImage } from '../../src/data/local-media';
 import { useAppState } from '../../src/state/app-state';
 import { createThemedStyles } from '../../src/theme/app-theme';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
+import { ensureAppPermission } from '../../src/data/app-permissions';
 
 export default function AlbumScreen() {
   const router = useRouter();
@@ -29,8 +30,7 @@ export default function AlbumScreen() {
 
   const choosePhotos = async () => {
     if (!album) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert('无法访问照片', '请在系统设置中允许“仍在”访问照片。'); return; }
+    if (!await ensureAppPermission('photos')) return;
     const result = await ImagePicker.launchImageLibraryAsync({ allowsMultipleSelection: true, mediaTypes: ['images'], quality: 0.9, selectionLimit: 20 });
     if (result.canceled) return;
     setImporting(true);

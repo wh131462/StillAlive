@@ -16,6 +16,7 @@ import { TabPageHeader } from '../../src/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } from '../../src/domain/embedded-media';
 import { birthdayFromDateString, lunarLeapMonth, lunarMonthDayCount, nextBirthday } from '../../src/domain/person-profile';
 import { resolveDeviceLocation } from '../../src/data/device-location';
+import { ensureAppPermission } from '../../src/data/app-permissions';
 import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 type TimelineItem =
@@ -76,6 +77,13 @@ export default function SpaceScreen() {
       let city: string;
       try {
         setCheckingIn(true);
+        const allowed = await ensureAppPermission('location', [
+          { text: '不记录城市，继续', onPress: () => void finishCheckInWithoutCity() },
+        ]);
+        if (!allowed) {
+          setCheckingIn(false);
+          return;
+        }
         const location = await resolveDeviceLocation();
         city = location.city;
       } catch (cause: unknown) {

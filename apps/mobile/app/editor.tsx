@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
-import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import { RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ import { useAppState } from '../src/state/app-state';
 import { createThemedStyles, editorTheme } from '../src/theme/app-theme';
 import { persistPickedImage, persistVoiceRecording } from '../src/data/local-media';
 import { resolveDeviceLocation } from '../src/data/device-location';
+import { ensureAppPermission } from '../src/data/app-permissions';
 import { extractEmbeddedMediaIds } from '../src/domain/embedded-media';
 
 export default function EditorScreen() {
@@ -232,7 +233,7 @@ export default function EditorScreen() {
       createdMediaRef.current = [];
       await Promise.all(created.map(discardMedia)).catch(() => undefined);
       allowExitRef.current = true;
-      if (router.canGoBack()) router.back();
+      if (router.canDismiss()) router.dismiss();
       else router.replace('/');
     } catch (cause: unknown) {
       Alert.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
@@ -243,11 +244,7 @@ export default function EditorScreen() {
 
   const beginRecording = async () => {
     try {
-      const permission = await AudioModule.requestRecordingPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('无法使用麦克风', '请在系统设置中允许“仍在”使用麦克风。');
-        return;
-      }
+      if (!await ensureAppPermission('microphone')) return;
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
@@ -383,11 +380,7 @@ export default function EditorScreen() {
     const remaining = remainingImageSlots();
     if (!remaining) return;
 
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('无法使用相机', '请在系统设置中允许“仍在”使用相机。');
-      return;
-    }
+    if (!await ensureAppPermission('camera')) return;
 
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
@@ -400,11 +393,7 @@ export default function EditorScreen() {
     const remaining = remainingImageSlots();
     if (!remaining) return;
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('无法访问照片', '请在系统设置中允许“仍在”访问照片。');
-      return;
-    }
+    if (!await ensureAppPermission('photos')) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
@@ -419,11 +408,7 @@ export default function EditorScreen() {
   const handleReplaceImage = async (mediaId: string) => {
     if (editorBusy) return;
     let replacement: Media | null = null;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('无法访问照片', '请在系统设置中允许“仍在”访问照片。');
-      return;
-    }
+    if (!await ensureAppPermission('photos')) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     try {
@@ -464,6 +449,7 @@ export default function EditorScreen() {
   const useCurrentLocation = async () => {
     try {
       setLocating(true);
+      if (!await ensureAppPermission('location')) return;
       const location = await resolveDeviceLocation();
       setLocationName(location.address);
       setLocationPickerOpen(false);

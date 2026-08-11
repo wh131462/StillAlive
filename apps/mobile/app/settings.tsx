@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -10,13 +11,26 @@ import { useAppState } from '../src/state/app-state';
 import { TimePickerField } from '../src/components/date-time-picker';
 import { StyledName } from '../src/components/styled-name';
 import { NAME_STYLE_OPTIONS, THEME_OPTIONS, createThemedStyles } from '../src/theme/app-theme';
+import { openAppSettings } from '../src/data/app-permissions';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { notificationPermission, openNotificationSettings, persistentNotificationRunning, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
+  const [retryingNotification, setRetryingNotification] = useState<'birthday' | 'memory' | null>(null);
   const showNotificationStatus = preferences.birthdayNotificationsEnabled || preferences.memoryNotificationsEnabled || preferences.persistentNotificationEnabled || Boolean(preferences.birthdayNotificationError) || Boolean(preferences.memoryNotificationError);
 
   const savePreference = (changes: Parameters<typeof updatePreferences>[0]) => void updatePreferences(changes).catch((cause: unknown) => Alert.alert('设置失败', errorMessage(cause)));
+  const retryNotification = async (kind: 'birthday' | 'memory') => {
+    if (retryingNotification) return;
+    try {
+      setRetryingNotification(kind);
+      await (kind === 'birthday' ? retryBirthdayNotifications() : retryMemoryNotifications());
+    } catch (cause) {
+      Alert.alert('重试失败', errorMessage(cause));
+    } finally {
+      setRetryingNotification(null);
+    }
+  };
 
   return <SafeAreaView style={styles.safeArea}>
     <View style={styles.header}>
@@ -66,8 +80,13 @@ export default function SettingsScreen() {
       {showNotificationStatus ? <Text style={styles.permissionState}>系统权限 {notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text> : null}
       {preferences.persistentNotificationEnabled ? <Text style={styles.permissionState}>常驻服务 {persistentNotificationRunning ? '正在运行' : '等待系统启动'}</Text> : null}
       {showNotificationStatus && notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
-      {preferences.birthdayNotificationError ? <><Pressable onPress={() => void retryBirthdayNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试通知调度</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
-      {preferences.memoryNotificationError ? <><Pressable onPress={() => void retryMemoryNotifications().catch((cause: unknown) => Alert.alert('重试失败', errorMessage(cause)))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>重试回忆通知</Text></Pressable><Text style={styles.error}>{preferences.memoryNotificationError}</Text></> : null}
+      {preferences.birthdayNotificationError ? <><Pressable disabled={Boolean(retryingNotification)} onPress={() => void retryNotification('birthday')} style={[styles.inlineButton, retryingNotification && styles.disabled]}><Text style={styles.inlineButtonText}>{retryingNotification === 'birthday' ? '重试中…' : '重试通知调度'}</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
+      {preferences.memoryNotificationError ? <><Pressable disabled={Boolean(retryingNotification)} onPress={() => void retryNotification('memory')} style={[styles.inlineButton, retryingNotification && styles.disabled]}><Text style={styles.inlineButtonText}>{retryingNotification === 'memory' ? '重试中…' : '重试回忆通知'}</Text></Pressable><Text style={styles.error}>{preferences.memoryNotificationError}</Text></> : null}
+
+      <Text style={styles.eyebrow}>PERMISSIONS</Text>
+      <View style={styles.group}>
+        <Entry icon="lock.shield" androidIcon="shield" label="系统权限" hint="通知、位置、相机、照片与麦克风可在系统中统一管理" onPress={() => void openAppSettings()} />
+      </View>
 
       <Text style={styles.eyebrow}>DATA</Text>
       <View style={styles.group}>
@@ -116,5 +135,6 @@ const styles = createThemedStyles(() => ({
   group: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.line }, entry: { minHeight: 72, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryCompact: { minHeight: 64 }, entryIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, entryCopy: { flex: 1 }, entryTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' }, entryHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, switchTrack: { width: 44, height: 26, marginLeft: spacing.md, padding: 2, borderRadius: 13, backgroundColor: colors.line }, switchTrackOn: { backgroundColor: colors.life }, switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper }, switchThumbOn: { alignSelf: 'flex-end' },
   permissionState: { marginTop: spacing.md, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta }, inlineButton: { minHeight: 44, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet }, inlineButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' }, error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 17 },
+  disabled: { opacity: 0.55 },
   pressed: { opacity: 0.7 },
 }));
