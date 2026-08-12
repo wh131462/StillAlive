@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.4",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.4.apk",
-  "releaseNotes": "新增 Android 增量更新、头像与相册相机/相册取图、系统权限引导和指纹验证优化，完善密码本状态反馈，优化数据库与通知同步、定位、键盘弹窗、动态预览及导航体验，并修复 Android WebView 与门户部署问题。"
+  "versionCode": 7,
+  "versionName": "1.0.5",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.5.apk",
+  "releaseNotes": "新增端到端加密资料收集、Android 更新断点续传与多源回退，以及相机和相册统一取图能力，完善系统权限引导、生日标记和密码本反馈，优化定位、通知同步与移动端交互，并修复 Android WebView 和门户部署问题。"
 }
