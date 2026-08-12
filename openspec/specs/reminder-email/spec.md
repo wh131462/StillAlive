@@ -1,0 +1,84 @@
+# reminder-email Specification
+
+## Purpose
+TBD - created by archiving change chronicle-pivot. Update Purpose after archive.
+## Requirements
+### Requirement: 命名与文案去重
+
+系统 SHALL 使用「提醒邮件」作为功能名称，面向用户的 UI 文案 SHALL NOT 出现「死亡」「诅咒」「终结」「离世」等语义强烈字眼。
+
+#### Scenario: UI 文案检查
+
+- **WHEN** 检查 `reminder-email` 相关 DOM 中所有可见中文文本
+- **THEN** 不出现「死亡」「确认死亡」「诅咒」「终结」「已故」
+- **AND** 可出现「长时间未打卡」「无活动」「牵挂」等中性或温和表达
+
+#### Scenario: 设计稿中屏 id 统一
+
+- **WHEN** 检查 `docs/design/app.html` 与 `docs/design/web.html`
+- **THEN** 不存在 `data-screen="death-confirm"` 或类似 id；统一为 `data-screen="reminder-email"`
+- **AND** profile / settings 入口标签从「死亡确认」改为「提醒邮件」
+
+### Requirement: 触发条件
+
+系统 SHALL 基于「连续无活动天数」触发提醒邮件；活动定义为：任一一条 Post 或一次「我还在」打卡。
+
+#### Scenario: 触发天数可配置
+
+- **WHEN** 用户在提醒邮件设置页
+- **THEN** 可从 `3 / 7 / 14 / 30 / 自定义` 中选择触发天数（默认 7）
+- **AND** 自定义上限 365 天，下限 3 天
+
+#### Scenario: 任一活动重置计数
+
+- **WHEN** 用户打卡或写 Post
+- **THEN** 无活动计数归零
+- **AND** 之前已排队的提醒邮件若未发出则取消
+
+### Requirement: 两种通知模式
+
+系统 SHALL 提供两种模式供用户选择：邮件模式 + 仅系统提示模式。
+
+#### Scenario: 邮件模式
+
+- **WHEN** 用户启用「邮件模式」并配置紧急联系人邮箱
+- **THEN** 触发时后端（或本地带 SMTP 配置的客户端）发送预设邮件到该邮箱
+- **AND** 邮件主题、正文均由用户自定义，提供默认模板：
+
+  ```
+  主题：关于 <用户昵称> 的近况提醒
+  正文：
+  你好，
+  <用户昵称> 已经连续 <N> 天未��「还活着」中留下任何记录。
+  这封邮件并不意味着什么，但如果方便，请轻轻确认 ta 是否安好。
+  ——「还活着」
+  ```
+
+#### Scenario: 仅系统提示模式
+
+- **WHEN** 用户启用「仅系统提示」
+- **THEN** 触发时仅在自己的设备显示一条本地通知「你已经 N 天没有记录，要写一条吗？」
+- **AND** 不发送任何邮件、不产生任何网络请求（除非用户额外开启同步备份）
+
+#### Scenario: 二选一互斥
+
+- **WHEN** 用户在两种模式间切换
+- **THEN** 设计稿用 pick-group（chip 互斥）或两个独立 toggle + 互斥校验，任一时刻仅一种模式生效
+- **AND** 切换时弹出「是否清空另一模式的配置」询问
+
+### Requirement: 预览与测试
+
+系统 SHALL 提供邮件预览与「发送测试邮件」入口。
+
+#### Scenario: 内容预览
+
+- **WHEN** 用户进入提醒邮件设置
+- **THEN** 下方固定展示一张邮件预览卡片：发件人 + 收件人 + 主题 + 正文（渲染占位变量 `<用户昵称>`、`<N>`）
+- **AND** 用户修改模板后预览实时更新
+
+#### Scenario: 测试发送
+
+- **WHEN** 用户点击「发送测试邮件到自己」
+- **THEN** 立即用当前模板发一封邮件到用户自己邮箱（而非紧急联系人）
+- **AND** 不改变触发计数、不影响真实的 N 天逻辑
+
