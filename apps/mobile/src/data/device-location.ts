@@ -20,18 +20,14 @@ export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
     800,
     '缓存位置读取超时',
   ).catch(() => null);
-  const position = cachedPosition ?? await withTimeout(
-    getCurrentPosition(),
-    6_000,
-    '定位超时，请移到开阔处后重试',
-  );
+  const position = cachedPosition ?? await getCurrentPosition();
   const [place] = await withTimeout(Location.reverseGeocodeAsync({
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
   }), 4_000, '位置解析超时，请稍后重试');
   if (!place) throw new Error('暂时无法识别当前位置');
 
-  const city = normalizeCity(place.city ?? place.subregion ?? place.region);
+  const city = normalizeCity(place.city ?? place.subregion ?? place.district ?? place.region);
   const address = place.formattedAddress?.trim() || joinUnique([
     place.region,
     place.city,
@@ -46,8 +42,15 @@ export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
 
 function getCurrentPosition(): Promise<Location.LocationObject> {
   if (!currentPositionTask) {
-    currentPositionTask = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, mayShowUserSettingsDialog: false });
-    void currentPositionTask.finally(() => { currentPositionTask = null; }).catch(() => undefined);
+    const task = withTimeout(
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low, mayShowUserSettingsDialog: false }),
+      10_000,
+      '定位超时，请稍后重试',
+    );
+    currentPositionTask = task;
+    void task.finally(() => {
+      if (currentPositionTask === task) currentPositionTask = null;
+    }).catch(() => undefined);
   }
   return currentPositionTask;
 }
