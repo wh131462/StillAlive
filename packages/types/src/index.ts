@@ -5,6 +5,8 @@ export type BuiltInTagSystem = 'mbti' | 'constellation' | 'zodiac' | 'custom';
 export type Gender = 'female' | 'male' | 'other';
 export type AppThemeId = 'moss' | 'sand' | 'midnight';
 export type NameStyleId = 'fresh' | 'journal' | 'sunlit' | 'colorful' | 'iridescent';
+export type ProfileCollectionField = 'name' | 'gender' | 'birthday' | 'mbti' | 'customTags';
+export type ProfileCollectionRequestStatus = 'pending' | 'consumed';
 
 export interface Birthday {
   calendar: BirthdayCalendar;
@@ -45,6 +47,17 @@ export interface Person {
   memoryEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProfileCollectionRequest {
+  id: string;
+  personId: string;
+  fields: ProfileCollectionField[];
+  tagMap: Record<string, string>;
+  expiresAt: string;
+  status: ProfileCollectionRequestStatus;
+  createdAt: string;
+  consumedAt: string | null;
 }
 
 export interface TagSystemSetting {

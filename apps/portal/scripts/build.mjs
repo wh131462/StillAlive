@@ -14,6 +14,8 @@ assertRelease(release);
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(path.join(outputDir, 'assets'), { recursive: true });
+await mkdir(path.join(outputDir, 'collect'), { recursive: true });
+await mkdir(path.join(outputDir, 'receive'), { recursive: true });
 
 const template = await readFile(path.join(sourceDir, 'index.html'), 'utf8');
 const html = template
@@ -21,11 +23,19 @@ const html = template
   .replaceAll('__VERSION__', escapeHtml(release.versionName))
   .replaceAll('__APK_URL__', escapeHtml(release.apkUrl))
   .replaceAll('__RELEASE_NOTES__', escapeHtml(release.releaseNotes || '查看 GitHub Release 获取本次更新详情。'));
+const collectHtml = (await readFile(path.join(sourceDir, 'collect/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
+const receiveHtml = (await readFile(path.join(sourceDir, 'receive/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
 
 await Promise.all([
   writeFile(path.join(outputDir, 'index.html'), html),
+  writeFile(path.join(outputDir, 'collect/index.html'), collectHtml),
+  writeFile(path.join(outputDir, 'receive/index.html'), receiveHtml),
   cp(path.join(sourceDir, 'styles.css'), path.join(outputDir, 'styles.css')),
   cp(path.join(sourceDir, 'app.js'), path.join(outputDir, 'app.js')),
+  cp(path.join(sourceDir, 'collection.css'), path.join(outputDir, 'collection.css')),
+  cp(path.join(sourceDir, 'collect.js'), path.join(outputDir, 'collect.js')),
+  cp(path.join(sourceDir, 'receive.js'), path.join(outputDir, 'receive.js')),
+  cp(path.join(sourceDir, 'robots.txt'), path.join(outputDir, 'robots.txt')),
   cp(path.join(sourceDir, 'favicon.svg'), path.join(outputDir, 'assets/favicon.svg')),
   mkdir(path.join(outputDir, 'release'), { recursive: true }).then(() => cp(releasePath, path.join(outputDir, 'release/latest.json'))),
 ]);

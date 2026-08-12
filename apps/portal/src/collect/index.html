@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1D6B49" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>补充一点关于你 — 仍在</title>
+    <link rel="icon" type="image/svg+xml" href="__BASE__assets/favicon.svg" />
+    <link rel="stylesheet" href="__BASE__collection.css" />
+  </head>
+  <body data-base="__BASE__">
+    <main class="collection-shell">
+      <header class="collection-brand" aria-label="仍在">
+        <span class="collection-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="89 18" transform="rotate(-35 32 32)"/><circle cx="32" cy="32" r="3.5" fill="currentColor"/><circle cx="46" cy="22" r="4" class="mark-sun"/></svg></span>
+        <span><b>仍在</b><small>Still Alive</small></span>
+      </header>
+
+      <section class="collection-card" data-state="loading">
+        <div class="collection-number">01</div>
+        <p class="collection-eyebrow">一份只发给你的邀请</p>
+        <h1>有些关于你的答案，<br />想听你亲自说。</h1>
+        <p class="collection-lead">只填写你愿意分享的部分即可。答案会在这个浏览器里加密，不会上传，也不会留在网站上。</p>
+
+        <div class="status-panel" data-status>
+          <span class="status-orbit" aria-hidden="true"></span>
+          <strong>正在检查邀请</strong>
+          <p>请稍候。</p>
+        </div>
+
+        <form class="profile-form" data-form hidden>
+          <div data-fields></div>
+          <div class="privacy-note"><strong>你的答案不会上传</strong><p>完成后，浏览器只会生成一封加密回信。网站看不到，也不会保存你的回答。</p></div>
+          <button class="primary-action" type="submit" data-submit>完成并生成回信</button>
+        </form>
+
+        <section class="result-panel" data-result hidden>
+          <span class="result-seal" aria-hidden="true">密</span>
+          <p class="collection-eyebrow">回答已加密</p>
+          <h2>现在，把它发回去</h2>
+          <p>只有邀请你的那台设备能打开这封回信。发送完成后，对方才会收到你的回答。</p>
+          <div class="result-actions">
+            <button class="primary-action" type="button" data-share>发回给邀请人</button>
+            <button class="secondary-action" type="button" data-copy>复制回信链接</button>
+          </div>
+          <p class="action-feedback" aria-live="polite" data-feedback></p>
+        </section>
+      </section>
+      <footer class="collection-footer">无需账号 · 不上传答案 · 仅在本地加密</footer>
+    </main>
+    <script src="__BASE__collect.js" defer></script>
+  </body>
+</html>

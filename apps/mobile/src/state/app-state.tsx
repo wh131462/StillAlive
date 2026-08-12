@@ -3,7 +3,7 @@ import type { PropsWithChildren } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState as NativeAppState, Linking } from 'react-native';
-import type { AlbumMedia, Birthday, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Birthday, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionRequest, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import { toDayKey } from '@still-alive/core';
 import { SQLiteStillAliveRepository } from '../data/sqlite-repository';
 import type { BackupSnapshot } from '../data/sqlite-repository';
@@ -16,6 +16,7 @@ import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter, initial
 import { getPersistentNotificationStatus, persistentNotificationSupported, refreshPersistentNotification, setPersistentNotificationEnabled } from '../data/android-persistent-notification';
 import { extractEmbeddedMediaIds, extractImageMediaIds } from '../domain/embedded-media';
 import { deletePasswordVaultStorage } from '../data/password-vault-storage';
+import { deleteProfileCollectionPrivateKey, deleteProfileCollectionPrivateKeys, saveProfileCollectionPrivateKey } from '../data/profile-collection-key-storage';
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   onboardingCompleted: false,
@@ -107,6 +108,10 @@ interface AppStateValue {
   recordBackupExport(): Promise<void>;
   dismissBackupReminder(): Promise<void>;
   deleteAllLocalData(): Promise<void>;
+  createProfileCollectionRequest(request: ProfileCollectionRequest, privateKeyJwk: string): Promise<void>;
+  getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null>;
+  deleteProfileCollectionRequest(requestId: string): Promise<void>;
+  applyProfileCollectionImport(requestId: string, person: Person, mbti: string | null, customTagIds: string[]): Promise<void>;
 }
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -176,6 +181,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
   }), [enqueueNotificationSync, repository]);
 
+  const cleanupExpiredProfileCollectionRequests = useCallback(async () => {
+    const requestIds = await repository.deleteExpiredProfileCollectionRequests(new Date().toISOString());
+    await deleteProfileCollectionPrivateKeys(requestIds);
+  }, [repository]);
+
   useEffect(() => {
     void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch(() => undefined);
     const subscription = NativeAppState.addEventListener('change', (state) => {
@@ -183,6 +193,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const activeToday = toDayKey(new Date());
         setToday(activeToday);
         void (async () => {
+          await cleanupExpiredProfileCollectionRequests().catch(() => undefined);
           const [checkIn, storedCheckIns, storedPeople, storedPosts, storedPreferences] = await Promise.all([
             repository.getCheckIn(activeToday),
             repository.listCheckIns(),
@@ -201,13 +212,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       }
     });
     return () => subscription.remove();
-  }, [repository, syncBirthdayNotifications, syncMemoryNotifications]);
+  }, [cleanupExpiredProfileCollectionRequests, repository, syncBirthdayNotifications, syncMemoryNotifications]);
 
   useEffect(() => {
     let active = true;
     databaseReadyRef.current = false;
     setReady(false);
     void (async () => {
+      await cleanupExpiredProfileCollectionRequests().catch(() => undefined);
       const checkIn = await repository.getCheckIn(today);
       const storedCheckIns = await repository.listCheckIns();
       const storedPosts = await repository.listPosts();
@@ -260,7 +272,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setReady(true);
       });
     return () => { active = false; };
-  }, [repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
+  }, [cleanupExpiredProfileCollectionRequests, repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
   useEffect(() => {
     if (!ready || !persistentNotificationSupported) return;
@@ -390,6 +402,38 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
     if (previousAvatarId && previousAvatarId !== changes.avatarMediaId) await cleanupUnreferencedMedia([previousAvatarId]);
   }, [cleanupUnreferencedMedia, people, repository, syncBirthdayNotifications]);
+
+  const createProfileCollectionRequest = useCallback(async (request: ProfileCollectionRequest, privateKeyJwk: string) => {
+    await saveProfileCollectionPrivateKey(request.id, privateKeyJwk);
+    try {
+      await repository.createProfileCollectionRequest(request);
+    } catch (cause) {
+      await deleteProfileCollectionPrivateKey(request.id).catch(() => undefined);
+      throw cause;
+    }
+  }, [repository]);
+
+  const getProfileCollectionRequest = useCallback((requestId: string) => repository.getProfileCollectionRequest(requestId), [repository]);
+
+  const deleteProfileCollectionRequest = useCallback(async (requestId: string) => {
+    await repository.deleteProfileCollectionRequest(requestId);
+    await deleteProfileCollectionPrivateKey(requestId).catch(() => undefined);
+  }, [repository]);
+
+  const applyProfileCollectionImport = useCallback(async (requestId: string, person: Person, mbti: string | null, customTagIds: string[]) => {
+    if (!person.name.trim()) throw new Error('人物名字不能为空');
+    if (person.birthday) validateBirthday(person.birthday);
+    if (mbti && !MBTI_TYPES.includes(mbti as typeof MBTI_TYPES[number])) throw new Error('MBTI 类型无效');
+    const knownTagIds = new Set(tagDefinitions.map((tag) => tag.id));
+    if (customTagIds.some((tagId) => !knownTagIds.has(tagId))) throw new Error('人物标签已经发生变化，请重新创建邀请');
+    const nextPerson = { ...person, name: person.name.trim(), updatedAt: new Date().toISOString() };
+    await repository.applyProfileCollectionUpdate(requestId, nextPerson, mbti, customTagIds, new Date().toISOString());
+    const storedPeople = await repository.listPeople();
+    setPeople(storedPeople);
+    setPersonTagsState(await repository.listPersonTagAssignments());
+    await deleteProfileCollectionPrivateKey(requestId).catch(() => undefined);
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
+  }, [repository, syncBirthdayNotifications, tagDefinitions]);
 
   const deletePerson = useCallback(async (personId: string) => {
     const existing = people.find((person) => person.id === personId);
@@ -719,6 +763,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const deleteAllLocalData = useCallback(async () => {
     const storedMedia = media;
+    const profileCollectionRequestIds = await repository.listProfileCollectionRequestIds();
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
     await setPersistentNotificationEnabled(false).catch(() => undefined);
@@ -727,6 +772,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     let vaultDeleted = false;
     try {
       await deletePasswordVaultStorage();
+      await deleteProfileCollectionPrivateKeys(profileCollectionRequestIds);
       vaultDeleted = true;
     } catch (cause) {
       failures.push(cause);
@@ -843,7 +889,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     recordBackupExport,
     dismissBackupReminder,
     deleteAllLocalData,
-  }), [addPhotoToAlbum, albumMedia, albums, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, persistentNotificationRunning, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
+    createProfileCollectionRequest,
+    getProfileCollectionRequest,
+    deleteProfileCollectionRequest,
+    applyProfileCollectionImport,
+  }), [addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deletePerson, deletePost, deleteProfileCollectionRequest, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, homeMemory, loadDraft, media, notificationPermission, openNotificationSettings, people, persistentNotificationRunning, personTags, posts, preferences, ready, recordBackupExport, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updatePerson, updatePost, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

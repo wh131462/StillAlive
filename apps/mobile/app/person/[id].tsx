@@ -99,6 +99,11 @@ export default function PersonScreen() {
                 </View>
               </View>
             </View>
+            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile-collection/invite', params: { personId: person.id } })} style={({ pressed }) => [styles.collectionButton, pressed && styles.featureRowPressed]}>
+              <View style={styles.collectionIcon}><SymbolView name={{ android: 'send', ios: 'paperplane.fill', web: 'send' }} size={18} tintColor={colors.life} type="hierarchical" /></View>
+              <View style={styles.featureCopy}><Text style={styles.featureTitle}>邀请本人填写</Text><Text style={styles.featureHint}>请对方亲自回答，再由你逐项确认</Text></View>
+              <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={16} tintColor={colors.inkFaint} type="hierarchical" />
+            </Pressable>
 
             <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>收藏与回忆</Text></View>
             <View style={styles.featureCard}>
@@ -182,6 +187,8 @@ const styles = createThemedStyles(() => ({
   profileMetaHint: { marginTop: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   profileEmpty: { color: colors.inkFaint, fontSize: 10 },
   profileDivider: { marginLeft: 58, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  collectionButton: { minHeight: 76, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  collectionIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   tag: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 15, backgroundColor: colors.lifeLight },
   tagText: { color: colors.life, fontSize: 9 },

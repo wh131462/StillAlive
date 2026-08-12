@@ -64,14 +64,10 @@ export default function PeopleScreen() {
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <TabPageHeader
           action={(
-            <Pressable
-              accessibilityLabel="添加人物"
-              accessibilityRole="button"
-              onPress={() => setCreating(true)}
-              style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
-            >
-              <SymbolView name={{ android: 'person_add', ios: 'person.badge.plus', web: 'person_add' }} pointerEvents="none" size={21} tintColor={colors.life} type="hierarchical" />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable accessibilityLabel="导入对方填写的资料" accessibilityRole="button" onPress={() => router.push('/profile-collection/import')} style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}><SymbolView name={{ android: 'move_to_inbox', ios: 'tray.and.arrow.down.fill', web: 'move_to_inbox' }} pointerEvents="none" size={20} tintColor={colors.life} type="hierarchical" /></Pressable>
+              <Pressable accessibilityLabel="添加人物" accessibilityRole="button" onPress={() => setCreating(true)} style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}><SymbolView name={{ android: 'person_add', ios: 'person.badge.plus', web: 'person_add' }} pointerEvents="none" size={21} tintColor={colors.life} type="hierarchical" /></Pressable>
+            </View>
           )}
           eyebrow="PEOPLE"
           subtitle="有些日子，因为有人而记得。"
@@ -173,6 +169,7 @@ const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
   addButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 22, backgroundColor: colors.lifeLight },
   addButtonPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
   controls: { marginBottom: spacing.md },

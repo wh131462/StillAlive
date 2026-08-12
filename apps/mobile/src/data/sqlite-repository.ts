@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from '@still-alive/storage';
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, CheckIn, DayKey, Draft, Gender, Media, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, CheckIn, DayKey, Draft, Gender, Media, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../domain/memory-notifications';
 
 interface CheckInRow {
@@ -55,6 +55,17 @@ interface MediaRow {
   height: number | null;
   checksum: string;
   created_at: string;
+}
+
+interface ProfileCollectionRequestRow {
+  id: string;
+  person_id: string;
+  fields_json: string;
+  tag_map_json: string;
+  expires_at: string;
+  status: ProfileCollectionRequestStatus;
+  created_at: string;
+  consumed_at: string | null;
 }
 
 export interface BackupSnapshot {
@@ -357,6 +368,21 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'persons', 'birthday_reminder_minute', 'INTEGER');
     await db.execAsync('PRAGMA user_version = 15;');
   }
+
+  if (currentVersion < 16) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS profile_collection_requests (
+      id TEXT PRIMARY KEY NOT NULL,
+      person_id TEXT NOT NULL,
+      fields_json TEXT NOT NULL,
+      tag_map_json TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      consumed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS profile_collection_requests_expiry_idx ON profile_collection_requests(status, expires_at);
+    PRAGMA user_version = 16;
+  `);
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {
@@ -866,6 +892,102 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     });
   }
 
+  async createProfileCollectionRequest(request: ProfileCollectionRequest): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO profile_collection_requests
+       (id, person_id, fields_json, tag_map_json, expires_at, status, created_at, consumed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      request.id,
+      request.personId,
+      JSON.stringify(request.fields),
+      JSON.stringify(request.tagMap),
+      request.expiresAt,
+      request.status,
+      request.createdAt,
+      request.consumedAt,
+    ));
+  }
+
+  async getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null> {
+    const row = await this.db.getFirstAsync<ProfileCollectionRequestRow>(
+      `SELECT id, person_id, fields_json, tag_map_json, expires_at, status, created_at, consumed_at
+       FROM profile_collection_requests WHERE id = ?`,
+      requestId,
+    );
+    return row ? mapProfileCollectionRequest(row) : null;
+  }
+
+  async listProfileCollectionRequestIds(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ id: string }>('SELECT id FROM profile_collection_requests ORDER BY created_at');
+    return rows.map((row) => row.id);
+  }
+
+  async consumeProfileCollectionRequest(requestId: string, consumedAt: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      "UPDATE profile_collection_requests SET status = 'consumed', consumed_at = ? WHERE id = ? AND status = 'pending'",
+      consumedAt,
+      requestId,
+    ));
+  }
+
+  async deleteProfileCollectionRequest(requestId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM profile_collection_requests WHERE id = ?', requestId));
+  }
+
+  async deleteExpiredProfileCollectionRequests(now: string): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ id: string }>(
+      "SELECT id FROM profile_collection_requests WHERE status = 'pending' AND expires_at <= ?",
+      now,
+    );
+    if (rows.length) await this.enqueueWrite(() => this.db.runAsync(
+      "DELETE FROM profile_collection_requests WHERE status = 'pending' AND expires_at <= ?",
+      now,
+    ));
+    return rows.map((row) => row.id);
+  }
+
+  async applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], consumedAt: string): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      const consumed = await transaction.runAsync(
+        "UPDATE profile_collection_requests SET status = 'consumed', consumed_at = ? WHERE id = ? AND person_id = ? AND status = 'pending' AND expires_at > ?",
+        consumedAt,
+        requestId,
+        person.id,
+        consumedAt,
+      );
+      if (consumed.changes !== 1) throw new Error('这份资料邀请已经过期或使用过');
+      const updated = await transaction.runAsync(
+        `UPDATE persons
+         SET name = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?,
+             birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?,
+             birthday_reminder_enabled = ?, birthday_reminder_hour = ?, birthday_reminder_minute = ?,
+             memory_enabled = ?, updated_at = ?
+         WHERE id = ?`,
+        person.name,
+        person.avatarMediaId,
+        person.gender,
+        person.relationToMe,
+        person.impression,
+        person.birthday?.calendar ?? null,
+        person.birthday?.year ?? null,
+        person.birthday?.month ?? null,
+        person.birthday?.day ?? null,
+        person.birthday?.isLeapMonth ? 1 : 0,
+        person.birthday?.reminderMode ?? null,
+        person.birthday?.reminderEnabled === false ? 0 : 1,
+        person.birthday?.reminderHour ?? null,
+        person.birthday?.reminderMinute ?? null,
+        person.memoryEnabled ? 1 : 0,
+        person.updatedAt,
+        person.id,
+      );
+      if (updated.changes !== 1) throw new Error('对应的人物已经被删除');
+      await transaction.runAsync('DELETE FROM person_tag_assignments WHERE person_id = ?', person.id);
+      if (mbti) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'mbti', ?)", person.id, mbti);
+      for (const tagId of new Set(customTagIds)) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'custom', ?)", person.id, tagId);
+    });
+  }
+
   async listMemoryNotificationSchedules(): Promise<MemoryNotificationSchedule[]> {
     const rows = await this.db.getAllAsync<{ id: string; post_id: string; scheduled_at: string; platform_identifier: string }>('SELECT id, post_id, scheduled_at, platform_identifier FROM memory_notification_schedules ORDER BY scheduled_at');
     return rows.map((row) => ({ id: row.id, postId: row.post_id, scheduledAt: row.scheduled_at, platformIdentifier: row.platform_identifier }));
@@ -988,7 +1110,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
     });
   }
 
@@ -1131,7 +1253,7 @@ function mapPerson(row: PersonRow): Person {
       reminderEnabled: row.birthday_reminder_enabled === 1,
       reminderHour: row.birthday_reminder_hour,
       reminderMinute: row.birthday_reminder_minute,
-      reminderMode: row.birthday_calendar,
+      reminderMode: row.birthday_reminder_mode ?? row.birthday_calendar,
     } : null,
     memoryEnabled: row.memory_enabled === 1,
     createdAt: row.created_at,
@@ -1149,6 +1271,39 @@ function mapMedia(row: MediaRow): Media {
     checksum: row.checksum,
     createdAt: row.created_at,
   };
+}
+
+function mapProfileCollectionRequest(row: ProfileCollectionRequestRow): ProfileCollectionRequest {
+  return {
+    id: row.id,
+    personId: row.person_id,
+    fields: parseProfileCollectionFields(row.fields_json),
+    tagMap: parseStringMap(row.tag_map_json),
+    expiresAt: row.expires_at,
+    status: row.status === 'consumed' ? 'consumed' : 'pending',
+    createdAt: row.created_at,
+    consumedAt: row.consumed_at,
+  };
+}
+
+function parseProfileCollectionFields(value: string): ProfileCollectionField[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ProfileCollectionField => item === 'name' || item === 'gender' || item === 'birthday' || item === 'mbti' || item === 'customTags');
+  } catch {
+    return [];
+  }
+}
+
+function parseStringMap(value: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  } catch {
+    return {};
+  }
 }
 
 function createLocalId(prefix: string): string {

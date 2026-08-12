@@ -31,9 +31,11 @@ createServer(async (request, response) => {
 
   try {
     const fileStat = await stat(filePath);
-    if (!fileStat.isFile()) throw new Error('Not a file');
-    response.writeHead(200, { 'Content-Type': mimeTypes.get(path.extname(filePath)) || 'application/octet-stream' });
-    createReadStream(filePath).pipe(response);
+    const resolvedFilePath = fileStat.isDirectory() ? path.join(filePath, 'index.html') : filePath;
+    const resolvedFileStat = fileStat.isDirectory() ? await stat(resolvedFilePath) : fileStat;
+    if (!resolvedFileStat.isFile()) throw new Error('Not a file');
+    response.writeHead(200, { 'Content-Type': mimeTypes.get(path.extname(resolvedFilePath)) || 'application/octet-stream' });
+    createReadStream(resolvedFilePath).pipe(response);
   } catch {
     response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not found');
   }

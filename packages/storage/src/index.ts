@@ -1,4 +1,4 @@
-import type { AlbumMedia, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionRequest, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey, city: string | null): Promise<CheckIn>;
@@ -42,4 +42,11 @@ export interface StillAliveRepository {
   removeAlbumMedia(albumId: string, mediaId: string): Promise<void>;
   listBirthdayNotificationSchedules(): Promise<BirthdayNotificationSchedule[]>;
   replaceBirthdayNotificationSchedules(items: BirthdayNotificationSchedule[]): Promise<void>;
+  createProfileCollectionRequest(request: ProfileCollectionRequest): Promise<void>;
+  getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null>;
+  listProfileCollectionRequestIds(): Promise<string[]>;
+  consumeProfileCollectionRequest(requestId: string, consumedAt: string): Promise<void>;
+  deleteProfileCollectionRequest(requestId: string): Promise<void>;
+  deleteExpiredProfileCollectionRequests(now: string): Promise<string[]>;
+  applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], consumedAt: string): Promise<void>;
 }
