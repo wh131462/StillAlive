@@ -135,7 +135,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           <Pressable accessibilityLabel="下一个月" accessibilityRole="button" onPress={() => onChangeMonth(1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>›</Text></Pressable>
         </View>
       </View>
-      <View style={styles.weekRow}>{['一', '二', '三', '四', '五', '六', '日'].map((day, index) => <Text key={day} style={[styles.weekLabel, index > 4 && styles.weekLabelWeekend]}>周{day}</Text>)}</View>
+      <View style={styles.weekRow}>{['日', '一', '二', '三', '四', '五', '六'].map((day, index) => <Text key={day} style={[styles.weekLabel, (index === 0 || index === 6) && styles.weekLabelWeekend]}>周{day}</Text>)}</View>
       <View style={styles.calendarGrid}>
         {weeks.map((week, rowIndex) => (
           <View key={`week_${rowIndex}`} style={styles.calendarWeek}>
@@ -296,7 +296,7 @@ function birthdayCalendarLabel(calendar: BirthdayCalendar): string {
 function calendarCells(month: string): DayKey[] {
   const [year, value] = month.split('-').map(Number);
   const first = new Date(year, value - 1, 1);
-  const offset = (first.getDay() + 6) % 7;
+  const offset = first.getDay();
   const dayCount = new Date(year, value, 0).getDate();
   const cellCount = Math.ceil((offset + dayCount) / 7) * 7;
   return Array.from({ length: cellCount }, (_, index) => toDayKey(new Date(year, value - 1, index - offset + 1)));
