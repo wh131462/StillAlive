@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.5",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.5.apk",
-  "releaseNotes": "新增端到端加密资料收集、Android 更新断点续传与多源回退，以及相机和相册统一取图能力，完善系统权限引导、生日标记和密码本反馈，优化定位、通知同步与移动端交互，并修复 Android WebView 和门户部署问题。"
+  "versionCode": 8,
+  "versionName": "1.0.6",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.6.apk",
+  "releaseNotes": "新增加密资料收集，可邀请对方安全填写并导入姓名、生日、MBTI 及自定义标签；优化富文本编辑与预览、日历生日标记、移动端底栏及官网视觉；完善更新源回退与弹层体验，并提升定位和 WebView 稳定性。"
 }
