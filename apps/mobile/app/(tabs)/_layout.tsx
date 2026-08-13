@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import type { SymbolViewProps } from 'expo-symbols';
-import { Platform, Pressable } from 'react-native';
+import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
+import { useFonts } from 'expo-font';
+import { Platform, Pressable, Text, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { colors, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
@@ -10,13 +10,14 @@ import { applyColorTheme } from '../../src/theme/app-theme';
 type TabIconName = 'space' | 'calendar' | 'people' | 'profile';
 
 const tabIcons = {
-  space: { android: 'orbit', ios: 'atom', web: 'orbit' },
-  calendar: { android: 'calendar_month', ios: 'calendar', web: 'calendar_month' },
-  people: { android: 'group', ios: 'person.2', web: 'group' },
-  profile: { android: 'account_circle', ios: 'person.crop.circle', web: 'account_circle' },
-} satisfies Record<TabIconName, SymbolViewProps['name']>;
+  space: '\uf426',
+  calendar: '\uebcc',
+  people: '\ue7ef',
+  profile: '\ue853',
+} satisfies Record<TabIconName, string>;
 
 export default function TabsLayout() {
+  const [fontsLoaded] = useFonts({ MaterialSymbols_400Regular });
   const { preferences } = useAppState();
   applyColorTheme(preferences.appearanceTheme);
   return (
@@ -30,23 +31,17 @@ export default function TabsLayout() {
         tabBarButton: Platform.OS === 'android' ? ({ ref: _ref, ...props }) => <Pressable {...props} android_ripple={null} /> : undefined,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: '空间', tabBarIcon: ({ color }) => <TabIcon color={color} name="space" /> }} />
-      <Tabs.Screen name="time" options={{ title: '日历', tabBarIcon: ({ color }) => <TabIcon color={color} name="calendar" /> }} />
-      <Tabs.Screen name="people" options={{ title: '人物', tabBarIcon: ({ color }) => <TabIcon color={color} name="people" /> }} />
-      <Tabs.Screen name="data" options={{ title: '我的', tabBarIcon: ({ color }) => <TabIcon color={color} name="profile" /> }} />
+      <Tabs.Screen name="index" options={{ title: '空间', tabBarIcon: ({ color }) => <TabIcon color={color} loaded={fontsLoaded} name="space" /> }} />
+      <Tabs.Screen name="time" options={{ title: '日历', tabBarIcon: ({ color }) => <TabIcon color={color} loaded={fontsLoaded} name="calendar" /> }} />
+      <Tabs.Screen name="people" options={{ title: '人物', tabBarIcon: ({ color }) => <TabIcon color={color} loaded={fontsLoaded} name="people" /> }} />
+      <Tabs.Screen name="data" options={{ title: '我的', tabBarIcon: ({ color }) => <TabIcon color={color} loaded={fontsLoaded} name="profile" /> }} />
     </Tabs>
   );
 }
 
-function TabIcon({ color, name }: { color: ColorValue; name: TabIconName }) {
+function TabIcon({ color, loaded, name }: { color: ColorValue; loaded: boolean; name: TabIconName }) {
+  if (!loaded) return <View style={{ width: 22, height: 22 }} />;
   return (
-    <SymbolView
-      name={tabIcons[name]}
-      pointerEvents="none"
-      size={22}
-      tintColor={color}
-      type="monochrome"
-      weight="regular"
-    />
+    <Text pointerEvents="none" style={{ width: 22, height: 22, color, fontFamily: 'MaterialSymbols_400Regular', fontSize: 22, lineHeight: 22, textAlign: 'center' }}>{tabIcons[name]}</Text>
   );
 }
