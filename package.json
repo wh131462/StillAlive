@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm --filter @still-alive/mobile dev",
     "dev:android": "pnpm --filter @still-alive/mobile dev:android",
+    "dev:portal": "pnpm --filter @still-alive/portal dev",
     "build": "turbo run build",
     "build:apk": "./build-apk.sh",
     "release": "node ./scripts/release.mjs",
