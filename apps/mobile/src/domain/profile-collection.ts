@@ -39,6 +39,7 @@ export interface ProfileCollectionAnswers {
   birthday?: ProfileCollectionBirthdayAnswer;
   mbti?: string;
   customTags?: string[];
+  newCustomTags?: string[];
 }
 
 export interface ProfileCollectionResponsePayloadV1 {
@@ -120,7 +121,7 @@ export function parseProfileCollectionResponseInput(input: string): string {
 export function validateProfileCollectionPayload(payload: unknown, request: ProfileCollectionRequest): ProfileCollectionResponsePayloadV1 {
   if (!isRecord(payload) || !hasOnlyKeys(payload, ['v', 'id', 'submittedAt', 'answers']) || payload.v !== 1 || payload.id !== request.id || !validIsoDate(payload.submittedAt) || !isRecord(payload.answers)) throw new Error('填写结果格式无效');
   const answers = payload.answers;
-  const allowedAnswerKeys = new Set(['name', 'gender', 'birthday', 'mbti', 'customTags']);
+  const allowedAnswerKeys = new Set(['name', 'gender', 'birthday', 'mbti', 'customTags', 'newCustomTags']);
   if (Object.keys(answers).some((key) => !allowedAnswerKeys.has(key))) throw new Error('填写结果包含不支持的字段');
   const result: ProfileCollectionAnswers = {};
   if (answers.name !== undefined) {
@@ -152,6 +153,13 @@ export function validateProfileCollectionPayload(payload: unknown, request: Prof
     const ids = answers.customTags;
     if (ids.some((item) => typeof item !== 'string' || !request.tagMap[item]) || new Set(ids).size !== ids.length) throw new Error('标签内容无效');
     result.customTags = ids;
+  }
+  if (answers.newCustomTags !== undefined) {
+    assertRequested(request, 'customTags');
+    if (!Array.isArray(answers.newCustomTags) || !answers.newCustomTags.length || answers.newCustomTags.length > 20) throw new Error('新标签内容无效');
+    const names = answers.newCustomTags.map((item) => typeof item === 'string' ? item.trim() : '');
+    if (names.some((item) => !item || item.length > 24) || new Set(names.map((item) => item.toLocaleLowerCase())).size !== names.length) throw new Error('新标签内容无效');
+    result.newCustomTags = names;
   }
   if (!Object.keys(result).length) throw new Error('填写结果中没有可导入的内容');
   return { v: 1, id: request.id, submittedAt: payload.submittedAt, answers: result };

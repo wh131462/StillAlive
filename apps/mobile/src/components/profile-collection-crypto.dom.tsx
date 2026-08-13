@@ -39,7 +39,7 @@ async function execute(command: ProfileCollectionCryptoCommand): Promise<Profile
     );
     return { id: command.id, ok: true, type: command.type, plaintext: new TextDecoder('utf-8', { fatal: true }).decode(plaintext) };
   } catch {
-    return { id: command.id, ok: false, error: '无法验证或解密这份资料' };
+    return { id: command.id, ok: false, error: command.type === 'generate-key-pair' ? '无法生成加密邀请' : '无法验证或解密这份资料' };
   }
 }
 

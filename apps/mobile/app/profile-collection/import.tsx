@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Birthday, Person, ProfileCollectionField, ProfileCollectionRequest } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { strToU8 } from 'fflate';
@@ -15,6 +15,7 @@ import { formatGender } from '../../src/components/gender-picker';
 import { formatBirthday } from '../../src/domain/person-profile';
 import { useAppState } from '../../src/state/app-state';
 import { createThemedStyles } from '../../src/theme/app-theme';
+import { executeProfileCollectionCrypto, isNativeProfileCollectionCryptoAvailable } from '../../src/data/profile-collection-crypto';
 
 interface ImportContext {
   request: ProfileCollectionRequest;
@@ -42,11 +43,15 @@ export default function ProfileCollectionImportScreen() {
   const [cryptoCommand, setCryptoCommand] = useState<ProfileCollectionCryptoCommand | null>(null);
   const initialHandledRef = useRef(false);
   const initializedPayloadRef = useRef<ProfileCollectionResponsePayloadV1 | null>(null);
+  const activeCryptoIdRef = useRef<number | null>(null);
   const person = context ? people.find((item) => item.id === context.personId) ?? null : null;
   const currentAssignments = useMemo(() => person ? personTags.filter((item) => item.personId === person.id) : [], [person, personTags]);
   const currentMbti = currentAssignments.find((item) => item.kind === 'mbti')?.value ?? null;
   const currentCustomTagIds = useMemo(() => currentAssignments.filter((item) => item.kind === 'custom').map((item) => item.value), [currentAssignments]);
-  const responseCustomTagIds = useMemo(() => context && payload?.answers.customTags ? payload.answers.customTags.map((temporaryId) => context.request.tagMap[temporaryId]).filter(Boolean) : undefined, [context, payload]);
+  const responseCustomTagIds = useMemo(() => context && payload && (payload.answers.customTags || payload.answers.newCustomTags)
+    ? (payload.answers.customTags ?? []).map((temporaryId) => context.request.tagMap[temporaryId]).filter(Boolean)
+    : undefined, [context, payload]);
+  const responseNewTagNames = payload?.answers.newCustomTags ?? [];
 
   const differences = useMemo<Difference[]>(() => {
     if (!person || !payload) return [];
@@ -55,9 +60,9 @@ export default function ProfileCollectionImportScreen() {
     if (payload.answers.gender && payload.answers.gender !== person.gender) result.push({ field: 'gender', label: '性别', before: formatGender(person.gender), after: formatGender(payload.answers.gender) });
     if (payload.answers.birthday && !sameBirthday(person.birthday, payload.answers.birthday)) result.push({ field: 'birthday', label: '生日', before: person.birthday ? formatBirthday(person.birthday) : '未记录', after: formatBirthday(toBirthday(payload.answers.birthday, person.birthday)) });
     if (payload.answers.mbti && payload.answers.mbti !== currentMbti) result.push({ field: 'mbti', label: 'MBTI', before: currentMbti ?? '未记录', after: payload.answers.mbti });
-    if (responseCustomTagIds && !sameStringSet(responseCustomTagIds, currentCustomTagIds)) result.push({ field: 'customTags', label: '人物标签', before: formatTags(currentCustomTagIds, tagDefinitions), after: formatTags(responseCustomTagIds, tagDefinitions) });
+    if ((responseCustomTagIds || responseNewTagNames.length) && !sameTagSelection(responseCustomTagIds ?? [], responseNewTagNames, currentCustomTagIds, tagDefinitions)) result.push({ field: 'customTags', label: '人物标签', before: formatTags(currentCustomTagIds, tagDefinitions), after: responseTagNames(responseCustomTagIds ?? [], responseNewTagNames, tagDefinitions).join('、') || '未记录' });
     return result;
-  }, [currentCustomTagIds, currentMbti, payload, person, responseCustomTagIds, tagDefinitions]);
+  }, [currentCustomTagIds, currentMbti, payload, person, responseCustomTagIds, responseNewTagNames, tagDefinitions]);
 
   const processInput = useCallback(async (rawInput: string) => {
     if (busy) return;
@@ -78,7 +83,10 @@ export default function ProfileCollectionImportScreen() {
       if (!privateKeyJwk) throw new Error('这台设备已无法解开这封回信');
       const nextContext = { request, envelope, personId: target.id };
       setContext(nextContext);
-      setCryptoCommand({ id: Date.now(), type: 'decrypt', envelope, privateKeyJwk });
+      const command = { id: Date.now(), type: 'decrypt', envelope, privateKeyJwk } as const;
+      activeCryptoIdRef.current = command.id;
+      if (Platform.OS === 'ios' && isNativeProfileCollectionCryptoAvailable) handleCryptoResult(await executeProfileCollectionCrypto(command), nextContext);
+      else setCryptoCommand(command);
     } catch (cause) {
       setBusy(false);
       setContext(null);
@@ -93,8 +101,9 @@ export default function ProfileCollectionImportScreen() {
     void processInput(params.response);
   }, [params.response, processInput]);
 
-  const handleCryptoResult = useCallback((result: ProfileCollectionCryptoResult) => {
-    if (!busy || !context) return;
+  const handleCryptoResult = useCallback((result: ProfileCollectionCryptoResult, resultContext = context) => {
+    if (activeCryptoIdRef.current !== result.id || !resultContext) return;
+    activeCryptoIdRef.current = null;
     setCryptoCommand(null);
     setBusy(false);
     if (!result.ok || result.type !== 'decrypt') {
@@ -104,12 +113,12 @@ export default function ProfileCollectionImportScreen() {
     try {
       if (strToU8(result.plaintext).byteLength > PROFILE_COLLECTION_PLAINTEXT_MAX_BYTES) throw new Error('回信内容超过允许大小');
       const parsed: unknown = JSON.parse(result.plaintext);
-      const nextPayload = validateProfileCollectionPayload(parsed, context.request);
+      const nextPayload = validateProfileCollectionPayload(parsed, resultContext.request);
       setPayload(nextPayload);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '回信格式无效');
     }
-  }, [busy, context]);
+  }, [context]);
 
   useEffect(() => {
     if (!payload) {
@@ -135,7 +144,7 @@ export default function ProfileCollectionImportScreen() {
     const nextCustomTagIds = selected.has('customTags') && responseCustomTagIds ? responseCustomTagIds : currentCustomTagIds;
     try {
       setBusy(true);
-      await applyProfileCollectionImport(context.request.id, nextPerson, nextMbti, nextCustomTagIds);
+      await applyProfileCollectionImport(context.request.id, nextPerson, nextMbti, nextCustomTagIds, selected.has('customTags') ? responseNewTagNames : []);
       Alert.alert('已保存', `确认的内容已更新到 ${person.name}。`, [{ text: '查看人物', onPress: () => router.replace({ pathname: '/person/[id]', params: { id: person.id } }) }]);
     } catch (cause) {
       Alert.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
@@ -168,7 +177,7 @@ export default function ProfileCollectionImportScreen() {
         {differences.length ? <Pressable accessibilityRole="button" disabled={busy || !selectedFields.length} onPress={() => void confirmImport()} style={[styles.primaryButton, (busy || !selectedFields.length) && styles.primaryButtonDisabled]}><Text style={styles.primaryButtonText}>{busy ? '正在保存…' : `保存选中的 ${selectedFields.length} 项`}</Text></Pressable> : null}
       </>}
     </ScrollView>
-    <View pointerEvents="none" style={styles.cryptoWorker}><ProfileCollectionCrypto command={cryptoCommand} dom={{ style: styles.cryptoDom }} onResult={handleCryptoResult} /></View>
+    {Platform.OS === 'ios' && isNativeProfileCollectionCryptoAvailable ? null : <View pointerEvents="none" style={styles.cryptoWorker}><ProfileCollectionCrypto command={cryptoCommand} dom={{ style: styles.cryptoDom }} onResult={handleCryptoResult} /></View>}
   </SafeAreaView>;
 }
 
@@ -188,6 +197,15 @@ function sameBirthday(existing: Birthday | null, answer: NonNullable<ProfileColl
 
 function sameStringSet(left: string[], right: string[]): boolean { return left.length === right.length && [...left].sort().every((item, index) => item === [...right].sort()[index]); }
 function formatTags(ids: string[], definitions: Array<{ id: string; name: string }>): string { return ids.map((id) => definitions.find((item) => item.id === id)?.name).filter(Boolean).join('、') || '未记录'; }
+function formatTagNames(ids: string[], definitions: Array<{ id: string; name: string }>): string[] { return ids.map((id) => definitions.find((item) => item.id === id)?.name).filter((name): name is string => Boolean(name)); }
+function sameTagSelection(ids: string[], newNames: string[], currentIds: string[], definitions: Array<{ id: string; name: string }>): boolean {
+  const currentNames = formatTagNames(currentIds, definitions).map((name) => name.toLocaleLowerCase());
+  const responseNames = responseTagNames(ids, newNames, definitions).map((name) => name.toLocaleLowerCase());
+  return sameStringSet(responseNames, currentNames);
+}
+function responseTagNames(ids: string[], newNames: string[], definitions: Array<{ id: string; name: string }>): string[] {
+  return [...new Map([...formatTagNames(ids, definitions), ...newNames].map((name) => [name.toLocaleLowerCase(), name])).values()];
+}
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },

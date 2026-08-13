@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { randomUUID } from 'expo-crypto';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import type { ProfileCollectionField, ProfileCollectionRequest } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import ProfileCollectionCrypto from '../../src/components/profile-collection-crypto.dom';
@@ -12,13 +12,14 @@ import { useAppState } from '../../src/state/app-state';
 import { encodeProfileCollectionInvitation, PROFILE_COLLECTION_INVITATION_DAYS, profileCollectionInvitationUrl } from '../../src/domain/profile-collection';
 import type { ProfileCollectionInvitationV1, ProfileCollectionTagOption } from '../../src/domain/profile-collection';
 import { createThemedStyles } from '../../src/theme/app-theme';
+import { executeProfileCollectionCrypto, isNativeProfileCollectionCryptoAvailable } from '../../src/data/profile-collection-crypto';
 
 const FIELD_OPTIONS: Array<{ id: ProfileCollectionField; label: string; hint: string }> = [
   { id: 'name', label: '姓名', hint: '对方平时希望被怎样称呼' },
   { id: 'gender', label: '性别', hint: '由对方自己选择' },
   { id: 'birthday', label: '生日', hint: '公历或农历都可以' },
   { id: 'mbti', label: 'MBTI', hint: '由对方选择自己的类型' },
-  { id: 'customTags', label: '人物标签', hint: '请对方从你已有的选项中选择' },
+  { id: 'customTags', label: '人物标签', hint: '由对方选择已有标签或创建新标签' },
 ];
 
 export default function ProfileCollectionInviteScreen() {
@@ -26,10 +27,11 @@ export default function ProfileCollectionInviteScreen() {
   const { personId } = useLocalSearchParams<{ personId?: string }>();
   const { createProfileCollectionRequest, deleteProfileCollectionRequest, people, tagDefinitions, tagGroups } = useAppState();
   const person = people.find((item) => item.id === personId);
-  const availableFields = useMemo(() => FIELD_OPTIONS.filter((option) => option.id !== 'customTags' || tagDefinitions.length > 0), [tagDefinitions.length]);
+  const availableFields = useMemo(() => FIELD_OPTIONS, []);
   const [selectedFields, setSelectedFields] = useState<ProfileCollectionField[]>(() => availableFields.map((option) => option.id));
   const [busy, setBusy] = useState(false);
   const [cryptoCommand, setCryptoCommand] = useState<ProfileCollectionCryptoCommand | null>(null);
+  const activeCryptoIdRef = useRef<number | null>(null);
 
   const toggleField = (field: ProfileCollectionField) => setSelectedFields((current) => current.includes(field) ? current.filter((item) => item !== field) : [...current, field]);
 
@@ -40,11 +42,15 @@ export default function ProfileCollectionInviteScreen() {
       return;
     }
     setBusy(true);
-    setCryptoCommand({ id: Date.now(), type: 'generate-key-pair' });
+    const command = { id: Date.now(), type: 'generate-key-pair' } as const;
+    activeCryptoIdRef.current = command.id;
+    if (Platform.OS === 'ios' && isNativeProfileCollectionCryptoAvailable) void executeProfileCollectionCrypto(command).then(handleCryptoResult);
+    else setCryptoCommand(command);
   };
 
   const handleCryptoResult = useCallback(async (result: ProfileCollectionCryptoResult) => {
-    if (!busy) return;
+    if (activeCryptoIdRef.current !== result.id) return;
+    activeCryptoIdRef.current = null;
     setCryptoCommand(null);
     if (!result.ok) {
       setBusy(false);
@@ -81,7 +87,7 @@ export default function ProfileCollectionInviteScreen() {
       const link = profileCollectionInvitationUrl(encodeProfileCollectionInvitation(invitation));
       await createProfileCollectionRequest(request, result.privateKeyJwk);
       stored = true;
-      const shareResult = await Share.share({ message: `有几件关于你的事，我不想替你猜，想听你自己说。愿意回答多少都可以，答案不会上传。填好后，把生成的回信发给我就好。\n\n${link}`, url: link, title: '有些事，想听你自己说' });
+      const shareResult = await Share.share({ message: `我最近在「仍在」记录关于你的点滴，如果你愿意，很希望能邀请你一同参与。点击链接就能填写，完成后把回信链接分享给我就好。\n\n${link}`, url: link, title: '有些事，想听你自己说' });
       if (shareResult.action === Share.dismissedAction) {
         await deleteProfileCollectionRequest(requestId);
         stored = false;
@@ -94,7 +100,7 @@ export default function ProfileCollectionInviteScreen() {
     } finally {
       setBusy(false);
     }
-  }, [busy, createProfileCollectionRequest, deleteProfileCollectionRequest, person, router, selectedFields, tagDefinitions, tagGroups]);
+  }, [createProfileCollectionRequest, deleteProfileCollectionRequest, person, router, selectedFields, tagDefinitions, tagGroups]);
 
   if (!person) return <SafeAreaView style={styles.safeArea}><Text style={styles.missing}>这个人物不存在或已被删除。</Text></SafeAreaView>;
 
@@ -107,7 +113,7 @@ export default function ProfileCollectionInviteScreen() {
       <View style={styles.intro}>
         <Text style={styles.introEyebrow}>请本人补充</Text>
         <Text style={styles.introTitle}>哪些信息，想听对方亲自回答？</Text>
-        <Text style={styles.introText}>对方愿意填多少都可以。邀请 7 天内有效，答案只在浏览器中加密，并由这台设备解开。</Text>
+        <Text style={styles.introText}>对方愿意填多少都可以。邀请 7 天内有效，答案只在浏览器中加密，并仅能由这台设备解开。</Text>
       </View>
       <View style={styles.fieldList}>
         {availableFields.map((option, index) => {
@@ -118,10 +124,9 @@ export default function ProfileCollectionInviteScreen() {
           </Pressable>;
         })}
       </View>
-      <View style={styles.notice}><Text style={styles.noticeTitle}>不会透露你已经写下的内容</Text><Text style={styles.noticeText}>邀请里没有姓名、头像、关系、印象，也不会带出任何现有记录。</Text></View>
       <Pressable accessibilityRole="button" disabled={busy || !selectedFields.length} onPress={createInvitation} style={[styles.primaryButton, (busy || !selectedFields.length) && styles.primaryButtonDisabled]}><Text style={styles.primaryButtonText}>{busy ? '正在生成安全邀请…' : '生成邀请并分享'}</Text></Pressable>
     </ScrollView>
-    <View pointerEvents="none" style={styles.cryptoWorker}><ProfileCollectionCrypto command={cryptoCommand} dom={{ style: styles.cryptoDom }} onResult={handleCryptoResult} /></View>
+    {Platform.OS === 'ios' && isNativeProfileCollectionCryptoAvailable ? null : <View pointerEvents="none" style={styles.cryptoWorker}><ProfileCollectionCrypto command={cryptoCommand} dom={{ style: styles.cryptoDom }} onResult={handleCryptoResult} /></View>}
   </SafeAreaView>;
 }
 
@@ -143,9 +148,6 @@ const styles = createThemedStyles(() => ({
   fieldCopy: { flex: 1, marginLeft: spacing.md },
   fieldTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' },
   fieldHint: { marginTop: 5, color: colors.inkFaint, fontSize: 10 },
-  notice: { marginTop: spacing.lg, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.sun, borderRadius: radius.md, backgroundColor: colors.sunLight },
-  noticeTitle: { color: colors.ink, fontSize: 11, fontWeight: '700' },
-  noticeText: { marginTop: 6, color: colors.inkSoft, fontSize: 10, lineHeight: 17 },
   primaryButton: { minHeight: 54, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   primaryButtonDisabled: { opacity: 0.42 },
   primaryButtonText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },

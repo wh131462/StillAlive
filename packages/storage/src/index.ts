@@ -48,5 +48,5 @@ export interface StillAliveRepository {
   consumeProfileCollectionRequest(requestId: string, consumedAt: string): Promise<void>;
   deleteProfileCollectionRequest(requestId: string): Promise<void>;
   deleteExpiredProfileCollectionRequests(now: string): Promise<string[]>;
-  applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], consumedAt: string): Promise<void>;
+  applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTags: TagDefinition[], consumedAt: string): Promise<void>;
 }

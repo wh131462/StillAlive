@@ -946,7 +946,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     return rows.map((row) => row.id);
   }
 
-  async applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], consumedAt: string): Promise<void> {
+  async applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTags: TagDefinition[], consumedAt: string): Promise<void> {
     await this.withTransaction(async (transaction) => {
       const consumed = await transaction.runAsync(
         "UPDATE profile_collection_requests SET status = 'consumed', consumed_at = ? WHERE id = ? AND person_id = ? AND status = 'pending' AND expires_at > ?",
@@ -982,6 +982,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         person.id,
       );
       if (updated.changes !== 1) throw new Error('对应的人物已经被删除');
+      for (const tag of newTags) await transaction.runAsync('INSERT INTO tag_definitions (id, name, normalized_name, group_id, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)', tag.id, tag.name, tag.normalizedName, tag.createdAt, tag.updatedAt);
       await transaction.runAsync('DELETE FROM person_tag_assignments WHERE person_id = ?', person.id);
       if (mbti) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'mbti', ?)", person.id, mbti);
       for (const tagId of new Set(customTagIds)) await transaction.runAsync("INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, 'custom', ?)", person.id, tagId);

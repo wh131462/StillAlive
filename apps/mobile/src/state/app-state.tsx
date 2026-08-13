@@ -111,7 +111,7 @@ interface AppStateValue {
   createProfileCollectionRequest(request: ProfileCollectionRequest, privateKeyJwk: string): Promise<void>;
   getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null>;
   deleteProfileCollectionRequest(requestId: string): Promise<void>;
-  applyProfileCollectionImport(requestId: string, person: Person, mbti: string | null, customTagIds: string[]): Promise<void>;
+  applyProfileCollectionImport(requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTagNames: string[]): Promise<void>;
 }
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -420,17 +420,30 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await deleteProfileCollectionPrivateKey(requestId).catch(() => undefined);
   }, [repository]);
 
-  const applyProfileCollectionImport = useCallback(async (requestId: string, person: Person, mbti: string | null, customTagIds: string[]) => {
+  const applyProfileCollectionImport = useCallback(async (requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTagNames: string[]) => {
     if (!person.name.trim()) throw new Error('人物名字不能为空');
     if (person.birthday) validateBirthday(person.birthday);
     if (mbti && !MBTI_TYPES.includes(mbti as typeof MBTI_TYPES[number])) throw new Error('MBTI 类型无效');
     const knownTagIds = new Set(tagDefinitions.map((tag) => tag.id));
     if (customTagIds.some((tagId) => !knownTagIds.has(tagId))) throw new Error('人物标签已经发生变化，请重新创建邀请');
+    const normalizedNames = [...new Set(newTagNames.map(normalizeTagName))];
+    const existingTags = new Map(tagDefinitions.filter((tag) => !tag.groupId).map((tag) => [tag.normalizedName, tag]));
+    const now = new Date().toISOString();
+    const newTags = normalizedNames.filter((name) => !existingTags.has(name)).map((normalizedName, index) => ({
+      id: `tag_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 10)}`,
+      name: newTagNames.find((name) => normalizeTagName(name) === normalizedName)!.trim(),
+      normalizedName,
+      groupId: null,
+      createdAt: now,
+      updatedAt: now,
+    } satisfies TagDefinition));
+    const importedTagIds = normalizedNames.map((name) => existingTags.get(name)?.id ?? newTags.find((tag) => tag.normalizedName === name)!.id);
     const nextPerson = { ...person, name: person.name.trim(), updatedAt: new Date().toISOString() };
-    await repository.applyProfileCollectionUpdate(requestId, nextPerson, mbti, customTagIds, new Date().toISOString());
+    await repository.applyProfileCollectionUpdate(requestId, nextPerson, mbti, [...new Set([...customTagIds, ...importedTagIds])], newTags, new Date().toISOString());
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);
     setPersonTagsState(await repository.listPersonTagAssignments());
+    setTagDefinitions(await repository.listTagDefinitions());
     await deleteProfileCollectionPrivateKey(requestId).catch(() => undefined);
     void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
   }, [repository, syncBirthdayNotifications, tagDefinitions]);

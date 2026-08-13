@@ -76,17 +76,20 @@ document.querySelector('[data-copy]').addEventListener('click', async () => {
 function renderForm(request) {
   const sections = [];
   if (request.f.includes('name')) sections.push(section('姓名', '填写你平时最常使用的名字。', '<input class="text-input" name="name" maxlength="40" autocomplete="name" placeholder="姓名" />'));
-  if (request.f.includes('gender')) sections.push(section('性别', '选择你认同的选项，也可以留空。', optionGrid('gender', [['female', '女'], ['male', '男'], ['other', '其他']])));
-  if (request.f.includes('birthday')) sections.push(section('生日', '年份、月份和日期需要一起填写。', '<div class="birthday-grid"><select class="select-input" name="calendar"><option value="solar">公历</option><option value="lunar">农历</option></select><input class="number-input" name="year" type="number" inputmode="numeric" min="1900" max="2200" placeholder="年" /><input class="number-input" name="month" type="number" inputmode="numeric" min="1" max="12" placeholder="月" /><input class="number-input" name="day" type="number" inputmode="numeric" min="1" max="31" placeholder="日" /></div><label class="leap-row" data-leap-row hidden><input name="isLeapMonth" type="checkbox" />这是农历闰月</label>'));
-  if (request.f.includes('mbti')) sections.push(section('MBTI', '从标准类型中选择，也可以留空。', `<select class="select-input" name="mbti"><option value="">暂不填写</option>${MBTI_TYPES.map((value) => `<option value="${value}">${value}</option>`).join('')}</select>`));
-  if (request.f.includes('customTags') && request.tags.length) sections.push(section('关于你的描述', '这些选项由邀请你的人准备，请选择你觉得合适的。', renderTags(request.tags)));
+  if (request.f.includes('gender')) sections.push(section('性别', '选择你认同的选项，也可以留空。', optionGrid('gender', [['female', '女'], ['male', '男'], ['other', '其他'], ['', '暂不填写']], 'gender-grid')));
+  if (request.f.includes('birthday')) sections.push(section('生日', '年份、月份和日期需要一起填写。', '<div class="calendar-toggle option-grid"><label class="option-chip"><input type="radio" name="calendar" value="solar" checked /><span>公历</span></label><label class="option-chip"><input type="radio" name="calendar" value="lunar" /><span>农历</span></label></div><div class="birthday-grid"><input class="number-input" name="year" type="number" inputmode="numeric" min="1900" max="2200" placeholder="年" /><input class="number-input" name="month" type="number" inputmode="numeric" min="1" max="12" placeholder="月" /><input class="number-input" name="day" type="number" inputmode="numeric" min="1" max="31" placeholder="日" /></div><label class="leap-row" data-leap-row hidden><input name="isLeapMonth" type="checkbox" />这是农历闰月</label>'));
+  if (request.f.includes('mbti')) sections.push(section('MBTI', '从标准类型中选择，也可以留空。', optionGrid('mbti', [['', '暂不填写'], ...MBTI_TYPES.map((value) => [value, value])], 'mbti-grid')));
+  if (request.f.includes('customTags')) sections.push(section('关于你的描述', '选择合适的已有标签，也可以补充新的描述。', `${renderTags(request.tags)}<div class="tag-create"><label for="new-custom-tag-input">添加自定义标签</label><div class="tag-create-row"><input class="text-input" id="new-custom-tag-input" data-new-custom-tag-input maxlength="24" placeholder="例如：喜欢远足" /><button class="tag-add-button" type="button" data-add-custom-tag>添加</button></div><div class="custom-tag-list" data-new-custom-tags></div><small>最多 20 个，每个不超过 24 个字</small></div>`));
   fieldsRoot.innerHTML = sections.join('');
-  const calendar = form.elements.calendar;
-  if (calendar) calendar.addEventListener('change', () => { document.querySelector('[data-leap-row]').hidden = calendar.value !== 'lunar'; });
+  form.querySelectorAll('input[name="calendar"]').forEach((input) => input.addEventListener('change', () => {
+    const leapRow = form.querySelector('[data-leap-row]');
+    if (leapRow) leapRow.hidden = input.value !== 'lunar';
+  }));
+  setupCustomTagInput();
 }
 
 function section(label, hint, content) { return `<section class="form-section"><label class="form-label">${escapeHtml(label)}</label><p class="form-hint">${escapeHtml(hint)}</p>${content}</section>`; }
-function optionGrid(name, options) { return `<div class="option-grid">${options.map(([value, label]) => `<label class="option-chip"><input type="radio" name="${name}" value="${value}" /><span>${label}</span></label>`).join('')}</div>`; }
+function optionGrid(name, options, className = '') { return `<div class="option-grid ${className}">${options.map(([value, label]) => `<label class="option-chip"><input type="radio" name="${name}" value="${escapeHtml(value)}" /><span>${escapeHtml(label)}</span></label>`).join('')}</div>`; }
 
 function renderTags(tags) {
   const groups = new Map();
@@ -95,11 +98,45 @@ function renderTags(tags) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(tag);
   }
+  if (!groups.size) return '<p class="tag-empty">邀请人还没有准备已有标签，你可以直接添加自己的描述。</p>';
   return [...groups.entries()].map(([group, options]) => {
     const type = group ? 'radio' : 'checkbox';
     const name = group ? `tag-${encodeURIComponent(group)}` : 'customTags';
     return `<div class="tag-group"><span class="tag-group-title">${escapeHtml(group || '可多选')}</span><div class="tag-options">${options.map((option) => `<label class="tag-option"><input type="${type}" name="${name}" value="${option.id}" data-custom-tag /><span>${escapeHtml(option.label)}</span></label>`).join('')}</div></div>`;
   }).join('');
+}
+
+function setupCustomTagInput() {
+  const input = form.querySelector('[data-new-custom-tag-input]');
+  const addButton = form.querySelector('[data-add-custom-tag]');
+  const list = form.querySelector('[data-new-custom-tags]');
+  if (!input || !addButton || !list) return;
+  const add = () => {
+    const value = input.value.trim();
+    if (!value) return;
+    if (value.length > 24) return showFieldError('每个新标签不超过 24 个字');
+    const inputs = [...list.querySelectorAll('input')];
+    if (inputs.length >= 20) return showFieldError('新标签最多添加 20 个');
+    const existing = inputs.map((item) => item.value.toLocaleLowerCase());
+    if (existing.includes(value.toLocaleLowerCase())) {
+      input.value = '';
+      return;
+    }
+    clearFieldError();
+    const chip = document.createElement('span');
+    chip.className = 'custom-tag-chip';
+    chip.innerHTML = `<input type="hidden" name="newCustomTags" value="${escapeHtml(value)}" /><span>${escapeHtml(value)}</span><button type="button" aria-label="删除${escapeHtml(value)}" data-remove-custom-tag>&times;</button>`;
+    list.append(chip);
+    input.value = '';
+    chip.querySelector('[data-remove-custom-tag]').addEventListener('click', () => chip.remove());
+  };
+  addButton.addEventListener('click', add);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ',') {
+      event.preventDefault();
+      add();
+    }
+  });
 }
 
 function collectAnswers(request) {
@@ -130,6 +167,12 @@ function collectAnswers(request) {
   if (request.f.includes('customTags')) {
     const selected = [...form.querySelectorAll('[data-custom-tag]:checked')].map((element) => element.value);
     if (selected.length) answers.customTags = selected;
+    const names = [...form.querySelectorAll('input[name="newCustomTags"]')].map((item) => item.value.trim()).filter(Boolean);
+    const pendingName = String(form.querySelector('[data-new-custom-tag-input]')?.value || '').trim();
+    if (pendingName) names.push(pendingName);
+    if (names.length > 20 || names.some((item) => item.length > 24)) throw new Error('新标签最多 20 个，每个不超过 24 个字');
+    const uniqueNames = [...new Map(names.map((item) => [item.toLocaleLowerCase(), item])).values()];
+    if (uniqueNames.length) answers.newCustomTags = uniqueNames;
   }
   return answers;
 }
