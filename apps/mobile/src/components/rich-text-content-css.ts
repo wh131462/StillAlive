@@ -2,7 +2,7 @@ import type { EditorTheme } from './rich-text-editor.types';
 
 export function richTextSurfaceCss(theme: EditorTheme): string {
   return `
-    .rich-text-surface { width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 19px; line-height: 1.85; }
+    .rich-text-surface { --rich-text-line-height: 1.85em; width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 19px; line-height: 1.85; }
     ${richTextContentCss(theme)}
     img { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
   `;
@@ -23,9 +23,11 @@ export function richTextContentCss(theme: EditorTheme): string {
     ul { list-style-type: disc; } ol { list-style-type: decimal; }
     li { margin: 0.34em 0; padding-left: 0.2em; }
     .task-list { padding-left: 0.25em; list-style: none; }
-    .task-list-item { position: relative; min-height: 1.85em; padding-left: 1.9em; list-style: none; }
+    .task-list-item { position: relative; min-height: var(--rich-text-line-height); padding-left: 1.9em; list-style: none; }
     .task-list-item::marker { content: ""; }
-    .task-list-item > input[type="checkbox"] { position: absolute; top: 0.45em; left: 0.2em; width: 18px; height: 18px; margin: 0; accent-color: ${theme.life}; }
+    .task-list-item > input[type="checkbox"] { position: absolute; top: calc((var(--rich-text-line-height) - 18px) / 2); left: 0.2em; width: 18px; height: 18px; margin: 0; appearance: none; -webkit-appearance: none; border: 1.5px solid ${theme.inkFaint}; border-radius: 4px; background: transparent; font-size: inherit; line-height: inherit; opacity: 1; }
+    .task-list-item > input[type="checkbox"]:checked { border-color: ${theme.life}; background: ${theme.life}; }
+    .task-list-item > input[type="checkbox"]:checked::after { position: absolute; top: 2px; left: 5px; width: 4px; height: 8px; border: solid ${theme.onLife}; border-width: 0 2px 2px 0; content: ""; transform: rotate(45deg); }
     code { padding: 0.15em 0.36em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82em; }
     pre { overflow-x: auto; margin: 1.2em 0; padding: 15px 16px; border-radius: 14px; background: ${theme.codeBackground}; color: ${theme.codeForeground}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78em; line-height: 1.65; white-space: pre-wrap; }
     pre code { padding: 0; background: transparent; color: inherit; font-size: inherit; }

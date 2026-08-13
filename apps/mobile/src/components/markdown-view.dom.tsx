@@ -12,11 +12,12 @@ interface MarkdownViewProps {
   media: EditorMediaSource[];
   onOverflowChange?(overflowed: boolean): void;
   onReady?(): void;
+  preview?: boolean;
   theme: EditorTheme;
   dom?: DOMProps;
 }
 
-export default function MarkdownView({ markdown, maxHeight, media, onOverflowChange, onReady, theme }: MarkdownViewProps) {
+export default function MarkdownView({ markdown, maxHeight, media, onOverflowChange, onReady, preview = false, theme }: MarkdownViewProps) {
   const html = renderRichTextMarkdown(markdown);
   const contentRef = useRef<HTMLElement | null>(null);
   const overflowRef = useRef<boolean | null>(null);
@@ -43,7 +44,7 @@ export default function MarkdownView({ markdown, maxHeight, media, onOverflowCha
 
   return (
     <>
-      <style>{viewCss(theme, maxHeight)}</style>
+      <style>{viewCss(theme, maxHeight, preview)}</style>
       <article
         className="markdown rich-text-surface"
         ref={(element) => {
@@ -63,12 +64,13 @@ export default function MarkdownView({ markdown, maxHeight, media, onOverflowCha
   );
 }
 
-const viewCss = (theme: EditorTheme, maxHeight?: number) => `
+const viewCss = (theme: EditorTheme, maxHeight?: number, preview = false) => `
   :root { color-scheme: ${theme.colorScheme}; font-family: ui-serif, Georgia, "Noto Serif SC", serif; }
   * { box-sizing: border-box; }
   html, body, #root { width: 100%; margin: 0; background: transparent; }
   body { overflow: hidden; color: ${theme.ink}; -webkit-font-smoothing: antialiased; }
   ${richTextSurfaceCss(theme)}
+  ${preview ? '.rich-text-surface { --rich-text-line-height: 1.6em; font-size: 15px; line-height: 1.6; }' : ''}
   .markdown { ${maxHeight === undefined ? '' : `max-height: ${Math.max(0, maxHeight)}px; overflow: hidden;`} }
   .markdown .task-list-item > input[type="checkbox"] { opacity: 1; pointer-events: none; }
   .markdown img { margin: 1.2em 0; border-radius: 4px; }

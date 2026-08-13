@@ -10,6 +10,7 @@ import { useAppState } from '../../src/state/app-state';
 import { AppKeyboardAvoidingView } from '../../src/components/app-keyboard-avoiding-view';
 import { DatePickerField } from '../../src/components/date-time-picker';
 import type { DateParts } from '../../src/components/date-time-picker';
+import MarkdownView from '../../src/components/markdown-view.dom';
 import { StyledName } from '../../src/components/styled-name';
 import { previewRouteParams, toSelectedPreviewFile } from '../../src/components/file-preview.types';
 import { TabPageHeader } from '../../src/components/tab-page-header';
@@ -17,7 +18,7 @@ import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } f
 import { birthdayFromDateString, lunarLeapMonth, lunarMonthDayCount, nextBirthday } from '../../src/domain/person-profile';
 import { resolveDeviceLocation } from '../../src/data/device-location';
 import { ensureAppPermission } from '../../src/data/app-permissions';
-import { createThemedStyles } from '../../src/theme/app-theme';
+import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 type TimelineItem =
   | { kind: 'check-in'; checkIn: CheckIn }
@@ -34,7 +35,7 @@ interface BirthdayPrompt {
 }
 
 const AUDIO_WAVE_HEIGHTS = [7, 13, 19, 11, 23, 15, 9, 20, 12, 17, 8, 14];
-const POST_PREVIEW_MAX_LENGTH = 240;
+const POST_PREVIEW_MAX_HEIGHT = 168;
 
 export default function SpaceScreen() {
   const router = useRouter();
@@ -310,12 +311,12 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
 }
 
 function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, onPress, post, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; signature: string }) {
+  const [bodyOverflowed, setBodyOverflowed] = useState(false);
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
   const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
-  const displayText = markdownToPlainText(displayMarkdown);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
-  const hasHiddenContent = displayText.length > POST_PREVIEW_MAX_LENGTH || images.length > 9 || audioEmbeds.length > 2;
+  const hasHiddenContent = bodyOverflowed || images.length > 9 || audioEmbeds.length > 2;
 
   return (
     <Pressable accessibilityLabel={`打开 ${post.dayKey} ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.postCard, pressed && styles.feedPressed]}>
@@ -325,7 +326,19 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
           <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
           {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
-        {displayText ? <Text numberOfLines={7} style={styles.postExcerpt}>{displayText}</Text> : null}
+        {displayMarkdown.trim() ? (
+          <View pointerEvents="none" style={styles.postMarkdownFrame}>
+            <MarkdownView
+              dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }}
+              markdown={displayMarkdown}
+              maxHeight={POST_PREVIEW_MAX_HEIGHT}
+              media={[]}
+              onOverflowChange={setBodyOverflowed}
+              preview
+              theme={editorTheme()}
+            />
+          </View>
+        ) : null}
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
         {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
         {hasHiddenContent ? <Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>更多</Text></Pressable> : null}
@@ -468,7 +481,7 @@ function markdownToPlainText(markdown: string): string {
     .replace(/^```.*$/gm, '')
     .replace(/^#{1,6}\s*/gm, '')
     .replace(/^\s*>\s?/gm, '')
-    .replace(/^\s*[-*+]\s+\[[ xX]\]\s*/gm, '')
+    .replace(/^\s*[-*+]\s+\[([ xX])\]\s*/gm, (_match, checked: string) => checked.toLocaleLowerCase() === 'x' ? '☑ ' : '☐ ')
     .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
     .replace(/~~|\*\*|__|[*_`]/g, '')
     .replace(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, '')
@@ -581,7 +594,8 @@ const styles = createThemedStyles(() => ({
   postHeader: { minHeight: 24, alignItems: 'flex-start', justifyContent: 'center' },
   postAuthor: { color: colors.life, fontFamily: typography.body, fontSize: 14, fontWeight: '700' },
   postSignature: { maxWidth: '100%', marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
-  postExcerpt: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 24 },
+  postMarkdownFrame: { width: '100%', marginTop: spacing.sm },
+  postMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
   postSingleImage: { width: '92%', marginTop: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   postImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   postImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.lifeLight },

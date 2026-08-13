@@ -571,6 +571,7 @@ export default function EditorScreen() {
               <ToolButton active={activeFormats.includes('strikethrough')} androidIcon="format_strikethrough" icon="strikethrough" label="删除线" onPress={() => sendCommand('strikethrough')} />
               <ToolButton active={activeFormats.includes('inlineCode')} androidIcon="code" icon="chevron.left.forwardslash.chevron.right" label="行内代码" onPress={() => sendCommand('inlineCode')} />
               <ToolButton active={activeFormats.includes('quote')} androidIcon="format_quote" icon="text.quote" label="引用" onPress={() => sendCommand('quote')} />
+              <ToolButton active={activeFormats.includes('bulletList')} androidIcon="format_list_bulleted" icon="list.bullet" label="无序列表" onPress={() => sendCommand('bulletList')} />
               <ToolButton active={activeFormats.includes('orderedList')} androidIcon="format_list_numbered" icon="list.number" label="有序列表" onPress={() => sendCommand('orderedList')} />
               <ToolButton active={activeFormats.includes('taskList')} androidIcon="checklist" icon="checklist" label={activeFormats.includes('taskList') ? '取消工作事项' : '工作事项'} onPress={() => sendCommand('taskList')} />
               <ToolButton active={activeFormats.includes('codeBlock')} androidIcon="data_object" icon="curlybraces" label="代码块" onPress={() => sendCommand('codeBlock')} />
@@ -583,7 +584,6 @@ export default function EditorScreen() {
 
           <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.toolbar} contentContainerStyle={styles.toolbarContent}>
             <ToolButton active={activeFormats.includes('bold')} androidIcon="format_bold" icon="bold" label="粗体" onPress={() => sendCommand('bold')} />
-            <ToolButton active={activeFormats.includes('bulletList')} androidIcon="format_list_bulleted" icon="list.bullet" label="无序列表" onPress={() => sendCommand('bulletList')} />
             <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={openPersonPicker} />
             <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={openImageSourcePicker} />
             <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />

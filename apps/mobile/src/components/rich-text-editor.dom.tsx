@@ -517,7 +517,7 @@ function runCommand(editor: HTMLDivElement, command: EditorCommand) {
     case 'inlineCode': toggleInlineCode(); break;
     case 'quote': toggleQuote(); break;
     case 'bulletList': document.execCommand('insertUnorderedList'); break;
-    case 'orderedList': document.execCommand('insertOrderedList'); break;
+    case 'orderedList': toggleOrderedList(editor); break;
     case 'taskList': toggleTaskList(); break;
     case 'codeBlock': {
       const selection = window.getSelection();
@@ -595,6 +595,39 @@ function toggleQuote() {
   if (lastChild) placeCursorAtEnd(lastChild);
 }
 
+function toggleOrderedList(editor: HTMLDivElement) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  const initialAnchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+  const orderedItem = initialAnchor?.closest('ol > li') as HTMLLIElement | null;
+  if (orderedItem && !orderedItem.textContent?.trim()) {
+    convertListItemToParagraph(orderedItem);
+    return;
+  }
+  document.execCommand('insertOrderedList');
+  const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+  if (anchor?.closest('ol')) return;
+  const block = anchor?.closest('p, div') as HTMLElement | null;
+  if (block && block !== editor && !block.textContent?.trim()) {
+    const list = document.createElement('ol');
+    const item = document.createElement('li');
+    item.append(document.createElement('br'));
+    list.append(item);
+    block.replaceWith(list);
+    placeCursorAtStart(item);
+    return;
+  }
+  if (!editor.textContent?.trim()) {
+    const list = document.createElement('ol');
+    const item = document.createElement('li');
+    item.append(document.createElement('br'));
+    list.append(item);
+    editor.replaceChildren(list);
+    placeCursorAtStart(item);
+    return;
+  }
+}
+
 function insertHtml(html: string) {
   document.execCommand('insertHTML', false, html);
 }
@@ -607,6 +640,11 @@ function toggleTaskList() {
   const taskItem = anchor?.closest('li.task-list-item') as HTMLLIElement | null;
   if (taskItem) {
     convertTaskItemToParagraph(taskItem);
+    return;
+  }
+  const listItem = anchor?.closest('li') as HTMLLIElement | null;
+  if (listItem) {
+    convertListToTask(listItem);
     return;
   }
 
@@ -624,6 +662,43 @@ function toggleTaskList() {
   fragment.append(list, paragraph);
   range.insertNode(fragment);
   placeCursorInTaskItem(item, 'end');
+}
+
+function convertListToTask(listItem: HTMLLIElement) {
+  const list = listItem.closest('ul, ol');
+  if (!list) return;
+  const taskList = document.createElement('ul');
+  taskList.className = 'task-list';
+  Array.from(list.children).forEach((item) => {
+    const taskItem = item as HTMLLIElement;
+    taskItem.classList.add('task-list-item');
+    taskItem.prepend(createTaskCheckbox());
+    ensureEmptyTaskItemAnchor(taskItem);
+    taskList.append(taskItem);
+  });
+  list.replaceWith(taskList);
+  placeCursorInTaskItem(listItem, 'end');
+}
+
+function convertListItemToParagraph(listItem: HTMLLIElement) {
+  const list = listItem.closest('ul, ol');
+  if (!list) return;
+  const paragraph = document.createElement('p');
+  paragraph.append(...listItem.childNodes);
+  if (!paragraph.hasChildNodes()) paragraph.append(document.createElement('br'));
+
+  const items = Array.from(list.children);
+  const itemIndex = items.indexOf(listItem);
+  const nextItems = items.slice(itemIndex + 1);
+  const trailingList = nextItems.length ? list.cloneNode(false) as HTMLOListElement | HTMLUListElement : null;
+  trailingList?.append(...nextItems);
+  if (itemIndex > 0) {
+    listItem.remove();
+    list.after(paragraph, ...(trailingList ? [trailingList] : []));
+  } else {
+    list.replaceWith(paragraph, ...(trailingList ? [trailingList] : []));
+  }
+  placeCursorAtStart(paragraph);
 }
 
 function convertTaskItemToParagraph(taskItem: HTMLLIElement) {

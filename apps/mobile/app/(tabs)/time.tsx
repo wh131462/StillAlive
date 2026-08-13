@@ -248,7 +248,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                   <View style={styles.selectedEntryContent}>
                     <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} · {post.locationName ? `${post.locationName} · ` : ''}{formatTime(post.createdAt)}{attachmentLabel ? ` · ${attachmentLabel}` : ''}</Text>
                     {displayMarkdown
-                      ? <View pointerEvents="none" style={styles.selectedPostMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.selectedPostMarkdown, matchContents: true, scrollEnabled: false, style: styles.selectedPostMarkdown }} markdown={displayMarkdown} maxHeight={CALENDAR_POST_PREVIEW_MAX_HEIGHT} media={[]} theme={editorTheme()} /></View>
+                      ? <View pointerEvents="none" style={styles.selectedPostMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.selectedPostMarkdown, matchContents: true, scrollEnabled: false, style: styles.selectedPostMarkdown }} markdown={displayMarkdown} maxHeight={CALENDAR_POST_PREVIEW_MAX_HEIGHT} media={[]} preview theme={editorTheme()} /></View>
                       : <Text style={styles.selectedPostFallback}>{attachmentLabel || '记录了一些内容'}</Text>}
                   </View>
                   <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
