@@ -1,27 +1,43 @@
 diff --git a/src/DomWebView.tsx b/src/DomWebView.tsx
-index 3a07ac938325385dc7e314f0e6d557068bc6f622..35cad101f03f36e8cb4c7fda893f6530ef1ad99a 100644
+index 3a07ac938325385dc7e314f0e6d557068bc6f622..8551dca5c0f3f62c70b571f5ca24bc072bf2df56 100644
 --- a/src/DomWebView.tsx
 +++ b/src/DomWebView.tsx
-@@ -23,7 +23,21 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
+@@ -10,3 +10,24 @@
++function handleViewCommand(result: unknown): void {
++  if (!result || typeof (result as Promise<void>).catch !== 'function') {
++    return;
++  }
++  void (result as Promise<void>).catch((error: unknown) => {
++    const message =
++      error && typeof error === 'object' && 'message' in error
++        ? String(error.message)
++        : String(error);
++    if (
++      message.includes(
++        'Unable to find the class expo.modules.webview.DomWebView view with tag'
++      ) ||
++      message.includes("Unable to find the 'DomWebView' view with tag")
++    ) {
++      return;
++    }
++    console.error(error);
++  });
++}
++
+ type NativeWebViewProps = Omit<DomWebViewProps, 'containerStyle' | 'injectedJavaScriptObject'> & {
+   injectedJavaScriptObject: string;
+ };
+@@ -22,9 +43,10 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
+     React.useImperativeHandle(
        ref,
        () => ({
-         scrollTo: (params) => viewRef.current?.scrollTo(params),
+-        scrollTo: (params) => viewRef.current?.scrollTo(params),
 -        injectJavaScript: (script: string) => viewRef.current?.injectJavaScript(script),
-+        injectJavaScript: (script: string) => {
-+          const result = viewRef.current?.injectJavaScript(script) as unknown as
-+            | Promise<void>
-+            | undefined;
-+          void result?.catch((error: unknown) => {
-+            if (
-+              !(error instanceof Error) ||
-+              !error.message.includes(
-+                'Unable to find the class expo.modules.webview.DomWebView view with tag'
-+              )
-+            ) {
-+              throw error;
-+            }
-+          });
-+        },
-         reload: () => viewRef.current?.reload(),
+-        reload: () => viewRef.current?.reload(),
++        scrollTo: (params) => handleViewCommand(viewRef.current?.scrollTo(params)),
++        injectJavaScript: (script: string) =>
++          handleViewCommand(viewRef.current?.injectJavaScript(script)),
++        reload: () => handleViewCommand(viewRef.current?.reload()),
        }),
        []
+     );
