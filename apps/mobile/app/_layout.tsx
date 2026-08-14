@@ -1,9 +1,12 @@
+import 'react-native-gesture-handler';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
 import type { NotificationResponse } from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ReaderProvider } from '@epubjs-react-native/core';
 import { colors } from '@still-alive/tokens';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 import { migrateDatabase } from '../src/data/sqlite-repository';
@@ -12,6 +15,7 @@ import { applyColorTheme } from '../src/theme/app-theme';
 import { AutomaticUpdateChecker } from '../src/components/automatic-update-checker';
 import { LaunchScreen } from '../src/components/launch-screen';
 import { writePersistentLog } from '../src/data/persistent-log';
+import { MusicPlayerProvider } from '../src/state/music-player';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -42,11 +46,17 @@ export default function RootLayout() {
     return () => subscription.remove();
   }, [router]);
   return (
-    <SQLiteProvider databaseName="still-alive.db" onInit={migrateDatabase}>
-      <AppStateProvider>
-        <ThemedNavigator />
-      </AppStateProvider>
-    </SQLiteProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SQLiteProvider databaseName="still-alive.db" onInit={migrateDatabase}>
+        <AppStateProvider>
+          <ReaderProvider>
+            <MusicPlayerProvider>
+              <ThemedNavigator />
+            </MusicPlayerProvider>
+          </ReaderProvider>
+        </AppStateProvider>
+      </SQLiteProvider>
+    </GestureHandlerRootView>
   );
 }
 

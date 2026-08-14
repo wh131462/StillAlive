@@ -35,8 +35,8 @@ import { extractEmbeddedMediaIds } from '../src/domain/embedded-media';
 export default function EditorScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const { dayKey: requestedDayKey, personId, postId } = useLocalSearchParams<{ dayKey?: string; personId?: string; postId?: string }>();
-  const { createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, saveDraft, saveMedia, savePost, today, todayCheckIn, updatePost } = useAppState();
+  const { dayKey: requestedDayKey, personId, postId, sourceBookId, sourceExcerptId } = useLocalSearchParams<{ dayKey?: string; personId?: string; postId?: string; sourceBookId?: string; sourceExcerptId?: string }>();
+  const { bookExcerpts, books, createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, saveDraft, saveMedia, savePost, saveReadingNoteSource, today, todayCheckIn, updatePost } = useAppState();
   const initializedRef = useRef(false);
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
@@ -109,14 +109,17 @@ export default function EditorScreen() {
     }
     initializedRef.current = true;
     void loadDraft(targetDay).then((draft) => {
-      initialBodyRef.current = draft?.bodyMarkdown ?? '';
-      setBody(draft?.bodyMarkdown ?? '');
+      const sourceBook = sourceBookId ? books.find((book) => book.id === sourceBookId) : null;
+      const sourceExcerpt = sourceExcerptId ? bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId) : null;
+      const quote = sourceExcerpt && sourceBook ? `> 《${sourceBook.title}》\n> ${sourceExcerpt.text.replaceAll('\n', '\n> ')}${sourceExcerpt.location ? `\n> —— ${sourceExcerpt.location}` : ''}\n\n` : sourceBook ? `> 《${sourceBook.title}》\n\n` : '';
+      initialBodyRef.current = draft?.bodyMarkdown ?? quote;
+      setBody(draft?.bodyMarkdown ?? quote);
       setRelationsLoading(false);
       setInitialized(true);
     }).catch((cause: unknown) => {
       Alert.alert('草稿加载失败', cause instanceof Error ? cause.message : '请返回后重试。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
     });
-  }, [getPersonIdsByPost, loadDraft, postId, posts, ready, router, targetDay, today, todayCheckIn]);
+  }, [bookExcerpts, books, getPersonIdsByPost, loadDraft, postId, posts, ready, router, sourceBookId, sourceExcerptId, targetDay, today, todayCheckIn]);
 
   useEffect(() => {
     if (personId && people.some((person) => person.id === personId)) {
@@ -230,7 +233,12 @@ export default function EditorScreen() {
       draftTimerRef.current = null;
       await draftQueueRef.current.catch(() => undefined);
       if (postId) await updatePost(postId, value, selectedPersonIds, locationName);
-      else await savePost(value, selectedPersonIds, targetDay, locationName);
+      else {
+        const createdPost = await savePost(value, selectedPersonIds, targetDay, locationName);
+        if (sourceBookId) {
+          await saveReadingNoteSource({ postId: createdPost.id, bookId: sourceBookId, excerptIds: sourceExcerptId ? [sourceExcerptId] : [], quoteSnapshots: sourceExcerptId ? [{ bookTitle: books.find((book) => book.id === sourceBookId)?.title ?? '已删除书籍', text: bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId)?.text ?? '', location: bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId)?.location ?? null }] : [] });
+        }
+      }
       const created = createdMediaRef.current;
       createdMediaRef.current = [];
       await Promise.all(created.map(discardMedia)).catch(() => undefined);

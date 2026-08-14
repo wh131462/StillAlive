@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Post } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/state/app-state';
@@ -10,12 +10,16 @@ import { formatGender } from '../../src/components/gender-picker';
 import { extractAudioEmbeds } from '../../src/domain/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from '../../src/domain/person-profile';
 import { createThemedStyles, nameTextStyle } from '../../src/theme/app-theme';
+import { pickLocalAsset } from '../../src/data/local-assets';
+import { useMusicPlayer } from '../../src/state/music-player';
 
 export default function PersonScreen() {
   const router = useRouter();
+  const musicPlayer = useMusicPlayer();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { albums, deletePerson, getPostsByPerson, media, people, personTags, posts: allPosts, preferences, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
+  const { addMusicCollectionEntry, albums, createMusicTrack, deletePerson, getPostsByPerson, media, musicCollectionEntries, musicTracks, people, personTags, posts: allPosts, preferences, ready, removeMusicCollectionEntry, saveMedia, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [musicPickerVisible, setMusicPickerVisible] = useState(false);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
   const personAssignments = personTags.filter((item) => item.personId === person?.id);
@@ -46,6 +50,25 @@ export default function PersonScreen() {
         (cause: unknown) => Alert.alert('删除失败', cause instanceof Error ? cause.message : '请稍后重试。'),
       ) },
     ]);
+  };
+  const personMusicIds = new Set(person ? musicCollectionEntries.filter((entry) => entry.targetType === 'person' && entry.targetId === person.id).map((entry) => entry.trackId) : []);
+  const personMusic = musicTracks.filter((track) => personMusicIds.has(track.id));
+  const availableMusic = musicTracks.filter((track) => !personMusicIds.has(track.id));
+  const importMusic = async () => {
+    if (!person) return;
+    try {
+      const asset = await pickLocalAsset('audio');
+      if (!asset) return;
+      await saveMedia(asset);
+      const now = new Date().toISOString();
+      const trackId = `track_${Date.now()}`;
+      await createMusicTrack({ id: trackId, mediaId: asset.id, title: asset.originalName?.replace(/\.[^.]+$/, '') || '未命名音乐', artist: null, album: null, durationMs: null, createdAt: now, updatedAt: now }, { trackId, targetType: 'person', targetId: person.id, createdAt: now });
+    } catch (cause) { Alert.alert('添加音乐失败', cause instanceof Error ? cause.message : '请稍后重试。'); }
+  };
+  const addExistingMusic = async (trackId: string) => {
+    if (!person) return;
+    await addMusicCollectionEntry({ trackId, targetType: 'person', targetId: person.id, createdAt: new Date().toISOString() });
+    setMusicPickerVisible(false);
   };
 
   return (
@@ -107,6 +130,10 @@ export default function PersonScreen() {
 
             <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>收藏与回忆</Text></View>
             <View style={styles.featureCard}>
+              <Pressable accessibilityRole="button" onPress={() => setMusicPickerVisible(true)} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}><View style={styles.featureCopy}><Text style={styles.featureTitle}>喜欢的音乐</Text><Text style={styles.featureHint}>{personMusic.length ? `${personMusic.length} 首 · 可从曲库选择或导入` : '为这个人物保存一首喜欢的音乐'}</Text></View><Text style={styles.albumCount}>添加</Text></Pressable>
+              <View style={styles.featureDivider} />
+              {personMusic.map((track) => <View key={track.id} style={styles.musicRow}><Pressable onPress={() => musicPlayer.currentTrack?.id === track.id ? musicPlayer.toggle() : void musicPlayer.playTrack(track.id, personMusic.map((item) => item.id), 'people')} style={styles.musicMain}><View style={[styles.musicPlay, musicPlayer.currentTrack?.id === track.id && styles.musicPlayActive]}><SymbolView name={{ android: musicPlayer.currentTrack?.id === track.id && musicPlayer.playing ? 'pause' : 'play_arrow', ios: musicPlayer.currentTrack?.id === track.id && musicPlayer.playing ? 'pause.fill' : 'play.fill', web: musicPlayer.currentTrack?.id === track.id && musicPlayer.playing ? 'pause' : 'play_arrow' }} size={15} tintColor={colors.life} type="hierarchical" /></View><View style={styles.musicCopy}><Text numberOfLines={1} style={[styles.musicTitle, musicPlayer.currentTrack?.id === track.id && styles.musicTitleActive]}>{track.title}</Text><Text style={styles.musicMeta}>{track.artist || '未知艺术家'}</Text></View></Pressable><Pressable accessibilityLabel={`移除 ${track.title}`} onPress={() => void removeMusicCollectionEntry(track.id, 'person', person.id)} style={styles.musicRemove}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={15} tintColor={colors.inkFaint} type="hierarchical" /></Pressable></View>)}
+              {personMusic.length ? <View style={styles.featureDivider} /> : null}
               <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/albums', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
                 <View style={styles.featureCopy}><Text style={styles.featureTitle}>人物相册</Text><Text style={styles.featureHint}>按文件夹整理只属于 {person.name} 的照片</Text></View>
                 <View style={styles.featureMeta}><Text style={styles.albumCount}>{albums.filter((album) => album.personId === person.id).length} 个</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
@@ -144,6 +171,16 @@ export default function PersonScreen() {
           <Text style={styles.missing}>这个人物不存在或已被删除。</Text>
         ) : null}
       </ScrollView>
+      <Modal animationType="slide" onRequestClose={() => setMusicPickerVisible(false)} transparent visible={musicPickerVisible}>
+        <Pressable onPress={() => setMusicPickerVisible(false)} style={styles.musicBackdrop}>
+          <Pressable onPress={(event) => event.stopPropagation()} style={styles.musicSheet}>
+            <View style={styles.musicHandle} />
+            <Text style={styles.musicSheetTitle}>添加喜欢的音乐</Text>
+            <Pressable onPress={() => { setMusicPickerVisible(false); void importMusic(); }} style={styles.musicImport}><SymbolView name={{ android: 'upload_file', ios: 'square.and.arrow.down', web: 'upload_file' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.musicImportText}>导入新音乐</Text></Pressable>
+            <ScrollView style={styles.musicList}>{availableMusic.map((track) => <Pressable key={track.id} onPress={() => void addExistingMusic(track.id)} style={styles.musicChoice}><View style={styles.musicCopy}><Text numberOfLines={1} style={styles.musicTitle}>{track.title}</Text><Text style={styles.musicMeta}>{track.artist || '未知艺术家'}</Text></View><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /></Pressable>)}{availableMusic.length === 0 ? <Text style={styles.musicEmpty}>曲库中没有可添加的其他音乐</Text> : null}</ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -199,7 +236,8 @@ const styles = createThemedStyles(() => ({
   featureTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15 },
   featureHint: { marginTop: 5, color: colors.inkFaint, fontSize: 9, lineHeight: 15 },
   featureMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  featureDivider: { marginLeft: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  featureDivider: { marginLeft: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }, musicRow: { minHeight: 58, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, musicMain: { flex: 1, minWidth: 0, minHeight: 58, flexDirection: 'row', alignItems: 'center' }, musicPlay: { width: 30, height: 30, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: colors.paper }, musicPlayActive: { backgroundColor: colors.lifeLight }, musicCopy: { flex: 1, minWidth: 0 }, musicTitle: { color: colors.ink, fontSize: 12 }, musicTitleActive: { color: colors.life }, musicMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 9 }, musicRemove: { width: 42, height: 46, alignItems: 'center', justifyContent: 'center' },
+  musicBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.34)' }, musicSheet: { maxHeight: '72%', padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet }, musicHandle: { width: 36, height: 4, marginBottom: spacing.lg, alignSelf: 'center', borderRadius: 2, backgroundColor: colors.line }, musicSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 }, musicImport: { minHeight: 52, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, backgroundColor: colors.lifeLight }, musicImportText: { color: colors.life, fontSize: 11, fontWeight: '700' }, musicList: { marginTop: spacing.sm }, musicChoice: { minHeight: 58, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, musicEmpty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontSize: 10, textAlign: 'center' },
   albumCount: { color: colors.life, fontSize: 10 },
   memorySwitch: { width: 40, height: 24, padding: 3, justifyContent: 'center', borderRadius: 12, backgroundColor: colors.line },
   memorySwitchOn: { backgroundColor: colors.life },

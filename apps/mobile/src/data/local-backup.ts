@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { BACKUP_SCHEMA_VERSION } from '@still-alive/backup';
 import type { BackupManifest } from '@still-alive/backup';
+import type { MusicTrack } from '@still-alive/types';
 import type { BackupSnapshot } from './sqlite-repository';
 import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../domain/embedded-media';
 import { unlockPasswordVault } from './password-vault-crypto';
@@ -41,7 +42,7 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
     const source = new File(item.localPath);
     if (!source.exists) throw new Error(`本地媒体缺失：${item.id}`);
     const album = albumByMedia.get(item.id);
-    const path = album ? `${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/${item.id}${source.extension || '.bin'}` : `media/${item.id}${source.extension || '.bin'}`;
+    const path = album ? `${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/${item.id}${source.extension || '.bin'}` : `${item.kind === 'book' ? 'books' : item.kind === 'audio' ? 'music' : 'media'}/${item.id}${source.extension || '.bin'}`;
     entries[path] = await source.bytes();
     portableMedia.push({ ...item, localPath: path });
   }
@@ -184,8 +185,18 @@ export function materializeBackupMedia(parsed: ParsedBackup): MaterializedBackup
         targetDirectory = new Directory(Paths.document, 'people', parts[1], 'albums', parts[3]);
       } else if (parts[0] === 'self' && parts.length === 4 && parts[1] === 'albums') {
         targetDirectory = new Directory(Paths.document, 'self', 'albums', parts[2]);
+      } else if (parts[0] === 'books') {
+        targetDirectory = new Directory(Paths.document, 'books');
+      } else if (parts[0] === 'music') {
+        targetDirectory = new Directory(Paths.document, 'media');
       }
       if (targetDirectory !== directory) {
+        const existed = targetDirectory.exists;
+        targetDirectory.create({ idempotent: true, intermediates: true });
+        if (!existed) createdDirectories.push(targetDirectory.uri);
+      }
+      if (targetDirectory === directory && (parts[0] === 'books' || parts[0] === 'music')) {
+        targetDirectory = new Directory(Paths.document, parts[0] === 'books' ? 'books' : 'media');
         const existed = targetDirectory.exists;
         targetDirectory.create({ idempotent: true, intermediates: true });
         if (!existed) createdDirectories.push(targetDirectory.uri);
@@ -225,9 +236,17 @@ function validateSnapshot(value: BackupSnapshot): void {
   const personTags = value.personTags ?? [];
   const albums = value.albums ?? [];
   const albumMedia = value.albumMedia ?? [];
+  const musicTracks = value.musicTracks ?? [];
+  const musicCollectionEntries = value.musicCollectionEntries ?? [];
+  const books = value.books ?? [];
+  const bookExcerpts = value.bookExcerpts ?? [];
+  const readingNoteSources = value.readingNoteSources ?? [];
   assertUniqueIds(tagDefinitions, '标签');
   assertUniqueIds(tagGroups, '标签组');
   assertUniqueIds(albums, '相册');
+  assertUniqueIds(musicTracks, '音乐曲目');
+  assertUniqueIds(books, '书籍');
+  assertUniqueIds(bookExcerpts, '摘抄');
   const tagSystems = new Set<string>();
   for (const setting of tagSystemSettings) {
     if (!['mbti', 'constellation', 'zodiac', 'custom'].includes(setting.system) || typeof setting.enabled !== 'boolean' || !Number.isInteger(setting.sortOrder) || tagSystems.has(setting.system)) throw new Error('备份中的标签体系设置无效');
@@ -236,6 +255,31 @@ function validateSnapshot(value: BackupSnapshot): void {
   const postIds = new Set(value.posts.map((post) => post.id));
   const personIds = new Set(value.people.map((person) => person.id));
   const mediaIds = new Set(value.media.map((item) => item.id));
+  const bookIds = new Set(books.map((book) => book.id));
+  const excerptIds = new Set(bookExcerpts.map((excerpt) => excerpt.id));
+  const musicTrackIds = new Set(musicTracks.map((track) => track.id));
+  for (const track of musicTracks) {
+    if (!mediaIds.has(track.mediaId) || !value.media.find((item) => item.id === track.mediaId)?.mimeType.startsWith('audio/')) throw new Error('备份中的音乐文件关联无效');
+  }
+  const collectionKeys = new Set<string>();
+  for (const entry of musicCollectionEntries) {
+    const key = `${entry.trackId}:${entry.targetType}:${entry.targetId ?? ''}`;
+    if (!musicTrackIds.has(entry.trackId) || !['self', 'person'].includes(entry.targetType) || (entry.targetType === 'self' && entry.targetId !== null) || (entry.targetType === 'person' && (!entry.targetId || !personIds.has(entry.targetId))) || collectionKeys.has(key)) throw new Error('备份中的音乐收藏关系无效');
+    collectionKeys.add(key);
+  }
+  for (const book of books) {
+    if (!mediaIds.has(book.fileMediaId) || !value.media.find((item) => item.id === book.fileMediaId)?.kind?.includes('book')) throw new Error('备份中的书籍文件关联无效');
+    if (book.coverMediaId && !mediaIds.has(book.coverMediaId)) throw new Error('备份中的书籍封面关联无效');
+    if (!['pdf', 'epub', 'mobi', 'azw', 'azw3'].includes(book.format) || !['ready', 'protected', 'unsupported', 'failed'].includes(book.parseStatus)) throw new Error('备份中的书籍格式或解析状态无效');
+    if (!Number.isFinite(book.progress) || book.progress < 0 || book.progress > 1) throw new Error('备份中的阅读进度无效');
+    if (book.locationType && !['epub-cfi', 'pdf-page', 'manual'].includes(book.locationType)) throw new Error('备份中的书籍定位类型无效');
+    if (book.pageCount != null && (!Number.isInteger(book.pageCount) || book.pageCount < 1)) throw new Error('备份中的 PDF 页数无效');
+    if (book.chapterCache && (!Array.isArray(book.chapterCache) || book.chapterCache.some((item) => !item || typeof item.href !== 'string' || typeof item.label !== 'string' || !Number.isInteger(item.depth)))) throw new Error('备份中的书籍目录无效');
+  }
+  for (const excerpt of bookExcerpts) if (!bookIds.has(excerpt.bookId) || !excerpt.text.trim() || excerpt.text.length > 20_000 || (excerpt.locationType && !['epub-cfi', 'pdf-page', 'manual'].includes(excerpt.locationType)) || (excerpt.sourceKind && !['selection', 'manual'].includes(excerpt.sourceKind))) throw new Error('备份中的摘抄无效');
+  for (const source of readingNoteSources) {
+    if (!postIds.has(source.postId) || (source.bookId && !bookIds.has(source.bookId)) || source.excerptIds.some((id) => !excerptIds.has(id)) || !Array.isArray(source.quoteSnapshots)) throw new Error('备份中的阅读笔记引用无效');
+  }
   for (const checkIn of value.checkIns) if (checkIn.city !== null && (typeof checkIn.city !== 'string' || checkIn.city.length > 40)) throw new Error('备份中的打卡城市无效');
   for (const post of value.posts) {
     if (post.locationName !== null && (typeof post.locationName !== 'string' || post.locationName.length > 80)) throw new Error('备份中的记录地点无效');
@@ -274,7 +318,7 @@ function validateSnapshot(value: BackupSnapshot): void {
     mediaPaths.add(item.localPath);
     const relation = albumRelationByMedia.get(item.id);
     const album = relation ? albumById.get(relation.albumId) : undefined;
-    const expectedPrefix = album ? `${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/` : 'media/';
+    const expectedPrefix = album ? `${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/` : `${item.kind === 'book' ? 'books' : item.kind === 'audio' ? 'music' : 'media'}/`;
     const fileName = item.localPath.slice(expectedPrefix.length);
     if (!item.localPath.startsWith(expectedPrefix) || !fileName.startsWith(`${item.id}.`) || fileName.length <= item.id.length + 1 || fileName.includes('/')) throw new Error('备份中的媒体路径与相册关联不一致');
   }
@@ -295,6 +339,38 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.personTags ??= [];
   value.albums ??= [];
   value.albumMedia ??= [];
+  value.musicTracks ??= [];
+  value.musicCollectionEntries ??= [];
+  for (const track of value.musicTracks as Array<MusicTrack & { ownerType?: string; ownerId?: string | null }>) {
+    if ((track.ownerType === 'self' || track.ownerType === 'person') && !value.musicCollectionEntries.some((entry) => entry.trackId === track.id && entry.targetType === track.ownerType && entry.targetId === (track.ownerId ?? null))) value.musicCollectionEntries.push({ trackId: track.id, targetType: track.ownerType, targetId: track.ownerType === 'person' ? track.ownerId ?? null : null, createdAt: track.createdAt });
+    delete track.ownerType;
+    delete track.ownerId;
+  }
+  value.books ??= [];
+  value.bookExcerpts ??= [];
+  value.readingNoteSources ??= [];
+  for (const book of value.books) {
+    if (book.format === 'pdf' && book.location?.match(/^page:\d+$/)) book.location = book.location.replace(/^page:/, 'pdf:');
+    book.locationType ??= book.format === 'pdf' ? 'pdf-page' : book.location?.startsWith('epubcfi(') ? 'epub-cfi' : null;
+    book.chapterHref ??= null;
+    book.chapterTitle ??= null;
+    book.engineVersion ??= null;
+    book.pageCount ??= null;
+    book.chapterCache ??= [];
+  }
+  for (const excerpt of value.bookExcerpts) {
+    if (excerpt.location?.match(/^page:\d+$/)) excerpt.location = excerpt.location.replace(/^page:/, 'pdf:');
+    excerpt.locationType ??= excerpt.location?.startsWith('pdf:') ? 'pdf-page' : excerpt.location?.startsWith('epubcfi(') ? 'epub-cfi' : 'manual';
+    excerpt.chapterTitle ??= null;
+    excerpt.contextBefore ??= null;
+    excerpt.contextAfter ??= null;
+    excerpt.sourceKind ??= 'manual';
+  }
+  for (const media of value.media ?? []) {
+    media.kind ??= media.mimeType.startsWith('audio/') ? 'audio' : 'image';
+    media.originalName ??= null;
+    media.sizeBytes ??= null;
+  }
   if (Array.isArray(value.people)) for (const person of value.people) {
     person.gender ??= null;
     person.birthday ??= null;

@@ -1,0 +1,35 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index 34da3248a540ad228acc7c4efdf294bf2f3b79e4..b00b4f957fb727f156313b5ee164c63a41935c8f 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -1,19 +1,5 @@
+ description = 'react-native-pdf'
+ 
+-buildscript {
+-    ext.safeExtGet = { prop, fallback ->
+-        rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+-    }
+-    repositories {
+-        mavenCentral()
+-        google()
+-    }
+-
+-    dependencies {
+-        classpath("com.android.tools.build:gradle:7.4.2")
+-    }
+-}
+-
+ repositories {
+     mavenCentral()
+     maven {
+@@ -30,6 +16,10 @@ repositories {
+ 
+ apply plugin: 'com.android.library'
+ 
++ext.safeExtGet = { prop, fallback ->
++    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
++}
++
+ def supportsNamespace() {
+   def parsed = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')
+   def major = parsed[0].toInteger()

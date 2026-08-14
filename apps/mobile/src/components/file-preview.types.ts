@@ -1,17 +1,24 @@
 import type { Media } from '@still-alive/types';
 
 export interface SelectedPreviewFile {
+  createdAt?: string;
+  height?: number;
   name: string;
+  size?: number;
   type: string;
   url: string;
-  size?: number;
+  width?: number;
 }
 
 export function toSelectedPreviewFile(item: Media): SelectedPreviewFile {
   return {
-    name: `${item.id}.${extensionForMimeType(item.mimeType)}`,
+    createdAt: item.createdAt,
+    height: item.height ?? undefined,
+    name: item.originalName || `${item.id}.${extensionForMimeType(item.mimeType)}`,
+    size: item.sizeBytes ?? undefined,
     type: item.mimeType || 'application/octet-stream',
     url: item.localPath,
+    width: item.width ?? undefined,
   };
 }
 

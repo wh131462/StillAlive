@@ -7,6 +7,31 @@ export type AppThemeId = 'moss' | 'sand' | 'midnight';
 export type NameStyleId = 'fresh' | 'journal' | 'sunlit' | 'colorful' | 'iridescent';
 export type ProfileCollectionField = 'name' | 'gender' | 'birthday' | 'mbti' | 'customTags';
 export type ProfileCollectionRequestStatus = 'pending' | 'consumed';
+export type MusicCollectionTargetType = 'self' | 'person';
+export type MusicPlaybackMode = 'list' | 'shuffle' | 'single';
+export type BookFormat = 'pdf' | 'epub' | 'mobi' | 'azw' | 'azw3';
+export type BookParseStatus = 'ready' | 'protected' | 'unsupported' | 'failed';
+export type BookLocationType = 'epub-cfi' | 'pdf-page' | 'manual';
+export type ReaderTheme = 'paper' | 'warm' | 'green' | 'night';
+export type ReaderFontFamily = 'serif' | 'sans';
+export type ReaderFlow = 'paginated' | 'scrolled';
+
+export interface ReaderTocItem {
+  href: string;
+  label: string;
+  depth: number;
+}
+
+export interface ReadingPreferences {
+  theme: ReaderTheme;
+  fontSize: number;
+  lineHeight: number;
+  pageMargin: number;
+  fontFamily: ReaderFontFamily;
+  flow: ReaderFlow;
+  pdfScale: number;
+  pdfHorizontal: boolean;
+}
 
 export interface Birthday {
   calendar: BirthdayCalendar;
@@ -130,6 +155,75 @@ export interface Media {
   height: number | null;
   checksum: string;
   createdAt: string;
+  kind?: 'image' | 'audio' | 'book';
+  originalName?: string | null;
+  sizeBytes?: number | null;
+}
+
+export interface MusicTrack {
+  id: string;
+  mediaId: string;
+  title: string;
+  artist: string | null;
+  album: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MusicCollectionEntry {
+  trackId: string;
+  targetType: MusicCollectionTargetType;
+  targetId: string | null;
+  createdAt: string;
+}
+
+export interface MusicPlaybackPreferences {
+  mode: MusicPlaybackMode;
+  miniPlayerX: number;
+  miniPlayerY: number;
+}
+
+export interface Book {
+  id: string;
+  fileMediaId: string;
+  coverMediaId: string | null;
+  title: string;
+  author: string | null;
+  format: BookFormat;
+  parseStatus: BookParseStatus;
+  parseMessage: string | null;
+  progress: number;
+  location: string | null;
+  locationType?: BookLocationType | null;
+  chapterHref?: string | null;
+  chapterTitle?: string | null;
+  engineVersion?: string | null;
+  pageCount?: number | null;
+  chapterCache?: ReaderTocItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookExcerpt {
+  id: string;
+  bookId: string;
+  text: string;
+  location: string | null;
+  note: string | null;
+  locationType?: BookLocationType | null;
+  chapterTitle?: string | null;
+  contextBefore?: string | null;
+  contextAfter?: string | null;
+  sourceKind?: 'selection' | 'manual';
+  createdAt: string;
+}
+
+export interface ReadingNoteSource {
+  postId: string;
+  bookId: string | null;
+  excerptIds: string[];
+  quoteSnapshots: Array<{ bookTitle: string; text: string; location: string | null }>;
 }
 
 export interface Draft {

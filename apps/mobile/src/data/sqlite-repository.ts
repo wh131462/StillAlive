@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from '@still-alive/storage';
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, CheckIn, DayKey, Draft, Gender, Media, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, Gender, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicTrack, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../domain/memory-notifications';
 
 interface CheckInRow {
@@ -55,7 +55,26 @@ interface MediaRow {
   height: number | null;
   checksum: string;
   created_at: string;
+  kind?: 'image' | 'audio' | 'book' | null;
+  original_name?: string | null;
+  size_bytes?: number | null;
 }
+
+interface MusicTrackRow {
+  id: string; media_id: string; title: string; artist: string | null; album: string | null;
+  duration_ms: number | null; created_at: string; updated_at: string;
+}
+
+interface MusicCollectionEntryRow { track_id: string; target_type: MusicCollectionTargetType; target_id: string; created_at: string; }
+
+interface BookRow {
+  id: string; file_media_id: string; cover_media_id: string | null; title: string; author: string | null;
+  format: BookFormat; parse_status: BookParseStatus; parse_message: string | null; progress: number; location: string | null; location_type: BookLocationType | null;
+  chapter_href: string | null; chapter_title: string | null; engine_version: string | null; page_count: number | null; chapter_cache_json: string | null;
+  created_at: string; updated_at: string;
+}
+
+interface BookExcerptRow { id: string; book_id: string; text: string; location: string | null; note: string | null; location_type: BookLocationType | null; chapter_title: string | null; context_before: string | null; context_after: string | null; source_kind: 'selection' | 'manual' | null; created_at: string; }
 
 interface ProfileCollectionRequestRow {
   id: string;
@@ -82,6 +101,11 @@ export interface BackupSnapshot {
   tagGroups?: TagGroup[];
   albums?: PersonAlbum[];
   albumMedia?: AlbumMedia[];
+  musicTracks?: MusicTrack[];
+  musicCollectionEntries?: MusicCollectionEntry[];
+  books?: Book[];
+  bookExcerpts?: BookExcerpt[];
+  readingNoteSources?: ReadingNoteSource[];
 }
 
 export interface AppPreferences {
@@ -110,6 +134,10 @@ export interface AppPreferences {
   memoryNotificationsEnabled: boolean;
   memoryNotificationError: string | null;
   persistentNotificationEnabled: boolean;
+  musicPlaybackMode: MusicPlaybackMode;
+  miniPlayerX: number;
+  miniPlayerY: number;
+  readerPreferencesJson: string;
 }
 
 export type HomeMemory =
@@ -383,6 +411,112 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS profile_collection_requests_expiry_idx ON profile_collection_requests(status, expires_at);
     PRAGMA user_version = 16;
   `);
+
+  if (currentVersion < 17) {
+    await addColumnIfMissing(db, 'media', 'kind', 'TEXT');
+    await addColumnIfMissing(db, 'media', 'original_name', 'TEXT');
+    await addColumnIfMissing(db, 'media', 'size_bytes', 'INTEGER');
+    await db.execAsync(`
+      UPDATE media SET kind = CASE WHEN mime_type LIKE 'audio/%' THEN 'audio' ELSE 'image' END WHERE kind IS NULL;
+      CREATE TABLE IF NOT EXISTS music_tracks (
+        id TEXT PRIMARY KEY NOT NULL,
+        media_id TEXT NOT NULL UNIQUE REFERENCES media(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        artist TEXT,
+        album TEXT,
+        duration_ms INTEGER,
+        owner_type TEXT NOT NULL,
+        owner_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS music_tracks_owner_idx ON music_tracks(owner_type, owner_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS books (
+        id TEXT PRIMARY KEY NOT NULL,
+        file_media_id TEXT NOT NULL UNIQUE REFERENCES media(id) ON DELETE CASCADE,
+        cover_media_id TEXT REFERENCES media(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        author TEXT,
+        format TEXT NOT NULL,
+        parse_status TEXT NOT NULL,
+        parse_message TEXT,
+        progress REAL NOT NULL DEFAULT 0,
+        location TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS books_updated_idx ON books(updated_at DESC);
+      CREATE TABLE IF NOT EXISTS book_excerpts (
+        id TEXT PRIMARY KEY NOT NULL,
+        book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        location TEXT,
+        note TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS book_excerpts_book_idx ON book_excerpts(book_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS reading_note_sources (
+        post_id TEXT PRIMARY KEY NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        book_id TEXT,
+        excerpt_ids_json TEXT NOT NULL,
+        quote_snapshots_json TEXT NOT NULL
+      );
+      PRAGMA user_version = 17;
+    `);
+  }
+
+  if (currentVersion < 18) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS music_collection_entries (
+      track_id TEXT NOT NULL REFERENCES music_tracks(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (track_id, target_type, target_id)
+    );
+    CREATE INDEX IF NOT EXISTS music_collection_target_idx ON music_collection_entries(target_type, target_id, created_at DESC);
+    INSERT OR IGNORE INTO music_collection_entries (track_id, target_type, target_id, created_at)
+    SELECT id, owner_type, CASE WHEN owner_type = 'person' THEN COALESCE(owner_id, '') ELSE '' END, created_at
+    FROM music_tracks
+    WHERE owner_type IN ('self', 'person') AND (owner_type != 'person' OR owner_id IS NOT NULL);
+    PRAGMA user_version = 18;
+  `);
+
+  if (currentVersion < 19) {
+    await addColumnIfMissing(db, 'books', 'location_type', 'TEXT');
+    await addColumnIfMissing(db, 'books', 'chapter_href', 'TEXT');
+    await addColumnIfMissing(db, 'books', 'chapter_title', 'TEXT');
+    await addColumnIfMissing(db, 'books', 'engine_version', 'TEXT');
+    await addColumnIfMissing(db, 'books', 'page_count', 'INTEGER');
+    await addColumnIfMissing(db, 'book_excerpts', 'location_type', 'TEXT');
+    await addColumnIfMissing(db, 'book_excerpts', 'chapter_title', 'TEXT');
+    await addColumnIfMissing(db, 'book_excerpts', 'context_before', 'TEXT');
+    await addColumnIfMissing(db, 'book_excerpts', 'context_after', 'TEXT');
+    await addColumnIfMissing(db, 'book_excerpts', 'source_kind', 'TEXT');
+    await db.execAsync(`
+      UPDATE books SET location = 'pdf:' || SUBSTR(location, 6), location_type = 'pdf-page'
+      WHERE format = 'pdf' AND location GLOB 'page:[0-9]*';
+      UPDATE books SET location_type = 'epub-cfi'
+      WHERE format = 'epub' AND location_type IS NULL AND (location LIKE 'epubcfi(%' OR chapter_href IS NOT NULL);
+      UPDATE book_excerpts SET location = 'pdf:' || SUBSTR(location, 6), location_type = 'pdf-page'
+      WHERE location GLOB 'page:[0-9]*';
+      UPDATE book_excerpts SET source_kind = 'manual' WHERE source_kind IS NULL;
+      PRAGMA user_version = 19;
+    `);
+  }
+
+  if (currentVersion < 20) {
+    await addColumnIfMissing(db, 'books', 'chapter_cache_json', 'TEXT');
+    await db.execAsync(`
+      UPDATE books SET location = 'pdf:' || SUBSTR(location, 6), location_type = 'pdf-page'
+      WHERE format = 'pdf' AND location GLOB 'page:[0-9]*';
+      UPDATE book_excerpts SET location = 'pdf:' || SUBSTR(location, 6), location_type = 'pdf-page'
+      WHERE location GLOB 'page:[0-9]*';
+      UPDATE book_excerpts SET source_kind = 'manual' WHERE source_kind IS NULL;
+      UPDATE books SET parse_status = 'ready', parse_message = NULL
+      WHERE format = 'epub' AND parse_status = 'unsupported';
+      PRAGMA user_version = 20;
+    `);
+  }
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {
@@ -621,14 +755,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listMedia(): Promise<Media[]> {
     const rows = await this.db.getAllAsync<MediaRow>(
-      'SELECT id, local_path, mime_type, width, height, checksum, created_at FROM media ORDER BY created_at DESC',
+      'SELECT id, local_path, mime_type, width, height, checksum, created_at, kind, original_name, size_bytes FROM media ORDER BY created_at DESC',
     );
     return rows.map(mapMedia);
   }
 
   async createMedia(media: Media): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync(
-      'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at, kind, original_name, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       media.id,
       media.localPath,
       media.mimeType,
@@ -636,18 +770,24 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       media.height,
       media.checksum,
       media.createdAt,
+      media.kind ?? (media.mimeType.startsWith('audio/') ? 'audio' : 'image'),
+      media.originalName ?? null,
+      media.sizeBytes ?? null,
     ));
   }
 
   async updateMedia(media: Media): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync(
-      'UPDATE media SET local_path = ?, mime_type = ?, width = ?, height = ?, checksum = ?, created_at = ? WHERE id = ?',
+      'UPDATE media SET local_path = ?, mime_type = ?, width = ?, height = ?, checksum = ?, created_at = ?, kind = ?, original_name = ?, size_bytes = ? WHERE id = ?',
       media.localPath,
       media.mimeType,
       media.width,
       media.height,
       media.checksum,
       media.createdAt,
+      media.kind ?? (media.mimeType.startsWith('audio/') ? 'audio' : 'image'),
+      media.originalName ?? null,
+      media.sizeBytes ?? null,
       media.id,
     ));
   }
@@ -673,12 +813,19 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         UNION ALL
         SELECT 1 FROM album_media WHERE media_id = ?
         UNION ALL
+        SELECT 1 FROM music_tracks WHERE media_id = ?
+        UNION ALL
+        SELECT 1 FROM books WHERE file_media_id = ? OR cover_media_id = ?
+        UNION ALL
         SELECT 1 FROM settings WHERE key = 'profileAvatarMediaId' AND value = ?
       ) AS referenced`,
       imageReference,
       imageReference,
       audioReference,
       audioReference,
+      mediaId,
+      mediaId,
+      mediaId,
       mediaId,
       mediaId,
       mediaId,
@@ -751,7 +898,10 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async deletePerson(personId: string): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM persons WHERE id = ?', personId));
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync("DELETE FROM music_collection_entries WHERE target_type = 'person' AND target_id = ?", personId);
+      await transaction.runAsync('DELETE FROM persons WHERE id = ?', personId);
+    });
   }
 
   async setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void> {
@@ -989,6 +1139,89 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     });
   }
 
+  async listMusicTracks(): Promise<MusicTrack[]> {
+    const rows = await this.db.getAllAsync<MusicTrackRow>('SELECT id, media_id, title, artist, album, duration_ms, created_at, updated_at FROM music_tracks ORDER BY created_at DESC');
+    return rows.map(mapMusicTrack);
+  }
+
+  async createMusicTrack(track: MusicTrack, collection?: MusicCollectionEntry): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('INSERT INTO music_tracks (id, media_id, title, artist, album, duration_ms, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.title, track.artist, track.album, track.durationMs, 'unassigned', track.createdAt, track.updatedAt);
+      if (collection) await transaction.runAsync('INSERT INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', collection.trackId, collection.targetType, collection.targetId ?? '', collection.createdAt);
+    });
+  }
+
+  async updateMusicTrack(track: MusicTrack): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE music_tracks SET title = ?, artist = ?, album = ?, duration_ms = ?, updated_at = ? WHERE id = ?', track.title, track.artist, track.album, track.durationMs, track.updatedAt, track.id));
+  }
+
+  async deleteMusicTrack(trackId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM music_tracks WHERE id = ?', trackId));
+  }
+
+  async listMusicCollectionEntries(): Promise<MusicCollectionEntry[]> {
+    const rows = await this.db.getAllAsync<MusicCollectionEntryRow>('SELECT track_id, target_type, target_id, created_at FROM music_collection_entries ORDER BY created_at DESC');
+    return rows.map((row) => ({ trackId: row.track_id, targetType: row.target_type, targetId: row.target_type === 'person' ? row.target_id : null, createdAt: row.created_at }));
+  }
+
+  async addMusicCollectionEntry(entry: MusicCollectionEntry): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('INSERT OR IGNORE INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', entry.trackId, entry.targetType, entry.targetId ?? '', entry.createdAt));
+  }
+
+  async removeMusicCollectionEntry(trackId: string, targetType: MusicCollectionTargetType, targetId: string | null): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM music_collection_entries WHERE track_id = ? AND target_type = ? AND target_id = ?', trackId, targetType, targetId ?? ''));
+  }
+
+  async listBooks(): Promise<Book[]> {
+    const rows = await this.db.getAllAsync<BookRow>('SELECT id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at FROM books ORDER BY updated_at DESC');
+    return rows.map(mapBook);
+  }
+
+  async createBook(book: Book): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO books (id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', book.id, book.fileMediaId, book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.createdAt, book.updatedAt));
+  }
+
+  async updateBook(book: Book): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE books SET cover_media_id = ?, title = ?, author = ?, format = ?, parse_status = ?, parse_message = ?, progress = ?, location = ?, location_type = ?, chapter_href = ?, chapter_title = ?, engine_version = ?, page_count = ?, chapter_cache_json = ?, updated_at = ? WHERE id = ?', book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.updatedAt, book.id));
+  }
+
+  async deleteBook(bookId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM books WHERE id = ?', bookId));
+  }
+
+  async listBookExcerpts(bookId?: string): Promise<BookExcerpt[]> {
+    const rows = bookId
+      ? await this.db.getAllAsync<BookExcerptRow>('SELECT id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at FROM book_excerpts WHERE book_id = ? ORDER BY created_at DESC', bookId)
+      : await this.db.getAllAsync<BookExcerptRow>('SELECT id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at FROM book_excerpts ORDER BY created_at DESC');
+    return rows.map(mapBookExcerpt);
+  }
+
+  async createBookExcerpt(excerpt: BookExcerpt): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO book_excerpts (id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt));
+  }
+
+  async updateBookExcerpt(excerpt: BookExcerpt): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE book_excerpts SET text = ?, location = ?, note = ?, location_type = ?, chapter_title = ?, context_before = ?, context_after = ?, source_kind = ? WHERE id = ?', excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.id));
+  }
+
+  async deleteBookExcerpt(excerptId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM book_excerpts WHERE id = ?', excerptId));
+  }
+
+  async getReadingNoteSource(postId: string): Promise<ReadingNoteSource | null> {
+    const row = await this.db.getFirstAsync<{ post_id: string; book_id: string | null; excerpt_ids_json: string; quote_snapshots_json: string }>('SELECT post_id, book_id, excerpt_ids_json, quote_snapshots_json FROM reading_note_sources WHERE post_id = ?', postId);
+    if (!row) return null;
+    return { postId: row.post_id, bookId: row.book_id, excerptIds: parseStringList(row.excerpt_ids_json), quoteSnapshots: parseQuoteSnapshots(row.quote_snapshots_json) };
+  }
+
+  async saveReadingNoteSource(source: ReadingNoteSource): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO reading_note_sources (post_id, book_id, excerpt_ids_json, quote_snapshots_json) VALUES (?, ?, ?, ?)
+       ON CONFLICT(post_id) DO UPDATE SET book_id = excluded.book_id, excerpt_ids_json = excluded.excerpt_ids_json, quote_snapshots_json = excluded.quote_snapshots_json`,
+      source.postId, source.bookId, JSON.stringify(source.excerptIds), JSON.stringify(source.quoteSnapshots),
+    ));
+  }
+
   async listMemoryNotificationSchedules(): Promise<MemoryNotificationSchedule[]> {
     const rows = await this.db.getAllAsync<{ id: string; post_id: string; scheduled_at: string; platform_identifier: string }>('SELECT id, post_id, scheduled_at, platform_identifier FROM memory_notification_schedules ORDER BY scheduled_at');
     return rows.map((row) => ({ id: row.id, postId: row.post_id, scheduledAt: row.scheduled_at, platformIdentifier: row.platform_identifier }));
@@ -1092,6 +1325,10 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       memoryNotificationsEnabled: values.memoryNotificationsEnabled === 'true',
       memoryNotificationError: values.memoryNotificationError || null,
       persistentNotificationEnabled: values.persistentNotificationEnabled === 'true',
+      musicPlaybackMode: values.musicPlaybackMode === 'shuffle' || values.musicPlaybackMode === 'single' ? values.musicPlaybackMode : 'list',
+      miniPlayerX: Number.isFinite(Number(values.miniPlayerX)) ? Number(values.miniPlayerX) : 0,
+      miniPlayerY: Number.isFinite(Number(values.miniPlayerY)) ? Number(values.miniPlayerY) : 0,
+      readerPreferencesJson: values.readerPreferencesJson ?? '{}',
     };
   }
 
@@ -1111,12 +1348,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM books; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
     });
   }
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
-    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, albums, albumMedia] = await Promise.all([
+    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, albums, albumMedia, musicTracks, musicCollectionEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
       this.db.getAllAsync<CheckInRow>('SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key'),
       this.listPosts(),
       this.db.getAllAsync<DraftRow>('SELECT id, day_key, body_markdown, updated_at FROM drafts ORDER BY day_key'),
@@ -1130,6 +1367,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       this.listPersonTagAssignments(),
       this.listAlbums(),
       this.listAlbumMedia(),
+      this.listMusicTracks(),
+      this.listMusicCollectionEntries(),
+      this.listBooks(),
+      this.listBookExcerpts(),
+      this.db.getAllAsync<{ post_id: string; book_id: string | null; excerpt_ids_json: string; quote_snapshots_json: string }>('SELECT post_id, book_id, excerpt_ids_json, quote_snapshots_json FROM reading_note_sources ORDER BY post_id'),
     ]);
     return {
       checkIns: checkInRows.map(mapCheckIn),
@@ -1145,12 +1387,17 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       personTags,
       albums,
       albumMedia,
+      musicTracks,
+      musicCollectionEntries,
+      books,
+      bookExcerpts,
+      readingNoteSources: readingNoteSources.map((row) => ({ postId: row.post_id, bookId: row.book_id, excerptIds: parseStringList(row.excerpt_ids_json), quoteSnapshots: parseQuoteSnapshots(row.quote_snapshots_json) })),
     };
   }
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM books; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
       }
@@ -1162,8 +1409,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const item of snapshot.media) {
         await transaction.runAsync(
-          'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          item.id, item.localPath, item.mimeType, item.width, item.height, item.checksum, item.createdAt,
+          'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at, kind, original_name, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          item.id, item.localPath, item.mimeType, item.width, item.height, item.checksum, item.createdAt, item.kind ?? null, item.originalName ?? null, item.sizeBytes ?? null,
         );
       }
       for (const draft of snapshot.drafts) {
@@ -1184,6 +1431,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const relation of snapshot.personTags ?? []) await transaction.runAsync('INSERT INTO person_tag_assignments (person_id, kind, value) VALUES (?, ?, ?)', relation.personId, relation.kind, relation.value);
       for (const album of snapshot.albums ?? []) await transaction.runAsync('INSERT INTO person_albums (id, person_id, name, cover_media_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', album.id, album.personId, album.name, album.coverMediaId, album.sortOrder, album.createdAt, album.updatedAt);
       for (const relation of snapshot.albumMedia ?? []) await transaction.runAsync('INSERT INTO album_media (album_id, media_id, sort_order, added_at) VALUES (?, ?, ?, ?)', relation.albumId, relation.mediaId, relation.sortOrder, relation.addedAt);
+      for (const track of snapshot.musicTracks ?? []) await transaction.runAsync('INSERT INTO music_tracks (id, media_id, title, artist, album, duration_ms, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.title, track.artist, track.album, track.durationMs, 'unassigned', track.createdAt, track.updatedAt);
+      for (const entry of snapshot.musicCollectionEntries ?? []) await transaction.runAsync('INSERT INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', entry.trackId, entry.targetType, entry.targetId ?? '', entry.createdAt);
+      for (const book of snapshot.books ?? []) await transaction.runAsync('INSERT INTO books (id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', book.id, book.fileMediaId, book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.createdAt, book.updatedAt);
+      for (const excerpt of snapshot.bookExcerpts ?? []) await transaction.runAsync('INSERT INTO book_excerpts (id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt);
+      for (const source of snapshot.readingNoteSources ?? []) await transaction.runAsync('INSERT INTO reading_note_sources (post_id, book_id, excerpt_ids_json, quote_snapshots_json) VALUES (?, ?, ?, ?)', source.postId, source.bookId, JSON.stringify(source.excerptIds), JSON.stringify(source.quoteSnapshots));
       for (const [key, value] of Object.entries(snapshot.settings)) {
         await transaction.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', key, value);
       }
@@ -1271,7 +1523,33 @@ function mapMedia(row: MediaRow): Media {
     height: row.height,
     checksum: row.checksum,
     createdAt: row.created_at,
+    kind: row.kind ?? (row.mime_type.startsWith('audio/') ? 'audio' : 'image'),
+    originalName: row.original_name ?? null,
+    sizeBytes: row.size_bytes ?? null,
   };
+}
+
+function mapMusicTrack(row: MusicTrackRow): MusicTrack {
+  return { id: row.id, mediaId: row.media_id, title: row.title, artist: row.artist, album: row.album, durationMs: row.duration_ms, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function mapBook(row: BookRow): Book {
+  return { id: row.id, fileMediaId: row.file_media_id, coverMediaId: row.cover_media_id, title: row.title, author: row.author, format: row.format, parseStatus: row.parse_status, parseMessage: row.parse_message, progress: row.progress, location: row.location, locationType: row.location_type, chapterHref: row.chapter_href, chapterTitle: row.chapter_title, engineVersion: row.engine_version, pageCount: row.page_count, chapterCache: parseReaderToc(row.chapter_cache_json), createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function parseReaderToc(value: string | null): ReaderTocItem[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ReaderTocItem => Boolean(item) && typeof item === 'object' && typeof (item as ReaderTocItem).href === 'string' && typeof (item as ReaderTocItem).label === 'string' && Number.isInteger((item as ReaderTocItem).depth));
+  } catch {
+    return [];
+  }
+}
+
+function mapBookExcerpt(row: BookExcerptRow): BookExcerpt {
+  return { id: row.id, bookId: row.book_id, text: row.text, location: row.location, note: row.note, locationType: row.location_type, chapterTitle: row.chapter_title, contextBefore: row.context_before, contextAfter: row.context_after, sourceKind: row.source_kind ?? 'manual', createdAt: row.created_at };
 }
 
 function mapProfileCollectionRequest(row: ProfileCollectionRequestRow): ProfileCollectionRequest {
@@ -1304,6 +1582,21 @@ function parseStringMap(value: string): Record<string, string> {
     return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   } catch {
     return {};
+  }
+}
+
+function parseQuoteSnapshots(value: string): ReadingNoteSource['quoteSnapshots'] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const value = item as Record<string, unknown>;
+      if (typeof value.bookTitle !== 'string' || typeof value.text !== 'string' || (value.location !== null && typeof value.location !== 'string')) return [];
+      return [{ bookTitle: value.bookTitle, text: value.text, location: value.location as string | null }];
+    });
+  } catch {
+    return [];
   }
 }
 

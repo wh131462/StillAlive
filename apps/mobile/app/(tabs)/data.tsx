@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,7 +15,7 @@ import { birthdayFromDateString, birthdaySolarDate, formatBirthday } from '../..
 
 export default function DataScreen() {
   const router = useRouter();
-  const { albumMedia, albums, checkIns, media, people, posts, preferences, tagDefinitions } = useAppState();
+  const { albumMedia, albums, books, checkIns, media, musicCollectionEntries, people, posts, preferences, tagDefinitions } = useAppState();
   const [avatarFailed, setAvatarFailed] = useState(false);
   const avatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const avatarUri = avatar?.localPath ?? null;
@@ -79,6 +80,15 @@ export default function DataScreen() {
         <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
       </Pressable>
 
+      <Pressable accessibilityRole="button" onPress={() => router.push('/music-box' as RelativePathString)} style={({ pressed }) => [styles.mediaCard, pressed && styles.pressed]}>
+        <View style={styles.mediaIcon}><SymbolView name={{ android: 'music_note', ios: 'music.note', web: 'music_note' }} size={25} tintColor={colors.life} type="hierarchical" /></View>
+        <View style={styles.mediaCopy}><Text style={styles.mediaTitle}>音乐盒</Text><Text style={styles.mediaMeta}>{musicCollectionEntries.some((entry) => entry.targetType === 'self') ? `${musicCollectionEntries.filter((entry) => entry.targetType === 'self').length} 首本地音乐` : '收集你喜欢的声音'}</Text></View><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/bookshelf' as RelativePathString)} style={({ pressed }) => [styles.mediaCard, pressed && styles.pressed]}>
+        <View style={[styles.mediaIcon, styles.bookIcon]}><SymbolView name={{ android: 'menu_book', ios: 'book.closed.fill', web: 'menu_book' }} size={25} tintColor={colors.life} type="hierarchical" /></View>
+        <View style={styles.mediaCopy}><Text style={styles.mediaTitle}>我的书架</Text><Text style={styles.mediaMeta}>{books.length ? `${books.length} 本书` : '把读过的书留下来'}</Text></View><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
+      </Pressable>
+
     </ScrollView>
   </SafeAreaView>;
 }
@@ -113,5 +123,5 @@ const styles = createThemedStyles(() => ({
   vaultCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
   vaultTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
   vaultMeta: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
-  pressed: { opacity: 0.72 },
+  pressed: { opacity: 0.72 }, mediaCard: { minHeight: 82, marginTop: spacing.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet }, mediaIcon: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 26, backgroundColor: colors.lifeLight }, bookIcon: { backgroundColor: colors.sunLight }, mediaCopy: { flex: 1, marginLeft: spacing.md }, mediaTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 }, mediaMeta: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },
 }));
