@@ -18,6 +18,7 @@ import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } f
 import { birthdayFromDateString, lunarLeapMonth, lunarMonthDayCount, nextBirthday } from '../../src/domain/person-profile';
 import { resolveDeviceLocation } from '../../src/data/device-location';
 import { ensureAppPermission } from '../../src/data/app-permissions';
+import { writePersistentError } from '../../src/data/persistent-log';
 import { createThemedStyles, editorTheme } from '../../src/theme/app-theme';
 
 type TimelineItem =
@@ -39,7 +40,7 @@ const POST_PREVIEW_MAX_HEIGHT = 168;
 
 export default function SpaceScreen() {
   const router = useRouter();
-  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, ready, shouldShowBackupReminder, today, todayCheckIn, updatePreferences } = useAppState();
+  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, ready, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
   const [nickname, setNickname] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [birthDateCalendar, setBirthDateCalendar] = useState<BirthdayCalendar>('solar');
@@ -75,28 +76,10 @@ export default function SpaceScreen() {
 
   const handlePrimaryAction = async () => {
     if (!todayCheckIn) {
-      let city: string;
       try {
         setCheckingIn(true);
-        const allowed = await ensureAppPermission('location', [
-          { text: '不记录城市，继续', onPress: () => void finishCheckInWithoutCity() },
-        ]);
-        if (!allowed) {
-          setCheckingIn(false);
-          return;
-        }
-        const location = await resolveDeviceLocation();
-        city = location.city;
-      } catch (cause: unknown) {
-        setCheckingIn(false);
-        Alert.alert('无法获取打卡城市', cause instanceof Error ? cause.message : '请稍后重试。', [
-          { text: '取消', style: 'cancel' },
-          { text: '不记录城市，继续', onPress: () => void finishCheckInWithoutCity() },
-        ]);
-        return;
-      }
-      try {
-        await checkInToday(city);
+        const checkIn = await checkInToday();
+        void resolveCheckInCity(checkIn.id);
       } catch (cause: unknown) {
         Alert.alert('暂时无法打卡', cause instanceof Error ? cause.message : '请稍后重试。');
       } finally {
@@ -107,14 +90,13 @@ export default function SpaceScreen() {
     router.push('/editor');
   };
 
-  const finishCheckInWithoutCity = async () => {
+  const resolveCheckInCity = async (checkInId: string) => {
     try {
-      setCheckingIn(true);
-      await checkInToday(null);
+      if (!await ensureAppPermission('location')) return;
+      const location = await resolveDeviceLocation();
+      await updateCheckInCity(checkInId, location.city);
     } catch (cause: unknown) {
-      Alert.alert('暂时无法打卡', cause instanceof Error ? cause.message : '请稍后重试。');
-    } finally {
-      setCheckingIn(false);
+      writePersistentError('location.check-in-city.failed', cause, { checkInId });
     }
   };
 
@@ -183,7 +165,7 @@ export default function SpaceScreen() {
               style={({ pressed }) => [styles.primaryButton, todayCheckIn && styles.secondaryButton, (!ready || Boolean(error) || checkingIn) && styles.disabled, pressed && styles.pressed]}
             >
               <Text style={[styles.primaryButtonText, todayCheckIn && styles.secondaryButtonText]}>
-                {checkingIn ? '正在定位并打卡…' : !todayCheckIn ? '今天也在' : '写一条记录'}
+                {checkingIn ? '正在打卡…' : !todayCheckIn ? '今天也在' : '写一条记录'}
               </Text>
             </Pressable>
           </View>

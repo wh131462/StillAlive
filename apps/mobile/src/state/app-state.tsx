@@ -75,7 +75,8 @@ interface AppStateValue {
   shouldShowBackupReminder: boolean;
   ready: boolean;
   error: string | null;
-  checkInToday(city: string | null): Promise<void>;
+  checkInToday(): Promise<CheckIn>;
+  updateCheckInCity(checkInId: string, city: string): Promise<void>;
   savePost(bodyMarkdown: string, personIds?: string[], dayKey?: DayKey, locationName?: string | null): Promise<Post>;
   updatePost(postId: string, bodyMarkdown: string, personIds?: string[], locationName?: string | null): Promise<void>;
   deletePost(postId: string): Promise<void>;
@@ -320,12 +321,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     void refreshPersistentNotification().catch(() => undefined);
   }, [checkIns.length, posts.length, preferences.persistentNotificationEnabled, ready, today]);
 
-  const checkInToday = useCallback(async (city: string | null) => {
-    if (city && city.length > 40) throw new Error('城市名称不能超过 40 字');
-    const checkIn = await repository.checkIn(today, city);
+  const checkInToday = useCallback(async () => {
+    const checkIn = await repository.checkIn(today);
     setTodayCheckIn(checkIn);
     setCheckIns(await repository.listCheckIns());
+    return checkIn;
   }, [repository, today]);
+
+  const updateCheckInCity = useCallback(async (checkInId: string, city: string) => {
+    if (!city || city.length > 40) throw new Error('城市名称必须为 1–40 字');
+    await repository.updateCheckInCity(checkInId, city);
+    setTodayCheckIn((current) => current?.id === checkInId ? { ...current, city } : current);
+    setCheckIns((current) => current.map((item) => item.id === checkInId ? { ...item, city } : item));
+  }, [repository]);
 
   const savePost = useCallback(async (bodyMarkdown: string, personIds: string[] = [], dayKey: DayKey = today, locationName: string | null = null): Promise<Post> => {
     validatePost(bodyMarkdown, personIds, locationName);
@@ -987,6 +995,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     ready,
     error,
     checkInToday,
+    updateCheckInCity,
     savePost,
     updatePost,
     deletePost,
@@ -1044,7 +1053,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     deleteBookExcerpt,
     getReadingNoteSource,
     saveReadingNoteSource,
-  }), [addMusicCollectionEntry, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, loadDraft, media, musicCollectionEntries, musicTracks, notificationPermission, openNotificationSettings, people, persistentNotificationRunning, personTags, posts, preferences, ready, recordBackupExport, removeMusicCollectionEntry, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateMusicTrack, updatePerson, updatePost, updatePreferences, updateTagSystems]);
+  }), [addMusicCollectionEntry, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, loadDraft, media, musicCollectionEntries, musicTracks, notificationPermission, openNotificationSettings, people, persistentNotificationRunning, personTags, posts, preferences, ready, recordBackupExport, removeMusicCollectionEntry, removePhotoFromAlbum, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePost, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

@@ -1,7 +1,8 @@
 import type { AlbumMedia, Book, BookExcerpt, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicTrack, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
-  checkIn(dayKey: DayKey, city: string | null): Promise<CheckIn>;
+  checkIn(dayKey: DayKey): Promise<CheckIn>;
+  updateCheckInCity(checkInId: string, city: string): Promise<void>;
   getCheckIn(dayKey: DayKey): Promise<CheckIn | null>;
   listCheckIns(): Promise<CheckIn[]>;
   createPost(post: Post, personIds?: string[]): Promise<void>;

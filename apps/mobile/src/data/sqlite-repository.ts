@@ -617,14 +617,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     return this.enqueueWrite(() => this.db.withTransactionAsync(() => operation(this.db)));
   }
 
-  async checkIn(dayKey: DayKey, city: string | null): Promise<CheckIn> {
+  async checkIn(dayKey: DayKey): Promise<CheckIn> {
     const existing = await this.getCheckIn(dayKey);
     if (existing) return existing;
 
     const checkIn: CheckIn = {
       id: createLocalId('checkin'),
       dayKey,
-      city,
+      city: null,
       createdAt: new Date().toISOString(),
     };
     await this.enqueueWrite(() => this.db.runAsync(
@@ -635,6 +635,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       checkIn.createdAt,
     ));
     return checkIn;
+  }
+
+  async updateCheckInCity(checkInId: string, city: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      'UPDATE checkins SET city = ? WHERE id = ?',
+      city,
+      checkInId,
+    ));
   }
 
   async getCheckIn(dayKey: DayKey): Promise<CheckIn | null> {
