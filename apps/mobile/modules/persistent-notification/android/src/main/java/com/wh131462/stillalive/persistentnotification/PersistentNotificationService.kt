@@ -12,7 +12,9 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import java.io.File
 import java.text.SimpleDateFormat
@@ -22,6 +24,15 @@ import java.util.Locale
 import java.util.UUID
 
 class PersistentNotificationService : Service() {
+  private val handler = Handler(Looper.getMainLooper())
+  private val refreshAtNextDay = object : Runnable {
+    override fun run() {
+      if (!isEnabled(this@PersistentNotificationService)) return
+      updateNotification()
+      scheduleNextDayRefresh()
+    }
+  }
+
   override fun onCreate() {
     super.onCreate()
     isRunning = true
@@ -37,17 +48,36 @@ class PersistentNotificationService : Service() {
     startForeground(NOTIFICATION_ID, buildNotification())
     if (intent?.action == ACTION_CHECK_IN) {
       quickCheckIn()
-      getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
+      updateNotification()
     }
+    scheduleNextDayRefresh()
     return START_STICKY
   }
 
   override fun onDestroy() {
+    handler.removeCallbacks(refreshAtNextDay)
     isRunning = false
     super.onDestroy()
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
+
+  private fun updateNotification() {
+    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
+  }
+
+  private fun scheduleNextDayRefresh() {
+    handler.removeCallbacks(refreshAtNextDay)
+    val now = Calendar.getInstance()
+    val nextDay = (now.clone() as Calendar).apply {
+      add(Calendar.DAY_OF_YEAR, 1)
+      set(Calendar.HOUR_OF_DAY, 0)
+      set(Calendar.MINUTE, 0)
+      set(Calendar.SECOND, 1)
+      set(Calendar.MILLISECOND, 0)
+    }
+    handler.postDelayed(refreshAtNextDay, (nextDay.timeInMillis - now.timeInMillis).coerceAtLeast(1000L))
+  }
 
   private fun quickCheckIn() {
     val database = openDatabase(writable = true) ?: return
