@@ -4,8 +4,8 @@ import { useFonts } from 'expo-font';
 import { Platform, Pressable, Text, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { colors, typography } from '@still-alive/tokens';
-import { useAppState } from '../../src/state/app-state';
-import { applyColorTheme } from '../../src/theme/app-theme';
+import { useAppState } from '../../src/application/state/app-state';
+import { applyColorTheme } from '../../src/shared/theme/app-theme';
 
 type TabIconName = 'space' | 'calendar' | 'people' | 'profile';
 

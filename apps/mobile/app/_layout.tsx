@@ -8,14 +8,15 @@ import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ReaderProvider } from '@epubjs-react-native/core';
 import { colors } from '@still-alive/tokens';
-import { AppStateProvider, useAppState } from '../src/state/app-state';
-import { migrateDatabase } from '../src/data/sqlite-repository';
-import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/data/expo-birthday-notifications';
-import { applyColorTheme } from '../src/theme/app-theme';
-import { AutomaticUpdateChecker } from '../src/components/automatic-update-checker';
-import { LaunchScreen } from '../src/components/launch-screen';
-import { writePersistentLog } from '../src/data/persistent-log';
-import { MusicPlayerProvider } from '../src/state/music-player';
+import { AppStateProvider, useAppState } from '../src/application/state/app-state';
+import { migrateDatabase } from '../src/infrastructure/database/sqlite-schema';
+import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/infrastructure/notifications/expo-notifications';
+import { applyColorTheme } from '../src/shared/theme/app-theme';
+import { AutomaticUpdateChecker } from '../src/features/system/automatic-update-checker';
+import { LaunchScreen } from '../src/features/onboarding/launch-screen';
+import { writePersistentLog } from '../src/infrastructure/platform/persistent-log';
+import { MusicPlayerProvider } from '../src/features/music/music-player-state';
+import { FeedbackProvider } from '../src/application/feedback-provider';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -47,15 +48,17 @@ export default function RootLayout() {
   }, [router]);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SQLiteProvider databaseName="still-alive.db" onInit={migrateDatabase}>
-        <AppStateProvider>
-          <ReaderProvider>
-            <MusicPlayerProvider>
-              <ThemedNavigator />
-            </MusicPlayerProvider>
-          </ReaderProvider>
-        </AppStateProvider>
-      </SQLiteProvider>
+      <FeedbackProvider>
+        <SQLiteProvider databaseName="still-alive.db" onInit={migrateDatabase}>
+          <AppStateProvider>
+            <ReaderProvider>
+              <MusicPlayerProvider>
+                <ThemedNavigator />
+              </MusicPlayerProvider>
+            </ReaderProvider>
+          </AppStateProvider>
+        </SQLiteProvider>
+      </FeedbackProvider>
     </GestureHandlerRootView>
   );
 }
@@ -70,7 +73,12 @@ function ThemedNavigator() {
       <StatusBar
         style={launchScreenVisible || preferences.appearanceTheme === 'midnight' ? 'light' : 'dark'}
       />
-      <Stack screenOptions={{ contentStyle: { backgroundColor: colors.paper }, headerShown: false }} />
+      <Stack screenOptions={{ contentStyle: { backgroundColor: colors.paper }, headerShown: false }}>
+        <Stack.Screen
+          name="music-player"
+          options={{ animation: 'slide_from_bottom', animationDuration: 280, gestureDirection: 'vertical', gestureEnabled: true }}
+        />
+      </Stack>
       {!launchScreenVisible ? <AutomaticUpdateChecker /> : null}
       {launchScreenVisible ? <LaunchScreen onFinish={finishLaunch} ready={ready} /> : null}
     </>
