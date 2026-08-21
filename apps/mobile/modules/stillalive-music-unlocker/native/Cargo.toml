@@ -1,0 +1,25 @@
+[package]
+name = "stillalive_music_unlocker_core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[package.metadata.upstream]
+repository = "https://github.com/arcana6264/unlock_music"
+commit = "e0ef67aa48411bf5d84c791bdee79aa9632ee33e"
+path = "decoder"
+license-file = "UNLOCK_MUSIC_LICENSE"
+
+[lib]
+name = "stillalive_music_unlocker_core"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+base64 = "0.22.1"
+bytes = "1.10.1"
+id3 = "1.16.3"
+rust-crypto = "0.2.36"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+thiserror = "1.0.69"

@@ -163,6 +163,7 @@ export interface Media {
 export interface MusicTrack {
   id: string;
   mediaId: string;
+  coverMediaId: string | null;
   title: string;
   artist: string | null;
   album: string | null;
@@ -176,6 +177,20 @@ export interface MusicCollectionEntry {
   targetType: MusicCollectionTargetType;
   targetId: string | null;
   createdAt: string;
+}
+
+export interface MusicPlaylist {
+  id: string;
+  name: string;
+  coverMediaId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MusicPlaylistEntry {
+  playlistId: string;
+  trackId: string;
+  addedAt: string;
 }
 
 export interface MusicPlaybackPreferences {
