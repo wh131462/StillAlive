@@ -13,14 +13,13 @@ apps/
 
 packages/
   types/        共享数据类型
-  core/         纯业务规则
-  storage/      本地存储接口
-  backup/       导出与恢复接口
   tokens/       设计 Token
 
 docs/           PRD 与 HTML 设计稿
 openspec/       产品变更规格
 ```
+
+移动端内部按业务功能组织在 `apps/mobile/src/features/`，共享 UI 与基础能力位于 `apps/mobile/src/shared/`，数据库、文件、通知和平台适配位于 `apps/mobile/src/infrastructure/`。`apps/mobile/app/` 仅保留 Expo Router 路由入口。
 
 MVP 不包含服务端、Web 客户端、微信小程序和 Docker 部署。门户仅用于产品介绍与应用下载，产品功能与验收以 iOS/Android 为准。
 

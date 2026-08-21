@@ -59,6 +59,97 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
 
 ---
 
+## Mobile Feedback Rules
+
+- Route all application-owned mobile notifications, errors, confirmations, action choices, and text prompts through `apps/mobile/src/shared/feedback.ts`.
+- Never import or call React Native `Alert`, `AlertButton`, `ToastAndroid`, or `ActionSheetIOS`, and never use browser `alert`, `confirm`, or `prompt` for application messages.
+- Preserve existing button labels, cancel behavior, destructive intent, callbacks, and navigation effects when migrating feedback calls.
+- Dedicated workflow dialogs that require custom content, such as update progress or permission instructions, must reuse `apps/mobile/src/shared/components/feedback-dialog.tsx` so their presentation remains consistent.
+- Ordinary forms, pickers, menus, and media viewers may continue to use feature-owned `Modal` components when they are not notifications or confirmations.
+- Before finishing a mobile change, scan the current source tree and confirm that no prohibited native feedback call was introduced.
+
+---
+
+## Directory Structure Rules
+
+Keep the repository organized by deployable application and business capability. New files and moved files must follow the existing structure below.
+
+### Repository Layout
+
+```text
+apps/
+  mobile/                  Expo React Native application
+  portal/                  Static product portal
+packages/
+  types/                   Cross-application data types
+  tokens/                  Cross-application design tokens
+docs/                      Current product documentation
+openspec/                  Product change specifications
+patches/                   pnpm dependency patches
+scripts/                   Repository-level scripts
+release/                   Release metadata
+archive/                   Historical material only
+```
+
+- Put independently runnable or deployable products in `apps/`.
+- Create a workspace package only when multiple applications consume it, or when it has independent build, test, and stable-contract value.
+- Do not create workspace packages for small modules used only by mobile.
+- Put repository-level scripts in `scripts/` and application-specific scripts in the application's `scripts/` directory.
+- Never commit build output, caches, dependency directories, or local signing material as source.
+
+### Mobile Layout
+
+```text
+apps/mobile/
+  app/                     Expo Router entries and layouts
+  assets/                  Static application assets
+  modules/                 Local Expo native modules
+  scripts/                 Mobile development and build scripts
+  src/
+    application/           Application composition, providers, global state entry
+    features/              Business-capability implementations
+    infrastructure/        Database, files, notifications, platform adapters
+    shared/                Business-neutral code reused across features
+    shims/                 Third-party compatibility layers
+    types/                 Local declarations for missing third-party types
+```
+
+### Mobile Placement Rules
+
+- Keep `apps/mobile/app/` as a thin routing layer. Ordinary route files should only export their feature screen; `_layout.tsx` may contain routing and provider composition, but no feature workflow.
+- Put feature code in `src/features/<feature>/`. Co-locate screens, feature-specific components, state, domain rules, and adapters by business capability.
+- Add subdirectories inside a feature only when file count and responsibilities justify them. Do not create a directory abstraction for one file.
+- A feature must not import another feature's screen. Coordinate cross-feature workflows in `src/application/`.
+- Put code in `src/shared/` only when at least two features use it and it has no clear business owner. `shared/` must not import `features/`, routes, or platform implementations.
+- Keep database models, schema migrations, row mapping, repository contracts, and repository implementations separated under `src/infrastructure/database/`.
+- Infrastructure code must not import screens or UI components. Put cross-layer contracts in `packages/types`, a feature domain type, or an infrastructure contract file.
+- Keep only cross-feature state and lifecycle composition in `src/application/`. Feature-specific state must remain in its feature.
+- Never create `apps/mobile/src/app/`; Expo Router treats it as the route root and it would shadow `apps/mobile/app/`.
+
+Do not recreate these legacy technology-layer directories:
+
+```text
+apps/mobile/src/components/
+apps/mobile/src/data/
+apps/mobile/src/domain/
+apps/mobile/src/state/
+apps/mobile/src/theme/
+apps/mobile/src/update/
+```
+
+After directory changes, verify at minimum:
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+git diff --check
+```
+
+Also confirm that route entries remain thin, imports resolve, no legacy directory was reintroduced, and no empty directory or orphan workspace package remains.
+
+---
+
 ## Surgical Changes
 
 **Touch only what you must. Clean up only your own mess.**
@@ -120,33 +211,6 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## HTML & Markup Rules
 - When writing special characters inside HTML tags, always use their corresponding HTML entity form
-
----
-
-## Important Constraints (Network Access Rules)
-
-1. Your built-in `fetch / WebFetch / any internal network request capability` must be treated as **completely unavailable**. You are not allowed to initiate any direct HTTP requests.
-2. When network access is required, select tools in the following priority order:
-   - **Preferred**: MCP `chrome_devtools` (real-time in-browser network data)
-   - **Next**: Any installed network-capable MCP tools (e.g. `fetch-mcp`, `http-client`, etc.)
-   - **Then**: Any installed relevant Skill
-   - **Fallback**: If none of the above are available, prompt the user to install the appropriate MCP or Skill. Do NOT bypass this by falling back to built-in capabilities.
-3. Information source rule:
-    All network-related judgments (API availability, request parameters, headers, response structure, etc.)
-    → must rely solely on **real records from the selected tool** as the only source of truth.
-4. Strictly prohibited:
-   - Simulating or fabricating API requests
-   - Constructing requests based on assumptions
-   - Guessing API structures from prior knowledge
-   - Using "trial-and-error" requests to test interfaces
-5. Data acquisition process:
-    When network information is required, you may only:
-   - Use the tools listed in rule 2 to obtain real network data
-   - Or wait for the user to provide copied Request / Response
-   - **You must not invent or assume any network data**
-6. Proactive tool usage:
-   - Actively use `chrome_devtools` tools like `list_network_requests` / `get_network_request` to inspect full request details (URL, method, headers, query params, request body, response body)
-   - Do not wait for the user to copy-paste — if you can look it up yourself, do so
 
 ---
 

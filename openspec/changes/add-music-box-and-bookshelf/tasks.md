@@ -59,3 +59,27 @@
 - [x] 8.6 Implement EPUB selection-to-excerpt with CFI/context snapshots and PDF capability-gated selection/manual excerpt labeling; add highlighter restore where the selected engine supports it.
 - [x] 8.7 Add real-device acceptance for 50 MB+ books, background/foreground resume, orientation, dynamic font settings, failed/protected/unsupported states and backup restore.
 - [ ] 8.8 Only after the two engine spikes pass, decide whether any no-DRM MOBI/AZW/AZW3 parser is stable enough to change its status from `unsupported`; otherwise keep archive-only behavior.
+
+## 9. Book batch import and deduplication
+
+- [x] 9.1 Extend local book import helpers with multi-file selection, recursive directory selection and checksum validation.
+- [x] 9.2 Update the bookshelf import flow to skip existing and in-batch duplicate checksums and summarize batch results.
+- [x] 9.3 Run typecheck, tests, build, strict OpenSpec validation and diff checks.
+
+## 10. PDF continuous scrolling
+
+- [x] 10.1 Separate observed PDF pages from imperative page navigation so vertical scrolling does not snap to page boundaries.
+- [x] 10.2 Run typecheck, tests, build, strict OpenSpec validation and diff checks.
+
+## 11. Reading note editor access
+
+- [x] 11.1 Allow validated book and excerpt note sources to enter the editor without today's check-in while preserving the ordinary journal guard.
+- [x] 11.2 Run typecheck, tests, build, strict OpenSpec validation and diff checks.
+
+## 12. Encrypted music import
+
+- [x] 12.1 Pin and audit the MIT-licensed Rust decoder core; confirm NCM, selected QMC/MGG/MFLAC, and KGM/KGMA vectors, and reject KGG/external-key formats.
+- [x] 12.2 Add an Expo native module under `apps/mobile/modules/` with iOS/Android bindings and a bounded, file-based `unlock` API; do not bridge whole audio buffers through JS.
+- [x] 12.3 Add `MusicImportCoordinator` to probe extensions and magic bytes, route encrypted inputs, validate decoded MP3/FLAC output, extract metadata, and commit media plus track atomically.
+- [x] 12.4 Update picker MIME/extension handling, progress/cancel/error states, temporary-file cleanup, and backup behavior so only validated unencrypted files enter the library.
+- [ ] 12.5 Run decoder fixture tests, malformed-input/fuzz limits, `pnpm typecheck`, `pnpm test`, `pnpm build`, `git diff --check`, and iOS/Android real-device acceptance with large files.
