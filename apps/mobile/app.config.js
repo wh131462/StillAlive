@@ -7,9 +7,13 @@ module.exports = () => {
     ...expo,
     name: development ? `${expo.name} Dev` : expo.name,
     scheme: development ? 'stillalive-dev' : expo.scheme,
+    ios: {
+      ...expo.ios,
+      bundleIdentifier: development ? 'com.eternalheart.stillalive.dev' : expo.ios.bundleIdentifier,
+    },
     android: {
       ...expo.android,
-      package: development ? 'com.wh131462.stillalive.dev' : expo.android.package,
+      package: development ? 'com.eternalheart.stillalive.dev' : expo.android.package,
     },
   };
 };

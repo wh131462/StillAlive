@@ -17,7 +17,7 @@
 pnpm build:apk
 ```
 
-当签名环境变量不完整时，`build-apk.sh` 会自动加载 `jks/export.sh`。也可以手动加载：
+当签名环境变量不完整时，`apps/mobile/scripts/build-apk.sh` 会自动加载 `jks/export.sh`。也可以手动加载：
 
 ```bash
 source ./jks/export.sh

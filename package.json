@@ -10,9 +10,10 @@
   "scripts": {
     "dev": "pnpm --filter @still-alive/mobile dev",
     "dev:android": "pnpm --filter @still-alive/mobile dev:android",
+    "dev:ios": "pnpm --filter @still-alive/mobile dev:ios",
     "dev:portal": "pnpm --filter @still-alive/portal dev",
     "build": "turbo run build",
-    "build:apk": "./build-apk.sh",
+    "build:apk": "./apps/mobile/scripts/build-apk.sh",
     "release": "node ./scripts/release.mjs",
     "release:testflight": "cd apps/mobile && npx eas-cli@latest build --platform ios --profile production --auto-submit",
     "typecheck": "turbo run typecheck",
@@ -27,7 +28,9 @@
     "patchedDependencies": {
       "@expo/dom-webview@57.0.1": "patches/@expo__dom-webview@57.0.1.patch",
       "react-native-pdf@7.0.5": "patches/react-native-pdf@7.0.5.patch",
-      "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch"
+      "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch",
+      "expo-modules-jsi@57.0.3": "patches/expo-modules-jsi@57.0.3.patch",
+      "expo-audio@57.0.3": "patches/expo-audio@57.0.3.patch"
     }
   }
 }

@@ -6,6 +6,8 @@ node_modules/
 dist/
 build/
 out/
+target/
+.cxx/
 
 # Turbo
 .turbo/
@@ -51,6 +53,7 @@ coverage/
 apps/mobile/android/
 apps/mobile/ios/
 *.jks
+jks/*.zip
 *.p8
 *.p12
 *.key

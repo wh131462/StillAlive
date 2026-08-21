@@ -14,7 +14,12 @@
       "backgroundColor": "#1D6B49"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "root": "app"
+        }
+      ],
       "expo-sqlite",
       [
         "expo-secure-store",
@@ -48,7 +53,7 @@
         {
           "microphonePermission": "允许“仍在”使用麦克风，将语音保存到你的本地记录中。",
           "recordAudioAndroid": true,
-          "enableBackgroundPlayback": false,
+          "enableBackgroundPlayback": true,
           "enableBackgroundRecording": false
         }
       ]
@@ -59,13 +64,13 @@
     "ios": {
       "supportsTablet": false,
       "buildNumber": "8",
-      "bundleIdentifier": "com.wh131462.stillalive",
+      "bundleIdentifier": "com.eternalheart.stillalive",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.wh131462.stillalive",
+      "package": "com.eternalheart.stillalive",
       "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

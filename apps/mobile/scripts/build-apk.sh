@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOBILE_DIR="$ROOT_DIR/apps/mobile"
+MOBILE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$MOBILE_DIR/../.." && pwd)"
 SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 NDK_VERSION="${ANDROID_NDK_VERSION:-27.1.12297006}"
 APP_VERSION="$(node -e "const config = require(process.argv[1]); process.stdout.write(config.expo.version);" "$MOBILE_DIR/app.json")"
