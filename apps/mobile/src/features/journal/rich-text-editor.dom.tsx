@@ -356,10 +356,10 @@ function createTurndownService(): TurndownService {
     replacement: () => '',
   });
   service.addRule('localMedia', {
-    filter: (node) => node.nodeName === 'IMG' && Boolean(node.getAttribute('data-media-id')),
+    filter: (node) => (node.nodeName === 'IMG' || node.nodeName === 'VIDEO') && Boolean(node.getAttribute('data-media-id')),
     replacement: (_content, node) => {
       const id = node.getAttribute('data-media-id') ?? '';
-      const alt = (node.getAttribute('alt') ?? '照片').replaceAll('[', '\\[').replaceAll(']', '\\]');
+      const alt = (node.getAttribute('alt') ?? (node.nodeName === 'VIDEO' ? '视频' : '照片')).replaceAll('[', '\\[').replaceAll(']', '\\]');
       return `\n\n![${alt}](media://${id})\n\n`;
     },
   });
@@ -373,14 +373,15 @@ function serializeMarkdown(editor: HTMLDivElement): string {
 }
 
 function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
-  const mediaById = new Map(media.map((item) => [item.id, item.uri]));
+  const mediaById = new Map(media.map((item) => [item.id, item]));
+  const mediaUris = new Map(media.map((item) => [item.id, item.uri]));
   decorateRichTextContent(editor, true);
   editor.querySelectorAll<HTMLLIElement>('li.task-list-item').forEach(ensureEmptyTaskItemAnchor);
   editor.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
     if (image.src.startsWith(RICH_TEXT_AUDIO_ORIGIN)) {
       const url = new URL(image.src);
       const id = decodeURIComponent(url.pathname.slice(url.pathname.lastIndexOf('/') + 1));
-      const frame = createAudioFrame({ durationMs: Number(url.searchParams.get('duration') ?? 0), id, uri: mediaById.get(id) ?? '' });
+      const frame = createAudioFrame({ durationMs: Number(url.searchParams.get('duration') ?? 0), id, uri: mediaUris.get(id) ?? '' });
       const paragraph = image.parentElement?.tagName === 'P' && image.parentElement.childNodes.length === 1 ? image.parentElement : null;
       if (paragraph) paragraph.replaceWith(frame);
       else image.replaceWith(frame);
@@ -389,40 +390,64 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
     const encodedId = image.src.startsWith(RICH_TEXT_MEDIA_ORIGIN) ? image.src.slice(RICH_TEXT_MEDIA_ORIGIN.length) : null;
     const id = image.dataset.mediaId ?? (encodedId ? decodeURIComponent(encodedId) : null);
     if (!id) return;
+    const mediaItem = mediaById.get(id);
+    if (mediaItem?.mimeType?.startsWith('video/')) {
+      const video = document.createElement('video');
+      video.controls = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      video.dataset.mediaId = id;
+      video.setAttribute('alt', image.alt || '视频');
+      image.replaceWith(video);
+      decorateVisualMedia(video, id, mediaItem.uri);
+      return;
+    }
     image.dataset.mediaId = id;
-    let frame = image.closest<HTMLElement>('.media-frame');
-    if (!frame) {
-      if (image.parentElement?.tagName === 'FIGURE') {
-        frame = image.parentElement;
-      } else {
-        frame = document.createElement('span');
-        image.before(frame);
-        frame.append(image);
-      }
-      frame.classList.add('media-frame');
-    }
-    frame.dataset.mediaId = id;
-    if (!frame.querySelector('.media-actions')) {
-      const actions = document.createElement('span');
-      actions.className = 'media-actions';
-      actions.contentEditable = 'false';
-      actions.innerHTML = '<button class="media-replace" type="button">替换</button><button class="media-remove" type="button">删除</button>';
-      frame.append(actions);
-    }
-    image.onload = () => frame?.classList.remove('is-media-error');
-    image.onerror = () => frame?.classList.add('is-media-error');
-    const uri = mediaById.get(id);
-    const source = image.getAttribute('src') ?? '';
-    if (uri) {
-      const shouldRetry = image.complete && image.naturalWidth === 0;
-      frame?.classList.remove('is-media-error');
-      if (source !== uri || shouldRetry) image.setAttribute('src', uri);
-    } else if (source.startsWith(RICH_TEXT_MEDIA_ORIGIN)) {
-      frame?.classList.add('is-media-error');
-    }
+    decorateVisualMedia(image, id, mediaItem?.uri);
   });
-  editor.querySelectorAll<HTMLElement>('.audio-frame').forEach((frame) => decorateAudioFrame(frame, mediaById));
+  editor.querySelectorAll<HTMLVideoElement>('video[data-media-id]').forEach((video) => decorateVisualMedia(video, video.dataset.mediaId ?? '', mediaById.get(video.dataset.mediaId ?? '')?.uri));
+  editor.querySelectorAll<HTMLElement>('.audio-frame').forEach((frame) => decorateAudioFrame(frame, mediaUris));
   ensureTrailingParagraph(editor);
+}
+
+function decorateVisualMedia(element: HTMLImageElement | HTMLVideoElement, id: string, uri?: string) {
+  if (!id) return;
+  let frame = element.closest<HTMLElement>('.media-frame');
+  if (!frame) {
+    if (element.parentElement?.tagName === 'FIGURE') frame = element.parentElement;
+    else {
+      frame = document.createElement('span');
+      element.before(frame);
+      frame.append(element);
+    }
+    frame.classList.add('media-frame');
+  }
+  frame.dataset.mediaId = id;
+  if (!frame.querySelector('.media-actions')) {
+    const actions = document.createElement('span');
+    actions.className = 'media-actions';
+    actions.contentEditable = 'false';
+    actions.innerHTML = '<button class="media-replace" type="button">替换</button><button class="media-remove" type="button">删除</button>';
+    frame.append(actions);
+  }
+  const source = element.getAttribute('src') ?? '';
+  const loaded = () => frame?.classList.remove('is-media-error');
+  const failed = () => frame?.classList.add('is-media-error');
+  if (element instanceof HTMLImageElement) {
+    element.onload = loaded;
+    element.onerror = failed;
+  } else {
+    element.controls = true;
+    element.playsInline = true;
+    element.preload = 'metadata';
+    element.onloadeddata = loaded;
+    element.onerror = failed;
+  }
+  if (uri) {
+    const shouldRetry = element instanceof HTMLImageElement && element.complete && element.naturalWidth === 0;
+    frame.classList.remove('is-media-error');
+    if (source !== uri || shouldRetry) element.setAttribute('src', uri);
+  } else if (source.startsWith(RICH_TEXT_MEDIA_ORIGIN) || !source) frame.classList.add('is-media-error');
 }
 
 function createAudioFrame(audio: EditorAudio): HTMLElement {
@@ -492,8 +517,8 @@ function updateAudioFrame(frame: HTMLElement, audio: HTMLAudioElement) {
 
 function ensureTrailingParagraph(editor: HTMLDivElement) {
   const last = editor.lastElementChild;
-  const isImageOnlyParagraph = last?.tagName === 'P' && Boolean(last.querySelector('img')) && !last.textContent?.trim();
-  if (!last || (!last.matches('table, blockquote, ul, ol, pre, figure, hr') && !isImageOnlyParagraph)) return;
+  const isMediaOnlyParagraph = last?.tagName === 'P' && Boolean(last.querySelector('img, video')) && !last.textContent?.trim();
+  if (!last || (!last.matches('table, blockquote, ul, ol, pre, figure, hr') && !isMediaOnlyParagraph)) return;
   const paragraph = document.createElement('p');
   paragraph.append(document.createElement('br'));
   editor.append(paragraph);
@@ -824,13 +849,21 @@ function insertLink(url: string) {
 }
 
 function replaceImage(editor: HTMLDivElement, replacement: EditorImageReplacement) {
-  const image = Array.from(editor.querySelectorAll<HTMLImageElement>('img[data-media-id]'))
+  const current = Array.from(editor.querySelectorAll<HTMLImageElement | HTMLVideoElement>('img[data-media-id], video[data-media-id]'))
     .find((candidate) => candidate.dataset.mediaId === replacement.previousId);
-  if (!image) return;
-  image.dataset.mediaId = replacement.id;
-  image.src = replacement.uri;
-  image.alt = replacement.alt;
-  const frame = image.closest<HTMLElement>('.media-frame');
+  if (!current) return;
+  const isVideo = replacement.mimeType?.startsWith('video/');
+  const next = isVideo ? document.createElement('video') : document.createElement('img');
+  next.dataset.mediaId = replacement.id;
+  next.setAttribute('alt', replacement.alt);
+  next.setAttribute('src', replacement.uri);
+  if (next instanceof HTMLVideoElement) {
+    next.controls = true;
+    next.playsInline = true;
+    next.preload = 'metadata';
+  }
+  current.replaceWith(next);
+  const frame = next.closest<HTMLElement>('.media-frame');
   if (frame) frame.dataset.mediaId = replacement.id;
 }
 
@@ -968,11 +1001,16 @@ function insertImages(images: EditorImage[]) {
   const fragment = document.createDocumentFragment();
   images.forEach((item) => {
     const figure = document.createElement('figure');
-    const image = document.createElement('img');
-    image.src = item.uri;
-    image.alt = item.alt;
-    image.dataset.mediaId = item.id;
-    figure.append(image);
+    const mediaElement = item.mimeType?.startsWith('video/') ? document.createElement('video') : document.createElement('img');
+    mediaElement.setAttribute('src', item.uri);
+    mediaElement.setAttribute('alt', item.alt);
+    mediaElement.dataset.mediaId = item.id;
+    if (mediaElement instanceof HTMLVideoElement) {
+      mediaElement.controls = true;
+      mediaElement.playsInline = true;
+      mediaElement.preload = 'metadata';
+    }
+    figure.append(mediaElement);
     fragment.append(figure);
   });
   const paragraph = document.createElement('p');
@@ -1091,7 +1129,7 @@ function placeCursorAtStart(element: Node) {
 }
 
 function isEditorVisuallyEmpty(editor: HTMLDivElement): boolean {
-  return !editor.textContent?.trim() && !editor.querySelector('img, table, hr, input, .audio-frame');
+  return !editor.textContent?.trim() && !editor.querySelector('img, video, table, hr, input, .audio-frame');
 }
 
 function textBeforeCaret(container: HTMLElement, selection: Selection): string {
@@ -1158,8 +1196,8 @@ const editorCss = (theme: EditorTheme) => `
   .media-actions button + button { border-left: 1px solid rgba(255, 255, 255, 0.28); }
   .media-actions .media-remove { color: #fff2ef; }
   .media-frame.is-media-error { min-height: 220px; border: 1px solid ${theme.line}; background: ${theme.paper}; }
-  .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "图片暂时无法显示 轻触替换"; color: ${theme.inkSoft}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
-  .media-frame.is-media-error img { visibility: hidden; }
+  .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "媒体暂时无法显示 轻触替换"; color: ${theme.inkSoft}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
+  .media-frame.is-media-error img, .media-frame.is-media-error video { visibility: hidden; }
   .mention { padding: 0.08em 0.22em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; }
   .audio-frame, .audio-recording-frame { min-height: 72px; display: flex; align-items: center; margin: 1.25em 0; padding: 14px; border-radius: 4px 22px 4px 22px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
   .audio-frame { background: ${theme.lifeLight}; }

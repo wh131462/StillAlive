@@ -21,6 +21,11 @@ import { resolveDeviceLocation } from '../../infrastructure/platform/device-loca
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
 import { writePersistentError } from '../../infrastructure/platform/persistent-log';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
+import { MusicShareCard } from '../../application/components/music-share-card';
+import { ReadingShareCard } from '../../application/components/reading-share-card';
+import { extractMusicShares } from '../../application/music-share';
+import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
+import { MediaThumbnail } from '../../shared/components/media-thumbnail';
 
 type TimelineItem =
   | { kind: 'check-in'; checkIn: CheckIn }
@@ -41,7 +46,7 @@ const POST_PREVIEW_MAX_HEIGHT = 168;
 
 export default function SpaceScreen() {
   const router = useRouter();
-  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, ready, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
+  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, readingNoteSources, ready, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
   const [nickname, setNickname] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [birthDateCalendar, setBirthDateCalendar] = useState<BirthdayCalendar>('solar');
@@ -61,13 +66,14 @@ export default function SpaceScreen() {
   const upcomingBirthday = useMemo(() => findUpcomingBirthday(people, today), [people, today]);
   const memoryImageId = homeMemory ? firstMediaId(homeMemory.post.bodyMarkdown) : null;
   const memoryImage = memoryImageId ? mediaById.get(memoryImageId) : null;
+  const memoryReadingSource = homeMemory ? readingNoteSources.find((source) => source.postId === homeMemory.post.id) ?? null : null;
   // 备份提醒优先展示；用户稍后处理后，今日页再轮换回忆卡片，避免次级卡片同时抢占注意力。
   const showBackupReminder = shouldShowBackupReminder;
   const showMemory = Boolean(homeMemory) && !showBackupReminder;
   const recordedDayKeys = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)];
   const recordedDays = new Set(recordedDayKeys).size;
   const latestRecordedDay = [...recordedDayKeys].sort().at(-1);
-  const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
+  const visualMediaCount = media.filter((item) => item.mimeType.startsWith('image/') || item.mimeType.startsWith('video/')).length;
   const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
 
   useEffect(() => {
@@ -170,7 +176,7 @@ export default function SpaceScreen() {
             <View style={styles.memoryTraceStats}>
               <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{recordedDays}</Text><Text style={styles.memoryTraceLabel}>记录天数</Text></View>
               <View style={styles.memoryTraceDivider} />
-              <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{imageCount}</Text><Text style={styles.memoryTraceLabel}>图片</Text></View>
+              <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{visualMediaCount}</Text><Text style={styles.memoryTraceLabel}>影像</Text></View>
               <View style={styles.memoryTraceDivider} />
               <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{voiceCount}</Text><Text style={styles.memoryTraceLabel}>语音</Text></View>
             </View>
@@ -217,8 +223,8 @@ export default function SpaceScreen() {
             <Text style={styles.memoryDate}>{homeMemory.post.dayKey.replaceAll('-', '.')}</Text>
           </View>
           <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${homeMemory.post.id}`)} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
-            {memoryImage ? <Image accessibilityLabel="回忆图片" resizeMode="cover" source={{ uri: memoryImage.localPath }} style={styles.memoryImage} /> : null}
-            <Text numberOfLines={4} style={styles.memoryText}>{memoryExcerpt(homeMemory.post.bodyMarkdown)}</Text>
+            {memoryImage ? <MediaThumbnail accessibilityLabel="回忆媒体" item={memoryImage} style={styles.memoryImage} /> : null}
+            <Text numberOfLines={4} style={styles.memoryText}>{memoryExcerpt(homeMemory.post.bodyMarkdown, memoryReadingSource)}</Text>
             <Text style={styles.memoryFoot}>{homeMemory.kind === 'person' ? `与 ${homeMemory.person.name} 有关的一段过去` : '那一天留下的坐标'}　›</Text>
           </Pressable>
         </View>
@@ -261,6 +267,7 @@ export default function SpaceScreen() {
             onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
             onPress={() => router.push(`/post/${item.post.id}`)}
             post={item.post}
+            readingSource={readingNoteSources.find((source) => source.postId === item.post.id) ?? null}
             signature={preferences.profileSignature}
             nameStyle={preferences.selfNameStyle}
           />
@@ -277,7 +284,7 @@ export default function SpaceScreen() {
             <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingSheet}>
               <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
               <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
-              <Text style={styles.onboardingText}>无需注册。日记、人物和图片默认只保存在这台设备，可以随时完整导出。</Text>
+              <Text style={styles.onboardingText}>无需注册。日记、人物和媒体默认只保存在这台设备，可以随时完整导出。</Text>
               <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
               <View style={styles.onboardingCalendar}>
                 <Text style={styles.onboardingCalendarLabel}>生日历法</Text>
@@ -318,12 +325,13 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
   );
 }
 
-function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, onPress, post, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; signature: string }) {
+function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, onPress, post, readingSource, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null; signature: string }) {
   const [bodyOverflowed, setBodyOverflowed] = useState(false);
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
-  const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
+  const displayMarkdown = withoutReadingSourceQuote(withoutEmbeddedAttachments(post.bodyMarkdown), readingSource);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
+  const musicShare = extractMusicShares(post.bodyMarkdown)[0] ?? null;
   const hasHiddenContent = bodyOverflowed || images.length > 9 || audioEmbeds.length > 2;
 
   return (
@@ -347,6 +355,8 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
             />
           </View>
         ) : null}
+        {readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} /></View> : null}
+        {musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} /></View> : null}
         {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
         {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
         {hasHiddenContent ? <Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>更多</Text></Pressable> : null}
@@ -375,8 +385,8 @@ function ProfileAvatar({ name, uri }: { name: string; uri: string | null }) {
 function PostImageGrid({ images, onPressImage, totalCount }: { images: Media[]; onPressImage(index: number): void; totalCount: number }) {
   if (images.length === 1) {
     return (
-      <Pressable accessibilityLabel="预览记录图片" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPressImage(0); }}>
-        <Image accessibilityLabel="记录图片" resizeMode="cover" source={{ uri: images[0].localPath }} style={[styles.postSingleImage, { aspectRatio: previewAspectRatio(images[0]) }]} />
+      <Pressable accessibilityLabel="预览记录媒体" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPressImage(0); }}>
+        <MediaThumbnail accessibilityLabel={images[0].mimeType.startsWith('video/') ? '记录视频' : '记录图片'} item={images[0]} style={[styles.postSingleImage, { aspectRatio: previewAspectRatio(images[0]) }]} />
       </Pressable>
     );
   }
@@ -384,8 +394,8 @@ function PostImageGrid({ images, onPressImage, totalCount }: { images: Media[]; 
   return (
     <View style={styles.postImageGrid}>
       {visibleImages.map((image, index) => (
-        <Pressable accessibilityLabel={`预览记录图片 ${index + 1}`} accessibilityRole="button" key={`${image.id}_${index}`} onPress={(event) => { event.stopPropagation(); onPressImage(index); }} style={styles.postImageCell}>
-          <Image accessibilityLabel={`记录图片 ${index + 1}`} resizeMode="cover" source={{ uri: image.localPath }} style={styles.postImage} />
+        <Pressable accessibilityLabel={`预览记录媒体 ${index + 1}`} accessibilityRole="button" key={`${image.id}_${index}`} onPress={(event) => { event.stopPropagation(); onPressImage(index); }} style={styles.postImageCell}>
+          <MediaThumbnail accessibilityLabel={image.mimeType.startsWith('video/') ? `记录视频 ${index + 1}` : `记录图片 ${index + 1}`} item={image} style={styles.postImage} />
           {index === visibleImages.length - 1 && totalCount > visibleImages.length ? <View style={styles.postImageMore}><Text style={styles.postImageMoreText}>+{totalCount - visibleImages.length}</Text></View> : null}
         </Pressable>
       ))}
@@ -507,9 +517,11 @@ function firstMediaId(markdown: string): string | null {
   return markdown.match(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/)?.[1] ?? null;
 }
 
-function memoryExcerpt(markdown: string): string {
+function memoryExcerpt(markdown: string, readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null): string {
   const audioEmbeds = extractAudioEmbeds(markdown);
-  return markdownToPlainText(markdown).replace(/\[照片\]/g, '').trim() || (audioEmbeds.length ? `那天留下了 ${audioEmbeds.length} 段语音。` : '那天留下了一张图片。');
+  const sharedMusic = extractMusicShares(markdown)[0];
+  const text = markdownToPlainText(withoutReadingSourceQuote(markdown, readingSource)).replace(/\[照片\]/g, '').trim();
+  return text || (readingSource ? `那天读了《${readingSourceTitle(readingSource)}》。` : sharedMusic ? `那天分享了《${sharedMusic.title}》。` : audioEmbeds.length ? `那天留下了 ${audioEmbeds.length} 段语音。` : '那天留下了一张图片。');
 }
 
 function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMemory']>, today: string): string {
@@ -604,6 +616,8 @@ const styles = createThemedStyles(() => ({
   postSignature: { maxWidth: '100%', marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
   postMarkdownFrame: { width: '100%', marginTop: spacing.sm },
   postMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
+  musicShare: { marginTop: spacing.md },
+  readingShare: { marginTop: spacing.md },
   postSingleImage: { width: '92%', marginTop: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   postImageGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   postImageCell: { width: '32%', aspectRatio: 1, position: 'relative', overflow: 'hidden', borderRadius: 4, backgroundColor: colors.lifeLight },

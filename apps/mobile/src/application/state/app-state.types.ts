@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 
 export interface AppStateValue {
@@ -14,12 +14,14 @@ export interface AppStateValue {
   personTags: PersonTagAssignment[];
   albums: PersonAlbum[];
   albumMedia: AlbumMedia[];
+  personBooks: PersonBook[];
   musicTracks: MusicTrack[];
   musicCollectionEntries: MusicCollectionEntry[];
   musicPlaylists: MusicPlaylist[];
   musicPlaylistEntries: MusicPlaylistEntry[];
   books: Book[];
   bookExcerpts: BookExcerpt[];
+  readingNoteSources: ReadingNoteSource[];
   homeMemory: HomeMemory | null;
   preferences: AppPreferences;
   notificationPermission: 'granted' | 'denied' | 'undetermined';
@@ -42,6 +44,7 @@ export interface AppStateValue {
   updatePerson(personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
   deletePerson(personId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
+  setPersonBooks(personId: string, bookIds: string[]): Promise<void>;
   createTag(name: string, groupId?: string | null): Promise<TagDefinition>;
   renameTag(tagId: string, name: string): Promise<void>;
   deleteTag(tagId: string): Promise<void>;

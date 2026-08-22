@@ -224,7 +224,7 @@ export function removeMaterializedMedia(materialized: MaterializedBackup): void 
 
 function validateSnapshot(value: BackupSnapshot): void {
   if (!value || typeof value !== 'object') throw new Error('备份数据格式无效');
-  const collections = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'albums', 'albumMedia'] as const;
+  const collections = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'albums', 'albumMedia', 'personBooks'] as const;
   for (const key of collections) if (!Array.isArray(value[key])) throw new Error(`备份数据缺少 ${key}`);
 
   assertUniqueIds(value.posts, '日记');
@@ -236,6 +236,7 @@ function validateSnapshot(value: BackupSnapshot): void {
   const personTags = value.personTags ?? [];
   const albums = value.albums ?? [];
   const albumMedia = value.albumMedia ?? [];
+  const personBooks = value.personBooks ?? [];
   const musicTracks = value.musicTracks ?? [];
   const musicCollectionEntries = value.musicCollectionEntries ?? [];
   const musicPlaylists = value.musicPlaylists ?? [];
@@ -259,6 +260,12 @@ function validateSnapshot(value: BackupSnapshot): void {
   const personIds = new Set(value.people.map((person) => person.id));
   const mediaIds = new Set(value.media.map((item) => item.id));
   const bookIds = new Set(books.map((book) => book.id));
+  const personBookKeys = new Set<string>();
+  for (const relation of personBooks) {
+    const key = `${relation.personId}:${relation.bookId}`;
+    if (!personIds.has(relation.personId) || !bookIds.has(relation.bookId) || personBookKeys.has(key)) throw new Error('备份中的人物喜欢的书籍关联无效');
+    personBookKeys.add(key);
+  }
   const excerptIds = new Set(bookExcerpts.map((excerpt) => excerpt.id));
   const musicTrackIds = new Set(musicTracks.map((track) => track.id));
   const musicPlaylistIds = new Set(musicPlaylists.map((playlist) => playlist.id));
@@ -285,13 +292,14 @@ function validateSnapshot(value: BackupSnapshot): void {
   for (const book of books) {
     if (!mediaIds.has(book.fileMediaId) || !value.media.find((item) => item.id === book.fileMediaId)?.kind?.includes('book')) throw new Error('备份中的书籍文件关联无效');
     if (book.coverMediaId && !mediaIds.has(book.coverMediaId)) throw new Error('备份中的书籍封面关联无效');
-    if (!['pdf', 'epub', 'mobi', 'azw', 'azw3'].includes(book.format) || !['ready', 'protected', 'unsupported', 'failed'].includes(book.parseStatus)) throw new Error('备份中的书籍格式或解析状态无效');
+    if (!['pdf', 'epub', 'mobi', 'txt', 'html', 'fb2', 'azw', 'azw3'].includes(book.format) || !['ready', 'protected', 'unsupported', 'failed'].includes(book.parseStatus)) throw new Error('备份中的书籍格式或解析状态无效');
     if (!Number.isFinite(book.progress) || book.progress < 0 || book.progress > 1) throw new Error('备份中的阅读进度无效');
-    if (book.locationType && !['epub-cfi', 'pdf-page', 'manual'].includes(book.locationType)) throw new Error('备份中的书籍定位类型无效');
+    if (book.lastReadAt !== null && (typeof book.lastReadAt !== 'string' || Number.isNaN(new Date(book.lastReadAt).getTime()))) throw new Error('备份中的最近阅读时间无效');
+    if (book.locationType && !['epub-cfi', 'reflow-cfi', 'pdf-page', 'manual'].includes(book.locationType)) throw new Error('备份中的书籍定位类型无效');
     if (book.pageCount != null && (!Number.isInteger(book.pageCount) || book.pageCount < 1)) throw new Error('备份中的 PDF 页数无效');
     if (book.chapterCache && (!Array.isArray(book.chapterCache) || book.chapterCache.some((item) => !item || typeof item.href !== 'string' || typeof item.label !== 'string' || !Number.isInteger(item.depth)))) throw new Error('备份中的书籍目录无效');
   }
-  for (const excerpt of bookExcerpts) if (!bookIds.has(excerpt.bookId) || !excerpt.text.trim() || excerpt.text.length > 20_000 || (excerpt.locationType && !['epub-cfi', 'pdf-page', 'manual'].includes(excerpt.locationType)) || (excerpt.sourceKind && !['selection', 'manual'].includes(excerpt.sourceKind))) throw new Error('备份中的摘抄无效');
+  for (const excerpt of bookExcerpts) if (!bookIds.has(excerpt.bookId) || !excerpt.text.trim() || excerpt.text.length > 20_000 || (excerpt.locationType && !['epub-cfi', 'reflow-cfi', 'pdf-page', 'manual'].includes(excerpt.locationType)) || (excerpt.sourceKind && !['selection', 'manual'].includes(excerpt.sourceKind))) throw new Error('备份中的摘抄无效');
   for (const source of readingNoteSources) {
     if (!postIds.has(source.postId) || (source.bookId && !bookIds.has(source.bookId)) || source.excerptIds.some((id) => !excerptIds.has(id)) || !Array.isArray(source.quoteSnapshots)) throw new Error('备份中的阅读笔记引用无效');
   }
@@ -320,7 +328,7 @@ function validateSnapshot(value: BackupSnapshot): void {
   const albumById = new Map(albums.map((album) => [album.id, album]));
   const albumRelationByMedia = new Map<string, (typeof albumMedia)[number]>();
   for (const relation of albumMedia) {
-    if (!albumIds.has(relation.albumId) || !mediaIds.has(relation.mediaId) || albumRelationByMedia.has(relation.mediaId)) throw new Error('备份中的相册照片关联无效');
+    if (!albumIds.has(relation.albumId) || !mediaIds.has(relation.mediaId) || albumRelationByMedia.has(relation.mediaId)) throw new Error('备份中的相册媒体关联无效');
     albumRelationByMedia.set(relation.mediaId, relation);
   }
   for (const album of albums) {
@@ -354,6 +362,7 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.personTags ??= [];
   value.albums ??= [];
   value.albumMedia ??= [];
+  value.personBooks ??= [];
   value.musicTracks ??= [];
   value.musicCollectionEntries ??= [];
   value.musicPlaylists ??= [];
@@ -371,23 +380,24 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.readingNoteSources ??= [];
   for (const book of value.books) {
     if (book.format === 'pdf' && book.location?.match(/^page:\d+$/)) book.location = book.location.replace(/^page:/, 'pdf:');
-    book.locationType ??= book.format === 'pdf' ? 'pdf-page' : book.location?.startsWith('epubcfi(') ? 'epub-cfi' : null;
+    book.locationType ??= book.format === 'pdf' ? 'pdf-page' : book.location?.startsWith('epubcfi(') ? 'epub-cfi' : book.location?.startsWith('reflow:') || book.location?.startsWith('reflow-href:') ? 'reflow-cfi' : null;
     book.chapterHref ??= null;
     book.chapterTitle ??= null;
     book.engineVersion ??= null;
     book.pageCount ??= null;
     book.chapterCache ??= [];
+    book.lastReadAt ??= book.progress > 0 ? book.updatedAt : null;
   }
   for (const excerpt of value.bookExcerpts) {
     if (excerpt.location?.match(/^page:\d+$/)) excerpt.location = excerpt.location.replace(/^page:/, 'pdf:');
-    excerpt.locationType ??= excerpt.location?.startsWith('pdf:') ? 'pdf-page' : excerpt.location?.startsWith('epubcfi(') ? 'epub-cfi' : 'manual';
+    excerpt.locationType ??= excerpt.location?.startsWith('pdf:') ? 'pdf-page' : excerpt.location?.startsWith('epubcfi(') ? 'epub-cfi' : excerpt.location?.startsWith('reflow:') || excerpt.location?.startsWith('reflow-href:') ? 'reflow-cfi' : 'manual';
     excerpt.chapterTitle ??= null;
     excerpt.contextBefore ??= null;
     excerpt.contextAfter ??= null;
     excerpt.sourceKind ??= 'manual';
   }
   for (const media of value.media ?? []) {
-    media.kind ??= media.mimeType.startsWith('audio/') ? 'audio' : 'image';
+    media.kind ??= media.mimeType.startsWith('audio/') ? 'audio' : media.mimeType.startsWith('video/') ? 'video' : 'image';
     media.originalName ??= null;
     media.sizeBytes ??= null;
   }

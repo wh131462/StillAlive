@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
@@ -24,6 +24,8 @@ export interface StillAliveRepository {
   updatePerson(person: Person): Promise<void>;
   deletePerson(personId: string): Promise<string[]>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
+  listPersonBooks(): Promise<PersonBook[]>;
+  setPersonBooks(personId: string, bookIds: string[]): Promise<void>;
   listTagDefinitions(): Promise<TagDefinition[]>;
   createTagDefinition(tag: TagDefinition): Promise<void>;
   updateTagDefinition(tag: TagDefinition): Promise<void>;
@@ -73,6 +75,7 @@ export interface StillAliveRepository {
   createBookExcerpt(excerpt: BookExcerpt): Promise<void>;
   updateBookExcerpt(excerpt: BookExcerpt): Promise<void>;
   deleteBookExcerpt(excerptId: string): Promise<void>;
+  listReadingNoteSources(): Promise<ReadingNoteSource[]>;
   getReadingNoteSource(postId: string): Promise<ReadingNoteSource | null>;
   saveReadingNoteSource(source: ReadingNoteSource): Promise<void>;
 }

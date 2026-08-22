@@ -11,12 +11,19 @@ import VoicePlayer from '../../shared/components/voice-player';
 import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview.types';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
+import { MusicShareCard } from '../../application/components/music-share-card';
+import { ReadingShareCard } from '../../application/components/reading-share-card';
+import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
+import { withoutReadingSourceQuote } from '../../application/reading-share';
+import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
+import { MediaVideo } from '../../shared/components/media-video';
 
 export default function PostDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { deletePost, media, posts, ready } = useAppState();
+  const { deletePost, media, posts, readingNoteSources, ready } = useAppState();
   const post = useMemo(() => posts.find((item) => item.id === id), [id, posts]);
+  const readingSource = useMemo(() => readingNoteSources.find((source) => source.postId === id) ?? null, [id, readingNoteSources]);
   const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
   const [readyPostId, setReadyPostId] = useState<string | null>(null);
   const contentReady = Boolean(post && readyPostId === post.id);
@@ -41,21 +48,11 @@ export default function PostDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}>
-          <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" />
-        </Pressable>
-        {post ? (
-          <View style={styles.actions}>
-            <Pressable accessibilityLabel="编辑日记" accessibilityRole="button" onPress={() => router.push({ pathname: '/editor', params: { postId: post.id } })} style={styles.headerButton}>
-              <SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" />
-            </Pressable>
-            <Pressable accessibilityLabel="删除日记" accessibilityRole="button" onPress={confirmDelete} style={styles.headerButton}>
-              <SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" />
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+      <ToolPageHeader
+        onBack={() => router.back()}
+        right={post ? <><ToolPageHeaderAction accessibilityLabel="编辑日记" onPress={() => router.push({ pathname: '/editor', params: { postId: post.id } })}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="删除日记" onPress={confirmDelete}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></ToolPageHeaderAction></> : undefined}
+        title="日记详情"
+      />
 
       {!ready ? (
         <DetailLoading />
@@ -67,6 +64,7 @@ export default function PostDetailScreen() {
               mediaById={mediaById}
               onImagePress={(item) => router.push({ pathname: '/file-preview', params: previewRouteParams(extractMediaItems(post.bodyMarkdown, mediaById).map(toSelectedPreviewFile), extractMediaItems(post.bodyMarkdown, mediaById).findIndex((candidate) => candidate.id === item.id)) })}
               onReady={handleContentReady}
+              readingSource={readingSource}
             />
             <Text style={styles.detailTime}>{post.locationName ? `${post.locationName} / ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
           </ScrollView>
@@ -104,8 +102,9 @@ function DetailLoading() {
   );
 }
 
-function PostBody({ markdown, mediaById, onImagePress, onReady }: { markdown: string; mediaById: Map<string, Media>; onImagePress(item: Media): void; onReady(): void }) {
-  const segments = splitPostBody(markdown);
+function PostBody({ markdown, mediaById, onImagePress, onReady, readingSource }: { markdown: string; mediaById: Map<string, Media>; onImagePress(item: Media): void; onReady(): void; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null }) {
+  const musicShares = extractMusicShares(markdown);
+  const segments = splitPostBody(withoutReadingSourceQuote(withoutMusicShares(markdown), readingSource));
   const markdownSegmentCount = segments.filter((segment) => segment.type === 'markdown' && segment.value.trim()).length;
   const readinessRef = useRef({ markdown, readyIndexes: new Set<number>() });
   if (readinessRef.current.markdown !== markdown) readinessRef.current = { markdown, readyIndexes: new Set<number>() };
@@ -119,7 +118,7 @@ function PostBody({ markdown, mediaById, onImagePress, onReady }: { markdown: st
     if (readinessRef.current.readyIndexes.size === markdownSegmentCount) onReady();
   };
 
-  return segments.map((segment, index) => {
+  return <>{readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} variant="detail" /></View> : null}{musicShares.map((share, index) => <View key={`music_${share.trackId}_${index}`} style={styles.musicShare}><MusicShareCard share={share} variant="detail" /></View>)}{segments.map((segment, index) => {
     if (segment.type === 'markdown') {
       if (!segment.value.trim()) return null;
       return (
@@ -143,20 +142,22 @@ function PostBody({ markdown, mediaById, onImagePress, onReady }: { markdown: st
 
     const item = mediaById.get(segment.id);
     if (!item) return <ImageFallback key={`missing_${segment.id}_${index}`} />;
-    return <PostImage alt={segment.alt} item={item} key={`image_${segment.id}_${index}`} onPress={() => onImagePress(item)} />;
-  });
+    return <PostMedia alt={segment.alt} item={item} key={`media_${segment.id}_${index}`} onPress={() => onImagePress(item)} />;
+  })}</>;
 }
 
-function PostImage({ alt, item, onPress }: { alt: string; item: Media; onPress(): void }) {
+function PostMedia({ alt, item, onPress }: { alt: string; item: Media; onPress(): void }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const aspectRatio = item.width && item.height ? item.width / item.height : 4 / 3;
+
+  if (item.mimeType.startsWith('video/')) return <MediaVideo style={[styles.postImage, { aspectRatio }]} uri={item.localPath} />;
 
   if (failed) {
     return <ImageFallback aspectRatio={aspectRatio} onRetry={() => { setAttempt((value) => value + 1); setFailed(false); }} />;
   }
 
-  return <Pressable accessibilityLabel={alt || '预览日记图片'} accessibilityRole="button" onPress={onPress} style={styles.postImagePressable}>
+  return <Pressable accessibilityLabel={alt || '预览日记媒体'} accessibilityRole="button" onPress={onPress} style={styles.postImagePressable}>
     <Image
       key={attempt}
       accessibilityLabel={alt || '日记图片'}
@@ -221,14 +222,13 @@ function formatTime(iso: string): string {
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.sheet },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  actions: { flexDirection: 'row' },
   detailContainer: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   contentHidden: { opacity: 0 },
   detailTime: { marginTop: spacing.lg, color: colors.inkFaint, fontSize: 9, textAlign: 'right' },
   markdownView: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
+  musicShare: { marginBottom: spacing.lg },
+  readingShare: { marginBottom: spacing.lg },
   audioSection: { marginTop: spacing.md },
   audioMissing: { minHeight: 64, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.paper },
   audioMissingText: { color: colors.inkFaint, fontSize: 10 },

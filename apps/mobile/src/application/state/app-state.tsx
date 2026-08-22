@@ -3,7 +3,7 @@ import type { PropsWithChildren } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState as NativeAppState, Linking } from 'react-native';
-import type { AlbumMedia, Book, BookExcerpt, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
@@ -41,12 +41,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [personTags, setPersonTagsState] = useState<PersonTagAssignment[]>([]);
   const [albums, setAlbums] = useState<PersonAlbum[]>([]);
   const [albumMedia, setAlbumMedia] = useState<AlbumMedia[]>([]);
+  const [personBooks, setPersonBooksState] = useState<PersonBook[]>([]);
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
   const [musicCollectionEntries, setMusicCollectionEntries] = useState<MusicCollectionEntry[]>([]);
   const [musicPlaylists, setMusicPlaylists] = useState<MusicPlaylist[]>([]);
   const [musicPlaylistEntries, setMusicPlaylistEntries] = useState<MusicPlaylistEntry[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [bookExcerpts, setBookExcerpts] = useState<BookExcerpt[]>([]);
+  const [readingNoteSources, setReadingNoteSources] = useState<ReadingNoteSource[]>([]);
   const [homeMemory, setHomeMemory] = useState<HomeMemory | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(DEFAULT_PREFERENCES);
   const [notificationPermission, setNotificationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
@@ -108,12 +110,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const storedPersonTags = await repository.listPersonTagAssignments();
       const storedAlbums = await repository.listAlbums();
       const storedAlbumMedia = await repository.listAlbumMedia();
+      const storedPersonBooks = await repository.listPersonBooks();
       const storedMusicTracks = await repository.listMusicTracks();
       const storedMusicCollectionEntries = await repository.listMusicCollectionEntries();
       const storedMusicPlaylists = await repository.listMusicPlaylists();
       const storedMusicPlaylistEntries = await repository.listMusicPlaylistEntries();
       const storedBooks = await repository.listBooks();
       const storedBookExcerpts = await repository.listBookExcerpts();
+      const storedReadingNoteSources = await repository.listReadingNoteSources();
       if (active) {
         setError(null);
         setTodayCheckIn(checkIn);
@@ -127,12 +131,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setPersonTagsState(storedPersonTags);
         setAlbums(storedAlbums);
         setAlbumMedia(storedAlbumMedia);
+        setPersonBooksState(storedPersonBooks);
         setMusicTracks(storedMusicTracks);
         setMusicCollectionEntries(storedMusicCollectionEntries);
         setMusicPlaylists(storedMusicPlaylists);
         setMusicPlaylistEntries(storedMusicPlaylistEntries);
         setBooks(storedBooks);
         setBookExcerpts(storedBookExcerpts);
+        setReadingNoteSources(storedReadingNoteSources);
         try { cleanupOrphanedAlbumFiles(storedMedia); } catch { /* 不阻塞主数据加载 */ }
         setHomeMemory(memory);
         const hasExistingContent = storedCheckIns.length > 0 || storedPosts.length > 0;
@@ -248,6 +254,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await repository.deletePost(postId);
     const storedPosts = await repository.listPosts();
     setPosts(storedPosts);
+    setReadingNoteSources((current) => current.filter((source) => source.postId !== postId));
     setHomeMemory((current) => current?.post.id === postId ? null : current);
     await cleanupUnreferencedMedia(extractEmbeddedMediaIds(existing.bodyMarkdown));
     void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch(() => undefined);
@@ -280,6 +287,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPeople(await repository.listPeople());
     if (!enabled) setHomeMemory((current) => current?.kind === 'person' && current.person.id === personId ? null : current);
   }, [repository]);
+
+  const setPersonBooks = useCallback(async (personId: string, bookIds: string[]) => {
+    if (!people.some((person) => person.id === personId)) throw new Error('人物不存在或已删除');
+    const availableBookIds = new Set(books.map((book) => book.id));
+    const nextBookIds = [...new Set(bookIds)].filter((bookId) => availableBookIds.has(bookId));
+    await repository.setPersonBooks(personId, nextBookIds);
+    setPersonBooksState(await repository.listPersonBooks());
+  }, [books, people, repository]);
 
   const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
     if (!changes.name.trim()) throw new Error('人物名字不能为空');
@@ -366,6 +381,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     try { deletePersonAlbumDirectory(personId); } catch { /* 数据记录已删除 */ }
     setAlbums(await repository.listAlbums());
     setAlbumMedia(await repository.listAlbumMedia());
+    setPersonBooksState(await repository.listPersonBooks());
     setPersonTagsState(await repository.listPersonTagAssignments());
     setMedia(await repository.listMedia());
     setHomeMemory((current) => current?.kind === 'person' && current.person.id === personId ? null : current);
@@ -747,6 +763,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const assets = book ? [book.fileMediaId, book.coverMediaId].filter((id): id is string => Boolean(id)) : [];
     await repository.deleteBook(bookId);
     setBooks(await repository.listBooks());
+    setPersonBooksState(await repository.listPersonBooks());
     setBookExcerpts(await repository.listBookExcerpts());
     if (assets.length) {
       await cleanupUnreferencedMedia(assets);
@@ -770,7 +787,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [repository]);
 
   const getReadingNoteSource = useCallback((postId: string) => repository.getReadingNoteSource(postId), [repository]);
-  const saveReadingNoteSource = useCallback((source: ReadingNoteSource) => repository.saveReadingNoteSource(source), [repository]);
+  const saveReadingNoteSource = useCallback(async (source: ReadingNoteSource) => {
+    await repository.saveReadingNoteSource(source);
+    setReadingNoteSources((current) => [...current.filter((item) => item.postId !== source.postId), source]);
+  }, [repository]);
 
   const createBackupSnapshot = useCallback(() => repository.exportBackupSnapshot(), [repository]);
 
@@ -853,7 +873,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       void syncMemoryNotifications(oldPosts, oldPreferences).catch(() => undefined);
       throw cause;
     }
-    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBooks, storedBookExcerpts] = await Promise.all([
+    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
       repository.getCheckIn(today),
       repository.listCheckIns(),
       repository.listPosts(),
@@ -867,12 +887,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       repository.listPersonTagAssignments(),
       repository.listAlbums(),
       repository.listAlbumMedia(),
+      repository.listPersonBooks(),
       repository.listMusicTracks(),
       repository.listMusicCollectionEntries(),
       repository.listMusicPlaylists(),
       repository.listMusicPlaylistEntries(),
       repository.listBooks(),
       repository.listBookExcerpts(),
+      repository.listReadingNoteSources(),
     ]);
     setTodayCheckIn(checkIn);
     setCheckIns(storedCheckIns);
@@ -887,12 +909,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPersonTagsState(storedPersonTags);
     setAlbums(storedAlbums);
     setAlbumMedia(storedAlbumMedia);
+    setPersonBooksState(storedPersonBooks);
     setMusicTracks(storedMusicTracks);
     setMusicCollectionEntries(storedMusicCollectionEntries);
     setMusicPlaylists(storedMusicPlaylists);
     setMusicPlaylistEntries(storedMusicPlaylistEntries);
     setBooks(storedBooks);
     setBookExcerpts(storedBookExcerpts);
+    setReadingNoteSources(storedReadingNoteSources);
     if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
     void syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
     void syncMemoryNotifications(storedPosts, storedPreferences).catch(() => undefined);
@@ -944,6 +968,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setMusicPlaylistEntries([]);
     setBooks([]);
     setBookExcerpts([]);
+    setReadingNoteSources([]);
+    setPersonBooksState([]);
     setTagDefinitions([]);
     setTagGroups([]);
     setTagSystemSettings([]);
@@ -994,12 +1020,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     personTags,
     albums,
     albumMedia,
+    personBooks,
     musicTracks,
     musicCollectionEntries,
     musicPlaylists,
     musicPlaylistEntries,
     books,
     bookExcerpts,
+    readingNoteSources,
     homeMemory,
     preferences,
     notificationPermission,
@@ -1022,6 +1050,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     updatePerson,
     deletePerson,
     setPersonMemoryEnabled,
+    setPersonBooks,
     createTag,
     renameTag,
     deleteTag,
@@ -1075,7 +1104,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     deleteBookExcerpt,
     getReadingNoteSource,
     saveReadingNoteSource,
-  }), [addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createMusicPlaylist, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, persistentNotificationRunning, personTags, posts, preferences, ready, recordBackupExport, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePost, updatePreferences, updateTagSystems]);
+  }), [addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createMusicPlaylist, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

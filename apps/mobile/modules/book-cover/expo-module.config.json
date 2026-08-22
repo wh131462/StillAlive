@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["StillAliveBookCoverModule"],
+    "podspecPath": "StillAliveBookCover.podspec"
+  },
+  "android": {
+    "modules": ["com.wh131462.stillalive.bookcover.StillAliveBookCoverModule"]
+  }
+}

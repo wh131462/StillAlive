@@ -19,7 +19,7 @@ import {
   View,
 } from 'react-native';
 import { feedback } from '../../shared/feedback';
-import type { DayKey, Media } from '@still-alive/types';
+import type { DayKey, Media, ReadingNoteSource } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
@@ -27,21 +27,29 @@ import RichTextEditor from './rich-text-editor.dom';
 import type { EditorCommand, EditorCommandType, EditorMediaSource } from './rich-text-editor.types';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
-import { persistPickedImage, persistVoiceRecording } from '../../infrastructure/files/local-media';
+import { persistPickedMedia, persistVoiceRecording } from '../../infrastructure/files/local-media';
 import { resolveDeviceLocation } from '../../infrastructure/platform/device-location';
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
 import { extractEmbeddedMediaIds } from './embedded-media';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { MusicShareCard } from '../../application/components/music-share-card';
+import { ReadingShareCard } from '../../application/components/reading-share-card';
+import { createMusicShare, extractMusicShares, withMusicShare, withoutMusicShares } from '../../application/music-share';
+import type { MusicShare } from '../../application/music-share';
+import { withReadingSourceQuote, withoutReadingSourceQuote } from '../../application/reading-share';
+import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 
 export default function EditorScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const { dayKey: requestedDayKey, personId, postId, sourceBookId, sourceExcerptId } = useLocalSearchParams<{ dayKey?: string; personId?: string; postId?: string; sourceBookId?: string; sourceExcerptId?: string }>();
-  const { bookExcerpts, books, createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, people, posts, ready, saveDraft, saveMedia, savePost, saveReadingNoteSource, today, todayCheckIn, updatePost } = useAppState();
+  const { dayKey: requestedDayKey, musicTrackId, personId, postId, sourceBookId, sourceExcerptId } = useLocalSearchParams<{ dayKey?: string; musicTrackId?: string; personId?: string; postId?: string; sourceBookId?: string; sourceExcerptId?: string }>();
+  const { bookExcerpts, books, createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, musicTracks, people, posts, readingNoteSources, ready, saveDraft, saveMedia, savePost, saveReadingNoteSource, today, todayCheckIn, updatePost } = useAppState();
   const initializedRef = useRef(false);
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
   const initialPersonIdsRef = useRef<string[]>([]);
   const initialLocationRef = useRef<string | null>(null);
+  const initialMusicShareRef = useRef<MusicShare | null>(null);
   const createdMediaRef = useRef<Media[]>([]);
   const bodyTouchedRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,6 +57,7 @@ export default function EditorScreen() {
   const pendingDraftSaveRef = useRef<Promise<void> | null>(null);
   const commandIdRef = useRef(0);
   const [body, setBody] = useState('');
+  const [musicShare, setMusicShare] = useState<MusicShare | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [command, setCommand] = useState<EditorCommand | null>(null);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
@@ -76,7 +85,20 @@ export default function EditorScreen() {
   const recorderState = useAudioRecorderState(audioRecorder, 250);
   const targetDay = editingPost?.dayKey ?? validPastDay(requestedDayKey, today);
   const isPastEntry = !postId && targetDay !== today;
-  const headerSubtitle = draftStatus || (postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
+  const sourceBook = sourceBookId ? books.find((book) => book.id === sourceBookId) ?? null : null;
+  const sourceExcerpt = sourceExcerptId && sourceBook ? bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId && excerpt.bookId === sourceBook.id) ?? null : null;
+  const readingSource = useMemo<ReadingNoteSource | null>(() => {
+    if (postId) return readingNoteSources.find((source) => source.postId === postId) ?? null;
+    if (!sourceBook || (sourceExcerptId && !sourceExcerpt)) return null;
+    return {
+      postId: '',
+      bookId: sourceBook.id,
+      excerptIds: sourceExcerpt ? [sourceExcerpt.id] : [],
+      quoteSnapshots: [{ bookTitle: sourceBook.title, text: sourceExcerpt?.text ?? '', location: sourceExcerpt?.location ?? null }],
+    };
+  }, [postId, readingNoteSources, sourceBook, sourceExcerpt, sourceExcerptId]);
+  const readingSourceBook = sourceBook ?? (readingSource?.bookId ? books.find((book) => book.id === readingSource.bookId) ?? null : null);
+  const headerSubtitle = draftStatus || (readingSource ? '写下这段阅读留给你的感受' : musicShare ? '写下这首歌留给你的感受' : postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
   const editorBusy = saving || audioSaving || mediaSaving || Boolean(locating) || relationsLoading;
 
   useEffect(() => {
@@ -88,9 +110,15 @@ export default function EditorScreen() {
         return;
       }
       initializedRef.current = true;
-      initialBodyRef.current = post.bodyMarkdown;
+      const sharedMusic = extractMusicShares(post.bodyMarkdown)[0] ?? null;
+      const currentReadingSource = readingNoteSources.find((source) => source.postId === post.id) ?? null;
+      const currentBook = currentReadingSource?.bookId ? books.find((book) => book.id === currentReadingSource.bookId) ?? null : null;
+      const visibleBody = withoutReadingSourceQuote(withoutMusicShares(post.bodyMarkdown), currentReadingSource, currentBook);
+      initialBodyRef.current = visibleBody;
+      initialMusicShareRef.current = sharedMusic;
       initialLocationRef.current = post.locationName;
-      setBody(post.bodyMarkdown);
+      setBody(visibleBody);
+      setMusicShare(sharedMusic);
       setLocationName(post.locationName);
       void getPersonIdsByPost(post.id).then((ids) => {
         initialPersonIdsRef.current = ids;
@@ -103,29 +131,37 @@ export default function EditorScreen() {
       });
       return;
     }
-    const sourceBook = sourceBookId ? books.find((book) => book.id === sourceBookId) : null;
-    const sourceExcerpt = sourceExcerptId && sourceBook ? bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId && excerpt.bookId === sourceBook.id) : null;
     const hasReadingSource = Boolean(sourceBook && (!sourceExcerptId || sourceExcerpt));
     if ((sourceBookId || sourceExcerptId) && !hasReadingSource) {
       initializedRef.current = true;
       feedback.alert('阅读来源不存在', '书籍或书摘可能已被删除。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
       return;
     }
-    if (targetDay === today && !todayCheckIn && !hasReadingSource) {
+    const sharedTrack = musicTrackId ? musicTracks.find((track) => track.id === musicTrackId) : null;
+    if (musicTrackId && !sharedTrack) {
+      initializedRef.current = true;
+      feedback.alert('歌曲不存在', '它可能已经被删除。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
+      return;
+    }
+    if (targetDay === today && !todayCheckIn && !hasReadingSource && !sharedTrack) {
       router.replace('/');
       return;
     }
     initializedRef.current = true;
     void loadDraft(targetDay).then((draft) => {
-      const quote = sourceExcerpt && sourceBook ? `> 《${sourceBook.title}》\n> ${sourceExcerpt.text.replaceAll('\n', '\n> ')}${sourceExcerpt.location ? `\n> —— ${sourceExcerpt.location}` : ''}\n\n` : sourceBook ? `> 《${sourceBook.title}》\n\n` : '';
-      initialBodyRef.current = draft?.bodyMarkdown ?? quote;
-      setBody(draft?.bodyMarkdown ?? quote);
+      const draftBody = draft?.bodyMarkdown ?? '';
+      const sharedMusic = sharedTrack ? createMusicShare(sharedTrack) : extractMusicShares(draftBody)[0] ?? null;
+      const visibleBody = withoutReadingSourceQuote(withoutMusicShares(draftBody), readingSource, sourceBook);
+      initialBodyRef.current = visibleBody;
+      initialMusicShareRef.current = sharedMusic;
+      setBody(visibleBody);
+      setMusicShare(sharedMusic);
       setRelationsLoading(false);
       setInitialized(true);
     }).catch((cause: unknown) => {
       feedback.alert('草稿加载失败', cause instanceof Error ? cause.message : '请返回后重试。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
     });
-  }, [bookExcerpts, books, getPersonIdsByPost, loadDraft, postId, posts, ready, router, sourceBookId, sourceExcerptId, targetDay, today, todayCheckIn]);
+  }, [bookExcerpts, books, getPersonIdsByPost, loadDraft, musicTrackId, musicTracks, postId, posts, readingNoteSources, readingSource, ready, router, sourceBook, sourceBookId, sourceExcerpt, sourceExcerptId, targetDay, today, todayCheckIn]);
 
   useEffect(() => {
     if (personId && people.some((person) => person.id === personId)) {
@@ -144,7 +180,7 @@ export default function EditorScreen() {
     if (postId || !initialized || !bodyTouchedRef.current) return;
     setDraftStatus('保存中…');
     draftTimerRef.current = setTimeout(() => {
-      const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(body, targetDay));
+      const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(withReadingSourceQuote(withMusicShare(body, musicShare), readingSource, readingSourceBook), targetDay));
       draftQueueRef.current = task;
       pendingDraftSaveRef.current = task;
       void task.then(() => {
@@ -159,7 +195,7 @@ export default function EditorScreen() {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       draftTimerRef.current = null;
     };
-  }, [body, initialized, postId, saveDraft, targetDay]);
+  }, [body, initialized, musicShare, postId, readingSource, readingSourceBook, saveDraft, targetDay]);
 
   useEffect(() => navigation.addListener('beforeRemove', (event) => {
     if (allowExitRef.current) return;
@@ -168,7 +204,7 @@ export default function EditorScreen() {
       feedback.alert(recorderState.isRecording ? '正在录音' : '正在处理内容', recorderState.isRecording ? '停止录音后才能离开这条记录。' : '请等待当前操作完成后再离开。');
       return;
     }
-    if (!createdMediaRef.current.length && !hasUnsavedContent(body, postId, initialBodyRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current)) return;
+    if (!createdMediaRef.current.length && !hasUnsavedContent(body, musicShare, postId, initialBodyRef.current, initialMusicShareRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current)) return;
     event.preventDefault();
     feedback.alert(
       postId ? '放弃这次修改？' : '先退出编写？',
@@ -181,7 +217,7 @@ export default function EditorScreen() {
           onPress: () => {
             const leave = () => navigation.dispatch(event.data.action);
             if (!postId) {
-              const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(body, targetDay));
+              const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(withReadingSourceQuote(withMusicShare(body, musicShare), readingSource, readingSourceBook), targetDay));
               draftQueueRef.current = task;
               void task.then(async () => {
                 const created = createdMediaRef.current;
@@ -204,7 +240,7 @@ export default function EditorScreen() {
         },
       ],
     );
-  }), [body, discardMedia, editorBusy, locationName, navigation, postId, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
+  }), [body, discardMedia, editorBusy, locationName, musicShare, navigation, postId, readingSource, readingSourceBook, recorderState.isRecording, saveDraft, selectedPersonIds, targetDay]);
 
   const editorMedia = useMemo<EditorMediaSource[]>(() => {
     const ids = new Set(extractEmbeddedMediaIds(body));
@@ -229,30 +265,28 @@ export default function EditorScreen() {
   const handleSave = async () => {
     if (editorBusy) return;
     const value = body.trim();
-    if (!value) {
+    if (!value && !musicShare && !readingSource) {
       feedback.alert('还没有内容', '写下一点内容或录一段语音后再记下。');
       return;
     }
+    const savedBody = withReadingSourceQuote(withMusicShare(value, musicShare), readingSource, readingSourceBook);
     try {
       setSaving(true);
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       draftTimerRef.current = null;
       await draftQueueRef.current.catch(() => undefined);
-      if (postId) await updatePost(postId, value, selectedPersonIds, locationName);
+      if (postId) await updatePost(postId, savedBody, selectedPersonIds, locationName);
       else {
-        const createdPost = await savePost(value, selectedPersonIds, targetDay, locationName);
-        const sourceBook = sourceBookId ? books.find((book) => book.id === sourceBookId) : null;
-        const sourceExcerpt = sourceExcerptId && sourceBook ? bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId && excerpt.bookId === sourceBook.id) : null;
-        if (sourceBook && (!sourceExcerptId || sourceExcerpt)) {
-          await saveReadingNoteSource({ postId: createdPost.id, bookId: sourceBook.id, excerptIds: sourceExcerpt ? [sourceExcerpt.id] : [], quoteSnapshots: sourceExcerpt ? [{ bookTitle: sourceBook.title, text: sourceExcerpt.text, location: sourceExcerpt.location }] : [] });
-        }
+        const createdPost = await savePost(savedBody, selectedPersonIds, targetDay, locationName);
+        if (readingSource) await saveReadingNoteSource({ ...readingSource, postId: createdPost.id });
       }
       const created = createdMediaRef.current;
       createdMediaRef.current = [];
       await Promise.all(created.map(discardMedia)).catch(() => undefined);
       allowExitRef.current = true;
       Keyboard.dismiss();
-      if (router.canGoBack()) router.back();
+      if (musicTrackId && !postId) router.replace('/');
+      else if (router.canGoBack()) router.back();
       else router.replace('/');
     } catch (cause: unknown) {
       setSaving(false);
@@ -354,35 +388,35 @@ export default function EditorScreen() {
     }
   };
 
-  const remainingImageSlots = () => {
+  const remainingMediaSlots = () => {
     const currentCount = [...body.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].length;
     const remaining = 9 - currentCount;
     if (remaining <= 0) {
-      feedback.alert('最多添加 9 张图片', '可以先删除一张，再添加新的图片。');
+      feedback.alert('最多添加 9 个媒体', '可以先删除一张图片或一个视频，再添加新的媒体。');
       return 0;
     }
     return remaining;
   };
 
-  const importPickedImages = async (assets: ImagePickerAsset[], limit: number) => {
+  const importPickedMedia = async (assets: ImagePickerAsset[], limit: number) => {
     const importedItems: Media[] = [];
     try {
       setMediaSaving(true);
-      setDraftStatus('正在保存图片…');
+      setDraftStatus('正在保存媒体…');
       for (const asset of assets.slice(0, limit)) {
-        const item = await persistPickedImage(asset);
+        const item = await persistPickedMedia(asset);
         importedItems.push(item);
         await saveMedia(item);
         createdMediaRef.current = [...createdMediaRef.current, item];
       }
-      const editorImages = await Promise.all(importedItems.map(async (item) => ({ id: item.id, uri: await mediaDataUrl(item), alt: '照片' })));
-      sendCommand('images', editorImages);
-      setDraftStatus('图片已保存到本机');
+      const editorMediaItems = await Promise.all(importedItems.map(async (item) => ({ id: item.id, mimeType: item.mimeType, uri: await editorMediaUri(item), alt: item.mimeType.startsWith('video/') ? '视频' : '照片' })));
+      sendCommand('images', editorMediaItems);
+      setDraftStatus('媒体已保存到本机');
     } catch (cause: unknown) {
       await Promise.all(importedItems.map(discardMedia)).catch(() => undefined);
       const failedIds = new Set(importedItems.map((item) => item.id));
       createdMediaRef.current = createdMediaRef.current.filter((item) => !failedIds.has(item.id));
-      feedback.alert('图片保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
+      feedback.alert('媒体保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
       setDraftStatus('本地草稿');
     } finally {
       setMediaSaving(false);
@@ -390,7 +424,7 @@ export default function EditorScreen() {
   };
 
   const openImageSourcePicker = () => {
-    if (editorBusy || !remainingImageSlots()) return;
+    if (editorBusy || !remainingMediaSlots()) return;
     Keyboard.dismiss();
     setImageSourcePickerOpen(true);
   };
@@ -398,32 +432,32 @@ export default function EditorScreen() {
   const handleTakePhoto = async () => {
     setImageSourcePickerOpen(false);
     if (editorBusy) return;
-    const remaining = remainingImageSlots();
+    const remaining = remainingMediaSlots();
     if (!remaining) return;
 
     if (!await ensureAppPermission('camera')) return;
 
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 });
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 });
     if (result.canceled) return;
-    await importPickedImages(result.assets, remaining);
+    await importPickedMedia(result.assets, remaining);
   };
 
   const handlePickImages = async () => {
     setImageSourcePickerOpen(false);
     if (editorBusy) return;
-    const remaining = remainingImageSlots();
+    const remaining = remainingMediaSlots();
     if (!remaining) return;
 
     if (!await ensureAppPermission('photos')) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
-      mediaTypes: ['images'],
+      mediaTypes: ['images', 'videos'],
       quality: 0.9,
       selectionLimit: remaining,
     });
     if (result.canceled) return;
-    await importPickedImages(result.assets, remaining);
+    await importPickedMedia(result.assets, remaining);
   };
 
   const handleReplaceImage = (mediaId: string) => {
@@ -440,23 +474,23 @@ export default function EditorScreen() {
     let replacement: Media | null = null;
     if (!await ensureAppPermission(source)) return;
     const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 });
     if (result.canceled) return;
     try {
       setMediaSaving(true);
-      setDraftStatus('正在替换图片…');
-      replacement = await persistPickedImage(result.assets[0]);
+      setDraftStatus('正在替换媒体…');
+      replacement = await persistPickedMedia(result.assets[0]);
       await saveMedia(replacement);
       createdMediaRef.current = [...createdMediaRef.current, replacement];
-      sendCommand('replaceImage', { ...replacement, alt: '照片', previousId: mediaId, uri: await mediaDataUrl(replacement) });
-      setDraftStatus('图片已替换');
+      sendCommand('replaceImage', { ...replacement, alt: replacement.mimeType.startsWith('video/') ? '视频' : '照片', mimeType: replacement.mimeType, previousId: mediaId, uri: await editorMediaUri(replacement) });
+      setDraftStatus('媒体已替换');
     } catch (cause: unknown) {
       if (replacement) {
         createdMediaRef.current = createdMediaRef.current.filter((item) => item.id !== replacement?.id);
         await discardMedia(replacement).catch(() => undefined);
       }
-      feedback.alert('图片替换失败', cause instanceof Error ? cause.message : '请稍后重试。');
+      feedback.alert('媒体替换失败', cause instanceof Error ? cause.message : '请稍后重试。');
       setDraftStatus('本地草稿');
     } finally {
       setMediaSaving(false);
@@ -515,20 +549,16 @@ export default function EditorScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppKeyboardAvoidingView style={styles.flex}>
-        <View style={styles.header}>
-          <View style={styles.headerSide}>
-            <Pressable accessibilityLabel="返回" accessibilityRole="button" disabled={editorBusy} onPress={() => router.back()} style={[styles.headerButton, editorBusy && styles.disabledControl]}>
-              <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.ink} type="hierarchical" />
-            </Pressable>
-          </View>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}</Text>
-            <Text style={styles.statusText}>{headerSubtitle}</Text>
-          </View>
-          <Pressable accessibilityRole="button" disabled={editorBusy || recorderState.isRecording} onPress={() => void handleSave()} style={[styles.saveButton, (editorBusy || recorderState.isRecording) && styles.saveButtonDisabled]}>
-            <Text style={styles.saveText}>{saving ? '保存中' : mediaSaving ? '处理图片' : audioSaving ? '保存语音' : relationsLoading ? '加载中' : '完成'}</Text>
-          </Pressable>
-        </View>
+        <ToolPageHeader
+          backDisabled={editorBusy}
+          onBack={() => router.back()}
+          right={<ToolPageHeaderTextAction disabled={editorBusy || recorderState.isRecording} emphasized label={saving ? '保存中' : mediaSaving ? '处理媒体' : audioSaving ? '保存语音' : relationsLoading ? '加载中' : '完成'} onPress={() => void handleSave()} />}
+          subtitle={headerSubtitle}
+          title={readingSource && !postId ? '阅读随感' : musicShare && !postId ? '分享音乐' : postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}
+        />
+
+        {initialized && readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} variant="composer" /></View> : null}
+        {initialized && musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} variant="composer" /></View> : null}
 
         {initialized ? (
           <RichTextEditor
@@ -543,7 +573,7 @@ export default function EditorScreen() {
             onMention={openPersonPicker}
             onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
             onStopRecording={() => void stopRecording()}
-            placeholder={`${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
+            placeholder={readingSource ? '这段阅读让你想到了什么？\n从这里写下感受…' : musicShare ? '这首歌让你想起了什么？\n从这里写下感受…' : `${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
             readLocalFile={readLocalFile}
             recordingDurationMs={recorderState.isRecording ? recorderState.durationMillis : null}
             theme={editorTheme()}
@@ -601,39 +631,25 @@ export default function EditorScreen() {
           <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.toolbar} contentContainerStyle={styles.toolbarContent}>
             <ToolButton active={activeFormats.includes('bold')} androidIcon="format_bold" icon="bold" label="粗体" onPress={() => sendCommand('bold')} />
             <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={openPersonPicker} />
-            <ToolButton androidIcon="image" icon="photo" label="插入图片" onPress={openImageSourcePicker} />
+            <ToolButton androidIcon="perm_media" icon="photo.on.rectangle" label="插入图片或视频" onPress={openImageSourcePicker} />
             <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />
             <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => { setShowMore((value) => !value); setShowTextSize(false); }} />
           </ScrollView>
         </View>
 
-        <Modal animationType="slide" onRequestClose={() => setImageSourcePickerOpen(false)} transparent visible={imageSourcePickerOpen}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setImageSourcePickerOpen(false)}>
-            <Pressable accessibilityLabel="选择图片来源" accessibilityRole="menu" accessibilityViewIsModal style={styles.imageSourceSheet} onPress={(event) => event.stopPropagation()}>
-              <View style={styles.sheetHandle} />
-              <ImageSourceOption label="拍摄" onPress={() => void handleTakePhoto()} />
+        <DraggableBottomSheet accessibilityLabel="选择媒体来源，向下拖动关闭" accessibilityRole="menu" onClose={() => setImageSourcePickerOpen(false)} open={imageSourcePickerOpen} sheetStyle={styles.imageSourceSheet}>
+              <ImageSourceOption label="拍摄照片或视频" onPress={() => void handleTakePhoto()} />
               <ImageSourceOption label="从手机相册选择" onPress={() => void handlePickImages()} />
               <Pressable accessibilityRole="button" onPress={() => setImageSourcePickerOpen(false)} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
-            </Pressable>
-          </Pressable>
-        </Modal>
+        </DraggableBottomSheet>
 
-        <Modal animationType="slide" onRequestClose={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} transparent visible={replaceImageSourcePickerOpen}>
-          <Pressable style={styles.modalBackdrop} onPress={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }}>
-            <Pressable accessibilityLabel="选择替换图片来源" accessibilityRole="menu" accessibilityViewIsModal style={styles.imageSourceSheet} onPress={(event) => event.stopPropagation()}>
-              <View style={styles.sheetHandle} />
-              <ImageSourceOption label="拍摄" onPress={() => void replaceImageFromSource('camera')} />
+        <DraggableBottomSheet accessibilityLabel="选择替换媒体来源，向下拖动关闭" accessibilityRole="menu" onClose={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} open={replaceImageSourcePickerOpen} sheetStyle={styles.imageSourceSheet}>
+              <ImageSourceOption label="拍摄照片或视频" onPress={() => void replaceImageFromSource('camera')} />
               <ImageSourceOption label="从手机相册选择" onPress={() => void replaceImageFromSource('photos')} />
               <Pressable accessibilityRole="button" onPress={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
-            </Pressable>
-          </Pressable>
-        </Modal>
+        </DraggableBottomSheet>
 
-        <Modal animationType="slide" onRequestClose={() => setPersonPickerOpen(false)} transparent visible={personPickerOpen}>
-          <AppKeyboardAvoidingView style={styles.flex}>
-            <Pressable style={styles.modalBackdrop} onPress={() => setPersonPickerOpen(false)}>
-              <Pressable style={styles.personSheet} onPress={(event) => event.stopPropagation()}>
-              <View style={styles.sheetHandle} />
+        <DraggableBottomSheet keyboardAvoiding onClose={() => setPersonPickerOpen(false)} open={personPickerOpen} sheetStyle={styles.personSheet}>
               <View style={styles.personSheetHeader}>
                 <View>
                   <Text style={styles.personSheetTitle}>提到谁？</Text>
@@ -655,16 +671,9 @@ export default function EditorScreen() {
                 <TextInput onChangeText={setNewPersonName} onSubmitEditing={() => void handleCreatePerson()} placeholder="输入名字，快速创建人物" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.personInput} value={newPersonName} />
                 <Pressable accessibilityRole="button" disabled={!newPersonName.trim()} onPress={() => void handleCreatePerson()} style={styles.createButton}><Text style={styles.createButtonText}>创建</Text></Pressable>
               </View>
-              </Pressable>
-            </Pressable>
-          </AppKeyboardAvoidingView>
-        </Modal>
+        </DraggableBottomSheet>
 
-        <Modal animationType="slide" onRequestClose={() => setLocationPickerOpen(false)} transparent visible={locationPickerOpen}>
-          <AppKeyboardAvoidingView style={styles.flex}>
-            <Pressable style={styles.modalBackdrop} onPress={() => setLocationPickerOpen(false)}>
-              <Pressable style={styles.locationSheet} onPress={(event) => event.stopPropagation()}>
-              <View style={styles.sheetHandle} />
+        <DraggableBottomSheet keyboardAvoiding onClose={() => setLocationPickerOpen(false)} open={locationPickerOpen} sheetStyle={styles.locationSheet}>
               <Text style={styles.locationSheetTitle}>所在位置</Text>
               <Text style={styles.locationSheetHint}>默认只记录城市；详细地址需要主动选择。地点只保存在本地，不会保存经纬度。</Text>
               <LocationOption androidIcon="location_off" icon="location.slash" label="不记录位置" onPress={() => { setLocationName(null); setLocationPickerOpen(false); }} />
@@ -677,10 +686,7 @@ export default function EditorScreen() {
                   <Pressable accessibilityRole="button" disabled={!customLocation.trim()} onPress={useCustomLocation} style={[styles.customLocationApply, !customLocation.trim() && styles.saveButtonDisabled]}><Text style={styles.customLocationApplyText}>使用</Text></Pressable>
                 </View>
               </View>
-              </Pressable>
-            </Pressable>
-          </AppKeyboardAvoidingView>
-        </Modal>
+        </DraggableBottomSheet>
 
         <Modal animationType="fade" onRequestClose={() => setLinkPickerOpen(false)} transparent visible={linkPickerOpen}>
           <AppKeyboardAvoidingView style={styles.flex}>
@@ -708,6 +714,10 @@ async function readLocalFile(uri: string): Promise<string> {
 
 async function mediaDataUrl(item: Media): Promise<string> {
   return `data:${item.mimeType || 'application/octet-stream'};base64,${await readLocalFile(item.localPath)}`;
+}
+
+async function editorMediaUri(item: Media): Promise<string> {
+  return item.mimeType.startsWith('video/') ? item.localPath : mediaDataUrl(item);
 }
 
 function TableActionButton({ active = false, androidIcon, destructive = false, icon, label, onPress, text }: { active?: boolean; androidIcon: AndroidSymbol; destructive?: boolean; icon: SFSymbol; label: string; onPress(): void; text: string }) {
@@ -759,9 +769,10 @@ function validPastDay(value: string | undefined, today: DayKey): DayKey {
   return toDayKey(parsed) === value ? value as DayKey : today;
 }
 
-function hasUnsavedContent(body: string, postId: string | undefined, initialBody: string, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
-  if (!postId) return body !== initialBody || Boolean(body.trim());
+function hasUnsavedContent(body: string, musicShare: MusicShare | null, postId: string | undefined, initialBody: string, initialMusicShare: MusicShare | null, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
+  if (!postId) return body !== initialBody || Boolean(body.trim()) || Boolean(musicShare);
   if (body !== initialBody) return true;
+  if (JSON.stringify(musicShare) !== JSON.stringify(initialMusicShare)) return true;
   if (locationName !== initialLocation) return true;
   return [...personIds].sort().join(',') !== [...initialPersonIds].sort().join(',');
 }
@@ -779,16 +790,10 @@ function markdownTextLength(markdown: string): number {
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.sheet },
-  header: { minHeight: 62, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerSide: { width: 68 },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   disabledControl: { opacity: 0.55 },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
-  statusText: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
-  saveButton: { minWidth: 68, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.life },
   saveButtonDisabled: { opacity: 0.6 },
-  saveText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },
+  musicShare: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  readingShare: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   domEditor: { flex: 1, width: '100%', backgroundColor: 'transparent' },
   meta: { minHeight: 34, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: typography.size.meta },

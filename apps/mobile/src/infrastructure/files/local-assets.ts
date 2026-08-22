@@ -5,7 +5,15 @@ import type { BookFormat, Media } from '@still-alive/types';
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg', '.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
 const ENCRYPTED_AUDIO_EXTENSIONS = new Set(['.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
 const REJECTED_AUDIO_EXTENSIONS = new Set(['.kgg']);
-const BOOK_EXTENSIONS = new Set(['.pdf', '.epub', '.mobi', '.azw', '.azw3']);
+const BOOK_EXTENSIONS = new Map<string, BookFormat>([
+  ['.pdf', 'pdf'],
+  ['.epub', 'epub'],
+  ['.mobi', 'mobi'],
+  ['.txt', 'txt'],
+  ['.html', 'html'],
+  ['.htm', 'html'],
+  ['.fb2', 'fb2'],
+]);
 const MAX_AUDIO_BYTES = 512 * 1024 * 1024;
 let assetPickerInProgress = false;
 
@@ -96,8 +104,7 @@ export async function probeAudioFile(file: File): Promise<LocalAudioFormat | nul
 }
 export function isSupportedBookName(name: string): boolean { return BOOK_EXTENSIONS.has(extensionOf(name)); }
 export function bookFormatFromName(name: string): BookFormat | null {
-  const extension = extensionOf(name).slice(1);
-  return BOOK_EXTENSIONS.has(`.${extension}`) ? extension as BookFormat : null;
+  return BOOK_EXTENSIONS.get(extensionOf(name)) ?? null;
 }
 
 async function copyLocalAssets(kind: ImportedAssetKind, sources: LocalAssetSource[]): Promise<Media[]> {
@@ -155,7 +162,7 @@ async function pickLocalAssets(kind: ImportedAssetKind, multiple: boolean): Prom
     const result = await DocumentPicker.getDocumentAsync({
       copyToCacheDirectory: true,
       multiple,
-      type: kind === 'audio' ? ['audio/*', 'application/octet-stream'] : ['application/pdf', 'application/epub+zip', 'application/x-mobipocket-ebook', 'application/octet-stream'],
+      type: kind === 'audio' ? ['audio/*', 'application/octet-stream'] : ['application/pdf', 'application/epub+zip', 'application/x-mobipocket-ebook', 'text/plain', 'text/html', 'application/xhtml+xml', 'application/xml', 'text/xml', 'application/octet-stream'],
     });
     if (result.canceled) return [];
     const sources = result.assets.map((asset) => ({ file: new File(asset.uri), name: asset.name, mimeType: asset.mimeType ?? null }));
@@ -164,7 +171,7 @@ async function pickLocalAssets(kind: ImportedAssetKind, multiple: boolean): Prom
         throw new Error('酷狗 KGG 需要外部密钥数据库，当前版本不支持');
       }
       const valid = result.assets.every((asset) => kind === 'audio' ? isSupportedAudioName(asset.name) : isSupportedBookName(asset.name));
-      if (!valid) throw new Error(kind === 'audio' ? '只支持 mp3、m4a、aac、wav、flac 或 ogg 音频' : '只支持 PDF、EPUB、MOBI、AZW 或 AZW3 书籍');
+      if (!valid) throw new Error(kind === 'audio' ? '只支持 mp3、m4a、aac、wav、flac 或 ogg 音频' : '只支持 PDF、EPUB、无 DRM MOBI、TXT、HTML 或 FB2 书籍');
       return await copyLocalAssets(kind, sources);
     } finally {
       for (const source of sources) {

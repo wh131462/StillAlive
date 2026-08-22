@@ -37,6 +37,7 @@ export interface EditorImage {
   id: string;
   uri: string;
   alt: string;
+  mimeType?: string;
 }
 
 export interface EditorAudio {

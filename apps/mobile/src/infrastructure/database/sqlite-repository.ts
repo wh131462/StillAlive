@@ -1,9 +1,15 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from './repository-contract';
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, Gender, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, Gender, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
-import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookRow, CheckInRow, DraftRow, HomeMemory, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
+import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookRow, CheckInRow, DraftRow, HomeMemory, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
 import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapMedia, mapMusicTrack, mapPerson, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
+
+function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('video/')) return 'video';
+  return 'image';
+}
 
 export class SQLiteStillAliveRepository implements StillAliveRepository {
   private writeQueue: Promise<void> = Promise.resolve();
@@ -185,7 +191,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       media.height,
       media.checksum,
       media.createdAt,
-      media.kind ?? (media.mimeType.startsWith('audio/') ? 'audio' : 'image'),
+      media.kind ?? mediaKindForMimeType(media.mimeType),
       media.originalName ?? null,
       media.sizeBytes ?? null,
     ));
@@ -200,7 +206,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       media.height,
       media.checksum,
       media.createdAt,
-      media.kind ?? (media.mimeType.startsWith('audio/') ? 'audio' : 'image'),
+      media.kind ?? mediaKindForMimeType(media.mimeType),
       media.originalName ?? null,
       media.sizeBytes ?? null,
       media.id,
@@ -342,6 +348,21 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       new Date().toISOString(),
       personId,
     ));
+  }
+
+  async listPersonBooks(): Promise<PersonBook[]> {
+    const rows = await this.db.getAllAsync<PersonBookRow>('SELECT person_id, book_id, created_at FROM person_books ORDER BY created_at DESC');
+    return rows.map((row) => ({ personId: row.person_id, bookId: row.book_id, createdAt: row.created_at }));
+  }
+
+  async setPersonBooks(personId: string, bookIds: string[]): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM person_books WHERE person_id = ?', personId);
+      const createdAt = new Date().toISOString();
+      for (const bookId of new Set(bookIds)) {
+        await transaction.runAsync('INSERT INTO person_books (person_id, book_id, created_at) VALUES (?, ?, ?)', personId, bookId, createdAt);
+      }
+    });
   }
 
   async listTagDefinitions(): Promise<TagDefinition[]> {
@@ -657,16 +678,16 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async listBooks(): Promise<Book[]> {
-    const rows = await this.db.getAllAsync<BookRow>('SELECT id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at FROM books ORDER BY updated_at DESC');
+    const rows = await this.db.getAllAsync<BookRow>('SELECT id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, last_read_at, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at FROM books ORDER BY last_read_at IS NULL, last_read_at DESC, created_at DESC');
     return rows.map(mapBook);
   }
 
   async createBook(book: Book): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO books (id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', book.id, book.fileMediaId, book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.createdAt, book.updatedAt));
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO books (id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, last_read_at, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', book.id, book.fileMediaId, book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.lastReadAt ?? null, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.createdAt, book.updatedAt));
   }
 
   async updateBook(book: Book): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('UPDATE books SET cover_media_id = ?, title = ?, author = ?, format = ?, parse_status = ?, parse_message = ?, progress = ?, location = ?, location_type = ?, chapter_href = ?, chapter_title = ?, engine_version = ?, page_count = ?, chapter_cache_json = ?, updated_at = ? WHERE id = ?', book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.updatedAt, book.id));
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE books SET cover_media_id = ?, title = ?, author = ?, format = ?, parse_status = ?, parse_message = ?, progress = ?, last_read_at = ?, location = ?, location_type = ?, chapter_href = ?, chapter_title = ?, engine_version = ?, page_count = ?, chapter_cache_json = ?, updated_at = ? WHERE id = ?', book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.lastReadAt ?? null, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.updatedAt, book.id));
   }
 
   async deleteBook(bookId: string): Promise<void> {
@@ -690,6 +711,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteBookExcerpt(excerptId: string): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync('DELETE FROM book_excerpts WHERE id = ?', excerptId));
+  }
+
+  async listReadingNoteSources(): Promise<ReadingNoteSource[]> {
+    const rows = await this.db.getAllAsync<{ post_id: string; book_id: string | null; excerpt_ids_json: string; quote_snapshots_json: string }>('SELECT post_id, book_id, excerpt_ids_json, quote_snapshots_json FROM reading_note_sources ORDER BY post_id');
+    return rows.map((row) => ({ postId: row.post_id, bookId: row.book_id, excerptIds: parseStringList(row.excerpt_ids_json), quoteSnapshots: parseQuoteSnapshots(row.quote_snapshots_json) }));
   }
 
   async getReadingNoteSource(postId: string): Promise<ReadingNoteSource | null> {
@@ -834,12 +860,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_books; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;");
     });
   }
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
-    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, albums, albumMedia, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
+    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
       this.db.getAllAsync<CheckInRow>('SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key'),
       this.listPosts(),
       this.db.getAllAsync<DraftRow>('SELECT id, day_key, body_markdown, updated_at FROM drafts ORDER BY day_key'),
@@ -853,6 +879,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       this.listPersonTagAssignments(),
       this.listAlbums(),
       this.listAlbumMedia(),
+      this.listPersonBooks(),
       this.listMusicTracks(),
       this.listMusicCollectionEntries(),
       this.listMusicPlaylists(),
@@ -875,6 +902,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       personTags,
       albums,
       albumMedia,
+      personBooks,
       musicTracks,
       musicCollectionEntries,
       musicPlaylists,
@@ -887,7 +915,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_books; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
       }
@@ -925,7 +953,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const entry of snapshot.musicCollectionEntries ?? []) await transaction.runAsync('INSERT INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', entry.trackId, entry.targetType, entry.targetId ?? '', entry.createdAt);
       for (const playlist of snapshot.musicPlaylists ?? []) await transaction.runAsync('INSERT INTO music_playlists (id, name, cover_media_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', playlist.id, playlist.name, playlist.coverMediaId ?? null, playlist.createdAt, playlist.updatedAt);
       for (const entry of snapshot.musicPlaylistEntries ?? []) await transaction.runAsync('INSERT INTO music_playlist_entries (playlist_id, track_id, added_at) VALUES (?, ?, ?)', entry.playlistId, entry.trackId, entry.addedAt);
-      for (const book of snapshot.books ?? []) await transaction.runAsync('INSERT INTO books (id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', book.id, book.fileMediaId, book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.createdAt, book.updatedAt);
+      for (const book of snapshot.books ?? []) await transaction.runAsync('INSERT INTO books (id, file_media_id, cover_media_id, title, author, format, parse_status, parse_message, progress, last_read_at, location, location_type, chapter_href, chapter_title, engine_version, page_count, chapter_cache_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', book.id, book.fileMediaId, book.coverMediaId, book.title, book.author, book.format, book.parseStatus, book.parseMessage, book.progress, book.lastReadAt ?? null, book.location, book.locationType ?? null, book.chapterHref ?? null, book.chapterTitle ?? null, book.engineVersion ?? null, book.pageCount ?? null, JSON.stringify(book.chapterCache ?? []), book.createdAt, book.updatedAt);
+      for (const relation of snapshot.personBooks ?? []) await transaction.runAsync('INSERT INTO person_books (person_id, book_id, created_at) VALUES (?, ?, ?)', relation.personId, relation.bookId, relation.createdAt);
       for (const excerpt of snapshot.bookExcerpts ?? []) await transaction.runAsync('INSERT INTO book_excerpts (id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt);
       for (const source of snapshot.readingNoteSources ?? []) await transaction.runAsync('INSERT INTO reading_note_sources (post_id, book_id, excerpt_ids_json, quote_snapshots_json) VALUES (?, ?, ?, ?)', source.postId, source.bookId, JSON.stringify(source.excerptIds), JSON.stringify(source.quoteSnapshots));
       for (const [key, value] of Object.entries(snapshot.settings)) {

@@ -11,11 +11,15 @@ import { formatGender } from './gender-picker';
 import { extractAudioEmbeds } from '../journal/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from './person-profile';
 import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
+import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
+import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
+import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
+import { MediaThumbnail } from '../../shared/components/media-thumbnail';
 
 export default function PersonScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { albums, deletePerson, getPostsByPerson, media, musicCollectionEntries, people, personTags, posts: allPosts, preferences, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
+  const { albums, deletePerson, getPostsByPerson, media, musicCollectionEntries, people, personBooks, personTags, posts: allPosts, preferences, readingNoteSources, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
@@ -40,7 +44,7 @@ export default function PersonScreen() {
   const confirmDelete = () => {
     if (!person) return;
     const albumCount = albums.filter((album) => album.personId === person.id).length;
-    feedback.alert(`删除 ${person.name}？`, `人物会被删除，历史日记会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中照片。` : ''}`, [
+    feedback.alert(`删除 ${person.name}？`, `人物会被删除，历史日记会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中媒体。` : ''}`, [
       { text: '取消', style: 'cancel' },
       { text: '删除人物', style: 'destructive', onPress: () => void deletePerson(person.id).then(
         () => router.replace('/people'),
@@ -49,21 +53,16 @@ export default function PersonScreen() {
     ]);
   };
   const personMusicCount = person ? musicCollectionEntries.filter((entry) => entry.targetType === 'person' && entry.targetId === person.id).length : 0;
+  const personBookCount = person ? personBooks.filter((entry) => entry.personId === person.id).length : 0;
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <ToolPageHeader
+        onBack={() => router.back()}
+        right={person ? <ToolPageHeaderAction accessibilityLabel="编辑人物" onPress={() => router.push({ pathname: '/person/edit', params: { id: person.id } })}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction> : undefined}
+        title="人物详情"
+      />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
-            <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" />
-          </Pressable>
-          {person ? <View style={styles.headerActions}>
-            <Pressable accessibilityLabel="编辑人物" accessibilityRole="button" onPress={() => router.push({ pathname: '/person/edit', params: { id: person.id } })} style={styles.headerButton}>
-              <SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" />
-            </Pressable>
-          </View> : null}
-        </View>
-
         {person ? (
           <>
             <View style={styles.identityCard}>
@@ -114,8 +113,13 @@ export default function PersonScreen() {
                 <View style={styles.featureMeta}><Text style={styles.albumCount}>{personMusicCount} 首</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
               </Pressable>
               <View style={styles.featureDivider} />
+              <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/books', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
+                <View style={styles.featureCopy}><Text style={styles.featureTitle}>喜欢的书籍</Text><Text style={styles.featureHint}>收藏 {person.name} 喜欢的书籍</Text></View>
+                <View style={styles.featureMeta}><Text style={styles.albumCount}>{personBookCount} 本</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
+              </Pressable>
+              <View style={styles.featureDivider} />
               <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/albums', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
-                <View style={styles.featureCopy}><Text style={styles.featureTitle}>人物相册</Text><Text style={styles.featureHint}>按文件夹整理只属于 {person.name} 的照片</Text></View>
+                <View style={styles.featureCopy}><Text style={styles.featureTitle}>人物相册</Text><Text style={styles.featureHint}>按文件夹整理只属于 {person.name} 的照片和视频</Text></View>
                 <View style={styles.featureMeta}><Text style={styles.albumCount}>{albums.filter((album) => album.personId === person.id).length} 个</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
               </Pressable>
               <View style={styles.featureDivider} />
@@ -137,11 +141,13 @@ export default function PersonScreen() {
             ) : posts.map((post) => {
               const imageId = firstMediaId(post.bodyMarkdown);
               const image = imageId ? media.find((item) => item.id === imageId) : undefined;
+              const readingSource = readingNoteSources.find((source) => source.postId === post.id) ?? null;
+              const body = markdownToPlainText(withoutReadingSourceQuote(post.bodyMarkdown, readingSource));
               return (
                 <Pressable key={post.id} accessibilityRole="button" onPress={() => router.push(`/post/${post.id}`)} style={({ pressed }) => [styles.memory, pressed && styles.memoryPressed]}>
                   <Text style={styles.date}>{post.dayKey.replaceAll('-', '.')}</Text>
-                  {image ? <Image accessibilityLabel="共同记忆图片" resizeMode="cover" source={{ uri: image.localPath }} style={styles.memoryImage} /> : null}
-                  <Text style={styles.body}>{markdownToPlainText(post.bodyMarkdown) || (extractAudioEmbeds(post.bodyMarkdown).length ? `${extractAudioEmbeds(post.bodyMarkdown).length} 段语音` : '一张照片')}</Text>
+                  {image ? <MediaThumbnail accessibilityLabel="共同记忆媒体" item={image} style={styles.memoryImage} /> : null}
+                  <Text style={styles.body}>{body || (readingSource ? `读了《${readingSourceTitle(readingSource)}》` : extractMusicShares(post.bodyMarkdown)[0] ? `分享了《${extractMusicShares(post.bodyMarkdown)[0].title}》` : extractAudioEmbeds(post.bodyMarkdown).length ? `${extractAudioEmbeds(post.bodyMarkdown).length} 段语音` : image?.mimeType.startsWith('video/') ? '一段视频' : '一张照片')}</Text>
                 </Pressable>
               );
             })}
@@ -156,7 +162,7 @@ export default function PersonScreen() {
 }
 
 function markdownToPlainText(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/^#{1,3}\s+/gm, '').replace(/^[-*>]\s+/gm, '').replace(/[*_`]/g, '').trim();
+  return withoutMusicShares(markdown).replace(/!\[[^\]]*\]\([^)]+\)/g, '').replace(/^#{1,3}\s+/gm, '').replace(/^[-*>]\s+/gm, '').replace(/[*_`]/g, '').trim();
 }
 
 function firstMediaId(markdown: string): string | null {
@@ -166,11 +172,7 @@ function firstMediaId(markdown: string): string | null {
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  header: { minHeight: 56, marginHorizontal: spacing.md - spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  identityCard: { marginTop: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  identityCard: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   identityRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 38, backgroundColor: colors.life },
   avatarImage: { width: '100%', height: '100%' },

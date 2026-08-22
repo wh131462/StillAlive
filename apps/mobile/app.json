@@ -38,8 +38,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "允许“仍在”使用相机拍摄照片，添加到你的本地记录、头像或相册中。",
-          "photosPermission": "允许“仍在”选择照片，添加到你的本地记录、头像或相册中。"
+          "cameraPermission": "允许“仍在”拍摄照片或视频，添加到本地记录或相册中；照片也可用于头像。",
+          "photosPermission": "允许“仍在”选择照片或视频，添加到本地记录或相册中；照片也可用于头像。"
         }
       ],
       [

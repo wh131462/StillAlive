@@ -81,10 +81,16 @@ export function mapMedia(row: MediaRow): Media {
     height: row.height,
     checksum: row.checksum,
     createdAt: row.created_at,
-    kind: row.kind ?? (row.mime_type.startsWith('audio/') ? 'audio' : 'image'),
+    kind: row.kind ?? mediaKindForMimeType(row.mime_type),
     originalName: row.original_name ?? null,
     sizeBytes: row.size_bytes ?? null,
   };
+}
+
+function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('video/')) return 'video';
+  return 'image';
 }
 
 export function mapMusicTrack(row: MusicTrackRow): MusicTrack {
@@ -92,7 +98,7 @@ export function mapMusicTrack(row: MusicTrackRow): MusicTrack {
 }
 
 export function mapBook(row: BookRow): Book {
-  return { id: row.id, fileMediaId: row.file_media_id, coverMediaId: row.cover_media_id, title: row.title, author: row.author, format: row.format, parseStatus: row.parse_status, parseMessage: row.parse_message, progress: row.progress, location: row.location, locationType: row.location_type, chapterHref: row.chapter_href, chapterTitle: row.chapter_title, engineVersion: row.engine_version, pageCount: row.page_count, chapterCache: parseReaderToc(row.chapter_cache_json), createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, fileMediaId: row.file_media_id, coverMediaId: row.cover_media_id, title: row.title, author: row.author, format: row.format, parseStatus: row.parse_status, parseMessage: row.parse_message, progress: row.progress, lastReadAt: row.last_read_at, location: row.location, locationType: row.location_type, chapterHref: row.chapter_href, chapterTitle: row.chapter_title, engineVersion: row.engine_version, pageCount: row.page_count, chapterCache: parseReaderToc(row.chapter_cache_json), createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 export function parseReaderToc(value: string | null): ReaderTocItem[] {

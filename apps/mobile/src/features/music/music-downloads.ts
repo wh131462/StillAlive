@@ -8,8 +8,6 @@ export interface MusicDownloadResult {
   fileName: string;
 }
 
-export type OpenMusicDownloadDirectoryResult = 'opened' | 'missing' | 'cancelled';
-
 export async function saveMusicCopy(media: Media, title: string): Promise<MusicDownloadResult | null> {
   const lastDirectoryUri = await SecureStore.getItemAsync(LAST_DOWNLOAD_DIRECTORY_KEY);
   let directory: Directory;
@@ -49,18 +47,6 @@ export async function saveMusicCopy(media: Media, title: string): Promise<MusicD
     } catch {
       // 缓存目录可由系统后续回收。
     }
-  }
-}
-
-export async function openLastMusicDownloadDirectory(): Promise<OpenMusicDownloadDirectoryResult> {
-  const directoryUri = await SecureStore.getItemAsync(LAST_DOWNLOAD_DIRECTORY_KEY);
-  if (!directoryUri) return 'missing';
-  try {
-    await Directory.pickDirectoryAsync(directoryUri);
-    return 'opened';
-  } catch (cause) {
-    if (isPickerCancellation(cause)) return 'cancelled';
-    throw cause;
   }
 }
 

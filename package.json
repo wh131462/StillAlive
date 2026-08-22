@@ -30,7 +30,8 @@
       "react-native-pdf@7.0.5": "patches/react-native-pdf@7.0.5.patch",
       "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch",
       "expo-modules-jsi@57.0.3": "patches/expo-modules-jsi@57.0.3.patch",
-      "expo-audio@57.0.3": "patches/expo-audio@57.0.3.patch"
+      "expo-audio@57.0.3": "patches/expo-audio@57.0.3.patch",
+      "rebook@0.8.0": "patches/rebook@0.8.0.patch"
     }
   }
 }

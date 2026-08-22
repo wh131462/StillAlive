@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,12 +11,13 @@ import type { Media, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { pickLocalAudioAssets } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
-import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { orderMusicTracksByCollectionEntries } from './music-library';
 import { useMusicPlayer } from './music-player-state';
 import { MusicCover } from './music-cover';
 import { reportMusicImportFailure } from './music-import-coordinator';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 export default function MusicPlaylistScreen() {
   const router = useRouter();
@@ -179,18 +180,14 @@ export default function MusicPlaylistScreen() {
 
   if (!playlist) return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>歌单</Text><View style={styles.headerButton} /></View>
+      <ToolPageHeader onBack={() => router.back()} title="歌单" />
       <View style={styles.missing}><Text style={styles.emptyTitle}>歌单不存在</Text><Text style={styles.emptyText}>它可能已经被删除。</Text></View>
     </SafeAreaView>
   );
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-        <Text numberOfLines={1} style={styles.headerTitle}>{playlist.name}</Text>
-        <Pressable accessibilityLabel="管理歌单" onPress={() => setManageVisible(true)} style={styles.headerButton}><VerticalMoreIcon /></Pressable>
-      </View>
+      <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderAction accessibilityLabel="管理歌单" onPress={() => setManageVisible(true)}><VerticalMoreIcon /></ToolPageHeaderAction>} title={playlist.name} />
 
       <ScrollView contentContainerStyle={[styles.content, player.currentTrack && styles.contentPlaying]}>
         <View style={styles.summary}><MusicCover media={media.find((item) => item.id === playlist.coverMediaId)} size={82} style={styles.summaryCover} /><View style={styles.summaryCopy}><Text numberOfLines={2} style={styles.summaryTitle}>{playlist.name}</Text><Text style={styles.summaryMeta}>{tracks.length} 首歌曲</Text></View></View>
@@ -199,28 +196,23 @@ export default function MusicPlaylistScreen() {
           <Pressable disabled={!tracks.length} onPress={() => void shuffleAll()} style={({ pressed }) => [styles.shuffle, !tracks.length && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'shuffle', ios: 'shuffle', web: 'shuffle' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.shuffleText}>随机播放</Text></Pressable>
         </View>
         <View style={styles.listHeader}><View style={styles.listTitleRow}><Text style={styles.listTitle}>歌曲</Text><Text style={styles.listCount}>{tracks.length}</Text></View><Pressable accessibilityLabel="添加歌曲" onPress={openPicker} style={styles.addButton}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={21} tintColor={colors.life} type="hierarchical" /></Pressable></View>
-        {tracks.length ? tracks.map((track) => <TrackRow key={track.id} media={media} selected={player.currentTrack?.id === track.id} track={track} onPlay={() => void playTrack(track)} onRemove={() => confirmRemoveTrack(track)} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>歌单还没有歌曲</Text><Text style={styles.emptyText}>从音乐盒或本地文件添加歌曲。</Text><Pressable onPress={openPicker} style={styles.emptyAction}><Text style={styles.emptyActionText}>添加歌曲</Text></Pressable></View>}
+        {tracks.length ? tracks.map((track) => <TrackRow key={track.id} media={media} selected={player.currentTrack?.id === track.id} track={track} onPlay={() => void playTrack(track)} onRemove={() => confirmRemoveTrack(track)} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>歌单还没有歌曲</Text><Text style={styles.emptyText}>从音乐盒或本地文件添加歌曲。</Text><Pressable accessibilityRole="button" onPress={openPicker} style={({ pressed }) => [styles.emptyAction, pressed && styles.emptyActionPressed]}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.emptyActionText}>添加歌曲</Text></Pressable></View>}
       </ScrollView>
 
-      <Modal animationType="slide" onRequestClose={() => setPickerVisible(false)} transparent visible={pickerVisible}>
-        <Pressable onPress={() => setPickerVisible(false)} style={styles.backdrop}>
-          <Pressable accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={[styles.pickerSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
-            <View style={styles.handle} />
+      <DraggableBottomSheet onClose={() => setPickerVisible(false)} open={pickerVisible} sheetStyle={[styles.pickerSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
             <View style={styles.sheetHeader}><View><Text style={styles.sheetTitle}>添加歌曲</Text><Text style={styles.sheetMeta}>已选择 {selectedTrackIds.size} 首</Text></View><Pressable accessibilityLabel="关闭" onPress={() => setPickerVisible(false)} style={styles.sheetClose}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor={colors.inkSoft} type="hierarchical" /></Pressable></View>
             <Pressable disabled={importing} onPress={() => void importLocalMusic()} style={({ pressed }) => [styles.importButton, importing && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'upload_file', ios: 'square.and.arrow.down', web: 'upload_file' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.importText}>{importing ? '正在导入' : '从本地导入'}</Text></Pressable>
             <ScrollView contentContainerStyle={styles.pickerContent} style={styles.pickerList}>{availableTracks.map((track) => { const checked = selectedTrackIds.has(track.id); return <Pressable key={track.id} accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={() => toggleSelectedTrack(track.id)} style={({ pressed }) => [styles.pickerRow, pressed && styles.pressed]}><View style={[styles.checkbox, checked && styles.checkboxActive]}>{checked ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={15} tintColor={colors.onLife} type="hierarchical" /> : null}</View><View style={styles.trackCopy}><Text numberOfLines={1} style={styles.trackTitle}>{track.title}</Text><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>; })}{!availableTracks.length ? <View style={styles.pickerEmpty}><Text style={styles.emptyText}>曲库中的歌曲都已加入这个歌单</Text></View> : null}</ScrollView>
             <Pressable disabled={!selectedTrackIds.size} onPress={() => void addSelectedTracks()} style={[styles.confirmButton, !selectedTrackIds.size && styles.disabled]}><Text style={styles.confirmButtonText}>添加 {selectedTrackIds.size ? `${selectedTrackIds.size} 首` : '歌曲'}</Text></Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </DraggableBottomSheet>
 
-      <Modal animationType="slide" onRequestClose={() => setManageVisible(false)} transparent visible={manageVisible}>
-        <Pressable onPress={() => setManageVisible(false)} style={styles.backdrop}><Pressable accessibilityRole="menu" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.actionSheet}><View style={styles.handle} /><View style={styles.actionPlaylistHeader}><MusicCover media={media.find((item) => item.id === playlist.coverMediaId)} size={64} style={styles.actionPlaylistCover} /><View style={styles.actionPlaylistCopy}><Text style={styles.actionPlaylistLabel}>歌单</Text><Text numberOfLines={2} style={styles.actionPlaylistTitle}>{playlist.name}</Text><Text style={styles.actionPlaylistMeta}>{tracks.length} 首歌曲</Text></View></View><ActionOption icon={{ android: 'image', ios: 'photo', web: 'image' }} label="更换歌单封面" onPress={() => void choosePlaylistCover()} />{playlist.coverMediaId ? <ActionOption icon={{ android: 'image_not_supported', ios: 'photo', web: 'image_not_supported' }} label="恢复通用封面" onPress={() => void resetPlaylistCover()} /> : null}<ActionOption icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="重命名歌单" onPress={openRename} /><ActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除歌单" onPress={confirmDeletePlaylist} /><Pressable onPress={() => setManageVisible(false)} style={styles.cancelAction}><Text style={styles.cancelText}>取消</Text></Pressable></Pressable></Pressable>
-      </Modal>
+      <DraggableBottomSheet accessibilityRole="menu" onClose={() => setManageVisible(false)} open={manageVisible} sheetStyle={styles.actionSheet}>
+        <View style={styles.actionPlaylistHeader}><MusicCover media={media.find((item) => item.id === playlist.coverMediaId)} size={64} style={styles.actionPlaylistCover} /><View style={styles.actionPlaylistCopy}><Text style={styles.actionPlaylistLabel}>歌单</Text><Text numberOfLines={2} style={styles.actionPlaylistTitle}>{playlist.name}</Text><Text style={styles.actionPlaylistMeta}>{tracks.length} 首歌曲</Text></View></View><ActionOption icon={{ android: 'image', ios: 'photo', web: 'image' }} label="更换歌单封面" onPress={() => void choosePlaylistCover()} />{playlist.coverMediaId ? <ActionOption icon={{ android: 'image_not_supported', ios: 'photo', web: 'image_not_supported' }} label="恢复通用封面" onPress={() => void resetPlaylistCover()} /> : null}<ActionOption icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="重命名歌单" onPress={openRename} /><ActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除歌单" onPress={confirmDeletePlaylist} /><Pressable onPress={() => setManageVisible(false)} style={styles.cancelAction}><Text style={styles.cancelText}>取消</Text></Pressable>
+      </DraggableBottomSheet>
 
-      <Modal animationType="slide" onRequestClose={() => setRenameVisible(false)} transparent visible={renameVisible}>
-        <AppKeyboardAvoidingView style={styles.flex}><Pressable onPress={() => setRenameVisible(false)} style={styles.backdrop}><Pressable accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.editSheet}><View style={styles.handle} /><Text style={styles.sheetTitle}>重命名歌单</Text><Text style={styles.inputLabel}>歌单名称</Text><TextInput autoFocus maxLength={40} onChangeText={setPlaylistName} onSubmitEditing={() => void saveName()} placeholder="输入歌单名称" placeholderTextColor={colors.inkFaint} returnKeyType="done" selectTextOnFocus style={styles.editInput} value={playlistName} /><Pressable disabled={!playlistName.trim()} onPress={() => void saveName()} style={[styles.confirmButton, !playlistName.trim() && styles.disabled]}><Text style={styles.confirmButtonText}>保存</Text></Pressable></Pressable></Pressable></AppKeyboardAvoidingView>
-      </Modal>
+      <DraggableBottomSheet keyboardAvoiding onClose={() => setRenameVisible(false)} open={renameVisible} sheetStyle={styles.editSheet}>
+        <Text style={styles.sheetTitle}>重命名歌单</Text><Text style={styles.inputLabel}>歌单名称</Text><TextInput autoFocus maxLength={40} onChangeText={setPlaylistName} onSubmitEditing={() => void saveName()} placeholder="输入歌单名称" placeholderTextColor={colors.inkFaint} returnKeyType="done" selectTextOnFocus style={styles.editInput} value={playlistName} /><Pressable disabled={!playlistName.trim()} onPress={() => void saveName()} style={[styles.confirmButton, !playlistName.trim() && styles.disabled]}><Text style={styles.confirmButtonText}>保存</Text></Pressable>
+      </DraggableBottomSheet>
     </SafeAreaView>
   );
 }
@@ -240,15 +232,12 @@ function ActionOption({ destructive = false, icon, label, onPress }: { destructi
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   moreIcon: { width: 4, height: 17, alignItems: 'center', justifyContent: 'space-between' },
   moreDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.inkSoft },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
   contentPlaying: { paddingBottom: 150 },
   summary: { paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center' },
-  summaryCover: { borderRadius: radius.md },
+  summaryCover: { borderRadius: 6 },
   summaryCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   summaryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 23, lineHeight: 30 },
   summaryMeta: { marginTop: 5, color: colors.inkFaint, fontSize: 10 },
@@ -274,8 +263,9 @@ const styles = createThemedStyles(() => ({
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17 },
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 11, textAlign: 'center' },
-  emptyAction: { minHeight: 44, marginTop: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
-  emptyActionText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
+  emptyAction: { minWidth: 148, minHeight: 46, marginTop: spacing.lg, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  emptyActionPressed: { opacity: 0.68 },
+  emptyActionText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
   handle: { width: 36, height: 4, marginBottom: spacing.md, alignSelf: 'center', borderRadius: 2, backgroundColor: colors.line },
   pickerSheet: { maxHeight: '82%', paddingTop: spacing.md, paddingHorizontal: spacing.lg, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
@@ -295,7 +285,7 @@ const styles = createThemedStyles(() => ({
   confirmButtonText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
   actionSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
   actionPlaylistHeader: { minHeight: 88, marginBottom: spacing.sm, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper },
-  actionPlaylistCover: { borderRadius: radius.md },
+  actionPlaylistCover: { borderRadius: 6 },
   actionPlaylistCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   actionPlaylistLabel: { color: colors.inkFaint, fontSize: 10, letterSpacing: 1 },
   actionPlaylistTitle: { marginTop: 2, color: colors.ink, fontFamily: typography.display, fontSize: 18, lineHeight: 23 },

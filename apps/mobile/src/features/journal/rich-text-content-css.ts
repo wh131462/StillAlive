@@ -4,7 +4,7 @@ export function richTextSurfaceCss(theme: EditorTheme): string {
   return `
     .rich-text-surface { --rich-text-line-height: 1.85em; width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 19px; line-height: 1.85; }
     ${richTextContentCss(theme)}
-    img { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
+    img, video { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
   `;
 }
 

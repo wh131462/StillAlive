@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 export type BookLocator =
   | { type: 'epub-cfi'; cfi: string; href: string | null; chapterTitle: string | null; progression: number }
+  | { type: 'reflow-cfi'; cfi: string; href: string | null; chapterTitle: string | null; progression: number }
   | { type: 'pdf-page'; page: number; pageCount: number | null }
   | { type: 'manual'; location: string | null; chapterTitle: string | null };
 
@@ -37,6 +38,7 @@ export interface ReaderSurfaceHandle {
   previous(): void;
   next(): void;
   goTo(locator: BookLocator): void;
+  setZoom?(scale: number): void;
 }
 
 export interface BookReaderAdapter {
@@ -53,7 +55,7 @@ export interface ReaderCapability {
 
 export function detectReaderCapability(book: Book): ReaderCapability {
   if (book.parseStatus !== 'ready') return { status: book.parseStatus, message: book.parseMessage };
-  if (book.format === 'pdf' || book.format === 'epub') return { status: 'ready', message: null };
+  if (['pdf', 'epub', 'mobi', 'txt', 'html', 'fb2'].includes(book.format)) return { status: 'ready', message: null };
   return { status: 'unsupported', message: '当前设备阅读适配器未启用该格式，原始文件仍保留在书架。' };
 }
 
@@ -64,7 +66,10 @@ const UNSUPPORTED_CAPABILITIES: ReaderCapabilities = { reflow: false, toc: false
 const ADAPTERS: Record<BookFormat, BookReaderAdapter> = {
   epub: { format: 'epub', engineVersion: 'epubjs-react-native@1.4.7', capabilities: EPUB_CAPABILITIES, canOpen: (book) => book.format === 'epub' && book.parseStatus === 'ready' },
   pdf: { format: 'pdf', engineVersion: 'react-native-pdf@7.0.5', capabilities: PDF_CAPABILITIES, canOpen: (book) => book.format === 'pdf' && book.parseStatus === 'ready' },
-  mobi: { format: 'mobi', engineVersion: 'archive-only', capabilities: UNSUPPORTED_CAPABILITIES, canOpen: () => false },
+  mobi: { format: 'mobi', engineVersion: 'rebook@0.8.0 + epubjs-react-native@1.4.7', capabilities: EPUB_CAPABILITIES, canOpen: (book) => book.format === 'mobi' && book.parseStatus === 'ready' },
+  txt: { format: 'txt', engineVersion: 'local-text-normalizer@1 + epubjs-react-native@1.4.7', capabilities: EPUB_CAPABILITIES, canOpen: (book) => book.format === 'txt' && book.parseStatus === 'ready' },
+  html: { format: 'html', engineVersion: 'local-html-normalizer@1 + epubjs-react-native@1.4.7', capabilities: EPUB_CAPABILITIES, canOpen: (book) => book.format === 'html' && book.parseStatus === 'ready' },
+  fb2: { format: 'fb2', engineVersion: 'rebook@0.8.0 + epubjs-react-native@1.4.7', capabilities: EPUB_CAPABILITIES, canOpen: (book) => book.format === 'fb2' && book.parseStatus === 'ready' },
   azw: { format: 'azw', engineVersion: 'archive-only', capabilities: UNSUPPORTED_CAPABILITIES, canOpen: () => false },
   azw3: { format: 'azw3', engineVersion: 'archive-only', capabilities: UNSUPPORTED_CAPABILITIES, canOpen: () => false },
 };
@@ -90,6 +95,7 @@ export class ReaderSessionController {
     return {
       ...this.book,
       progress: clamp(event.progression, 0, 1),
+      lastReadAt: new Date().toISOString(),
       location: serializeBookLocator(event.locator),
       locationType: event.locator.type,
       chapterHref: event.chapterHref,
@@ -107,9 +113,10 @@ export const DEFAULT_READING_PREFERENCES: ReadingPreferences = {
   lineHeight: 1.8,
   pageMargin: 22,
   fontFamily: 'serif',
-  flow: 'paginated',
+  flow: 'scrolled',
   pdfScale: 1,
   pdfHorizontal: false,
+  pdfThemeEnabled: true,
 };
 
 export function readingPreferencesForBook(json: string, bookId: string): ReadingPreferences {
@@ -141,9 +148,14 @@ export function createEpubLocator(cfi: string, href: string | null, chapterTitle
   return { type: 'epub-cfi', cfi, href, chapterTitle, progression: clamp(progression, 0, 1) };
 }
 
+export function createReflowLocator(cfi: string, href: string | null, chapterTitle: string | null, progression: number): BookLocator {
+  return { type: 'reflow-cfi', cfi, href, chapterTitle, progression: clamp(progression, 0, 1) };
+}
+
 export function serializeBookLocator(locator: BookLocator): string | null {
   if (locator.type === 'pdf-page') return `pdf:${normalizePage(locator.page)}`;
   if (locator.type === 'epub-cfi') return locator.cfi || locator.href;
+  if (locator.type === 'reflow-cfi') return locator.cfi ? `reflow:${locator.cfi}` : locator.href ? `reflow-href:${locator.href}` : null;
   return locator.location;
 }
 
@@ -154,6 +166,11 @@ export function locatorFromBook(book: Pick<Book, 'format' | 'location' | 'locati
     if (cfi || book.chapterHref) return createEpubLocator(cfi, book.chapterHref ?? null, book.chapterTitle ?? null, book.progress);
   }
   if (book.locationType === 'pdf-page' || book.format === 'pdf') return createPdfLocator(pageFromBookLocation(book.location), book.pageCount ?? null);
+  if (book.locationType === 'reflow-cfi' || ['mobi', 'txt', 'html', 'fb2'].includes(book.format)) {
+    const cfi = book.location?.startsWith('reflow:') ? book.location.slice('reflow:'.length) : '';
+    const href = book.location?.startsWith('reflow-href:') ? book.location.slice('reflow-href:'.length) : book.chapterHref ?? null;
+    if (cfi || href) return createReflowLocator(cfi, href, book.chapterTitle ?? null, book.progress);
+  }
   return { type: 'manual', location: book.location, chapterTitle: book.chapterTitle ?? null };
 }
 
@@ -174,9 +191,10 @@ function sanitizePreferences(value: unknown): ReadingPreferences {
     lineHeight: clampNumber(candidate.lineHeight, 1.3, 2.4, DEFAULT_READING_PREFERENCES.lineHeight),
     pageMargin: clampNumber(candidate.pageMargin, 12, 44, DEFAULT_READING_PREFERENCES.pageMargin),
     fontFamily: candidate.fontFamily === 'sans' ? 'sans' : 'serif',
-    flow: candidate.flow === 'scrolled' ? 'scrolled' : 'paginated',
+    flow: candidate.flow === 'paginated' ? 'paginated' : DEFAULT_READING_PREFERENCES.flow,
     pdfScale: clampNumber(candidate.pdfScale, 1, 5, DEFAULT_READING_PREFERENCES.pdfScale),
     pdfHorizontal: candidate.pdfHorizontal === true,
+    pdfThemeEnabled: candidate.pdfThemeEnabled !== false,
   };
 }
 

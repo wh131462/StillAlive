@@ -13,6 +13,8 @@ import { extractAudioEmbeds, withoutEmbeddedAttachments } from '../journal/embed
 import { birthdayFromDateString, birthdayInSolarYear, birthdaySolarDate, toLocalDayKey } from '../people/person-profile';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
+import { extractMusicShares } from '../../application/music-share';
+import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 
 type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
@@ -21,7 +23,7 @@ const birthdayCakeSource = require('../../../assets/birthday-cake.png');
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const { checkIns, people, posts, preferences, today, todayCheckIn } = useAppState();
+  const { checkIns, people, posts, preferences, readingNoteSources, today, todayCheckIn } = useAppState();
   const [activeMonth, setActiveMonth] = useState(today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const checkInDays = useMemo(() => new Set(checkIns.map((item) => item.dayKey)), [checkIns]);
@@ -67,6 +69,7 @@ export default function CalendarScreen() {
           selectedCheckIn={selectedCheckIn}
           selectedDay={selectedDay}
           selectedPosts={selectedPosts}
+          readingNoteSources={readingNoteSources}
           selfBirthday={selfBirthday}
           today={today}
         />
@@ -87,6 +90,7 @@ interface CalendarViewProps {
   selectedCheckIn?: CheckIn;
   selectedDay: DayKey;
   selectedPosts: Post[];
+  readingNoteSources: ReturnType<typeof useAppState>['readingNoteSources'];
   selfBirthday: Birthday | null;
   today: DayKey;
 }
@@ -95,7 +99,7 @@ function BirthdayCakeIcon({ size }: { size: number }) {
   return <Image accessibilityIgnoresInvertColors accessible={false} resizeMode="contain" source={birthdayCakeSource} style={{ width: size, height: size, tintColor: colors.sun }} />;
 }
 
-function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
+function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, readingNoteSources, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
     return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
@@ -181,7 +185,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
       <View style={styles.calendarLegend}>
         <LegendItem kind="check-in" label="打卡" />
         <LegendItem kind="text" label="文字" />
-        <LegendItem kind="image" label="图片" />
+        <LegendItem kind="image" label="影像" />
         <LegendItem kind="audio" label="录音" />
         <View style={styles.legendItem}><BirthdayCakeIcon size={11} /><Text style={styles.legendText}>生日</Text></View>
         <Text style={styles.legendText}>内容最多 3 个</Text>
@@ -239,8 +243,9 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               </View>
             ) : null}
             {selectedPosts.map((post) => {
-              const attachmentLabel = postAttachmentLabel(post.bodyMarkdown);
-              const displayMarkdown = withoutEmbeddedAttachments(post.bodyMarkdown);
+              const readingSource = readingNoteSources.find((source) => source.postId === post.id) ?? null;
+              const attachmentLabel = postAttachmentLabel(post.bodyMarkdown, readingSource);
+              const displayMarkdown = withoutReadingSourceQuote(withoutEmbeddedAttachments(post.bodyMarkdown), readingSource);
               const markerKind = postMarkerKind(post.bodyMarkdown);
               return (
                 <Pressable key={post.id} accessibilityLabel={`打开 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedEntry, pressed && styles.selectedEntryPressed]}>
@@ -364,10 +369,11 @@ function formatTime(iso: string): string {
   return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
 }
 
-function postAttachmentLabel(markdown: string): string {
+function postAttachmentLabel(markdown: string, readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null): string {
   const imageCount = [...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].length;
   const audioCount = extractAudioEmbeds(markdown).length;
-  return [imageCount ? `${imageCount} 张图片` : '', audioCount ? `${audioCount} 段语音` : ''].filter(Boolean).join(' / ');
+  const musicCount = extractMusicShares(markdown).length;
+  return [readingSource ? `引用《${readingSourceTitle(readingSource)}》` : '', musicCount ? `${musicCount} 首音乐` : '', imageCount ? `${imageCount} 个影像` : '', audioCount ? `${audioCount} 段语音` : ''].filter(Boolean).join(' / ');
 }
 
 function postMarkerKind(markdown: string): CalendarMarkerKind {
@@ -385,7 +391,7 @@ function markerColor(kind: CalendarMarkerKind): string {
 
 function markerLabel(kind: CalendarMarkerKind): string {
   if (kind === 'check-in') return '打卡';
-  if (kind === 'image') return '图片记录';
+  if (kind === 'image') return '影像记录';
   if (kind === 'audio') return '录音记录';
   return '文字记录';
 }

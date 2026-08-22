@@ -9,9 +9,9 @@ export type ProfileCollectionField = 'name' | 'gender' | 'birthday' | 'mbti' | '
 export type ProfileCollectionRequestStatus = 'pending' | 'consumed';
 export type MusicCollectionTargetType = 'self' | 'person';
 export type MusicPlaybackMode = 'list' | 'shuffle' | 'single';
-export type BookFormat = 'pdf' | 'epub' | 'mobi' | 'azw' | 'azw3';
+export type BookFormat = 'pdf' | 'epub' | 'mobi' | 'txt' | 'html' | 'fb2' | 'azw' | 'azw3';
 export type BookParseStatus = 'ready' | 'protected' | 'unsupported' | 'failed';
-export type BookLocationType = 'epub-cfi' | 'pdf-page' | 'manual';
+export type BookLocationType = 'epub-cfi' | 'reflow-cfi' | 'pdf-page' | 'manual';
 export type ReaderTheme = 'paper' | 'warm' | 'green' | 'night';
 export type ReaderFontFamily = 'serif' | 'sans';
 export type ReaderFlow = 'paginated' | 'scrolled';
@@ -31,6 +31,7 @@ export interface ReadingPreferences {
   flow: ReaderFlow;
   pdfScale: number;
   pdfHorizontal: boolean;
+  pdfThemeEnabled: boolean;
 }
 
 export interface Birthday {
@@ -114,6 +115,12 @@ export interface PersonTagAssignment {
   value: string;
 }
 
+export interface PersonBook {
+  personId: string;
+  bookId: string;
+  createdAt: string;
+}
+
 export interface PersonAlbum {
   id: string;
   personId: string | null;
@@ -155,7 +162,7 @@ export interface Media {
   height: number | null;
   checksum: string;
   createdAt: string;
-  kind?: 'image' | 'audio' | 'book';
+  kind?: 'image' | 'video' | 'audio' | 'book';
   originalName?: string | null;
   sizeBytes?: number | null;
 }
@@ -209,6 +216,7 @@ export interface Book {
   parseStatus: BookParseStatus;
   parseMessage: string | null;
   progress: number;
+  lastReadAt: string | null;
   location: string | null;
   locationType?: BookLocationType | null;
   chapterHref?: string | null;

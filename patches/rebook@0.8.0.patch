@@ -1,0 +1,26 @@
+diff --git a/dist/binary-BqfbMTdW.js b/dist/binary-BqfbMTdW.js
+index 98c39c0..25806f4 100644
+--- a/dist/binary-BqfbMTdW.js
++++ b/dist/binary-BqfbMTdW.js
+@@ -34,7 +34,7 @@ class ArrayBufferBlob {
+   }
+ }
+ function hasBlobConstructor() {
+-  return typeof Blob !== "undefined";
++  return typeof Blob !== "undefined" && typeof Blob.prototype.arrayBuffer === "function";
+ }
+ function isNativeBlob(input) {
+   return hasBlobConstructor() && input instanceof Blob;
+diff --git a/dist/parsers/mobi.js b/dist/parsers/mobi.js
+index 311911f..c8464ca 100644
+--- a/dist/parsers/mobi.js
++++ b/dist/parsers/mobi.js
+@@ -1475,7 +1475,7 @@ revokeURL_fn2 = function(url) {
+   }
+ };
+ function createOutputBlob(buffer, type = "") {
+-  if (typeof Blob !== "undefined") return new Blob([buffer], { type });
++  if (typeof Blob !== "undefined" && typeof Blob.prototype.arrayBuffer === "function") return new Blob([buffer], { type });
+   return new ArrayBufferBlob(buffer, type);
+ }
+ function toMOBIBlobInput(input) {

@@ -1,3 +1,5 @@
+import { withoutMusicShares } from '../../application/music-share';
+
 export interface AudioEmbed {
   durationMs: number;
   id: string;
@@ -17,16 +19,16 @@ export function extractAudioEmbeds(markdown: string): AudioEmbed[] {
   }));
 }
 
-export function extractImageMediaIds(markdown: string): string[] {
+export function extractVisualMediaIds(markdown: string): string[] {
   return [...new Set([...markdown.matchAll(IMAGE_EMBED_PATTERN)].map((match) => match[1]))];
 }
 
 export function extractEmbeddedMediaIds(markdown: string): string[] {
-  return [...new Set([...extractImageMediaIds(markdown), ...extractAudioEmbeds(markdown).map((item) => item.id)])];
+  return [...new Set([...extractVisualMediaIds(markdown), ...extractAudioEmbeds(markdown).map((item) => item.id)])];
 }
 
 export function withoutEmbeddedAttachments(markdown: string): string {
-  return markdown.replace(/!\[[^\]]*\]\((?:media|audio):\/\/[^)]+\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return withoutMusicShares(markdown.replace(/!\[[^\]]*\]\((?:media|audio):\/\/[^)]+\)/g, '')).replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function formatAudioDuration(durationMs: number | null): string {

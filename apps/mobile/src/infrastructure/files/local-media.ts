@@ -4,6 +4,10 @@ import type { ImagePickerAsset } from 'expo-image-picker';
 import type { Media } from '@still-alive/types';
 
 export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media> {
+  return persistPickedMedia(asset);
+}
+
+export async function persistPickedMedia(asset: ImagePickerAsset): Promise<Media> {
   const id = createLocalId('media');
   const extension = fileExtension(asset);
   const documentDirectory = LegacyFileSystem.documentDirectory;
@@ -15,15 +19,18 @@ export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media
     await LegacyFileSystem.makeDirectoryAsync(directoryUri, { intermediates: true });
     await LegacyFileSystem.copyAsync({ from: asset.uri, to: destinationUri });
     const info = await LegacyFileSystem.getInfoAsync(destinationUri, { md5: true });
-    if (!info.exists || info.isDirectory || info.size <= 0) throw new Error('照片文件为空');
+    if (!info.exists || info.isDirectory || info.size <= 0) throw new Error('媒体文件为空');
     return {
       id,
       localPath: destinationUri,
-      mimeType: asset.mimeType ?? mimeTypeForExtension(extension),
+      mimeType: asset.mimeType ?? mimeTypeForExtension(extension, asset.type),
       width: asset.width || null,
       height: asset.height || null,
       checksum: info.md5 ?? '',
       createdAt: new Date().toISOString(),
+      kind: asset.type === 'video' || asset.mimeType?.startsWith('video/') ? 'video' : 'image',
+      originalName: asset.fileName ?? null,
+      sizeBytes: info.size,
     };
   } catch (cause) {
     await LegacyFileSystem.deleteAsync(destinationUri, { idempotent: true }).catch(() => undefined);
@@ -56,7 +63,7 @@ export async function persistVoiceRecording(uri: string): Promise<Media> {
   }
 }
 
-export async function persistAlbumImage(personId: string | null, albumId: string, asset: ImagePickerAsset): Promise<Media> {
+export async function persistAlbumMedia(personId: string | null, albumId: string, asset: ImagePickerAsset): Promise<Media> {
   const id = createLocalId('media');
   const targetDirectory = personId
     ? new Directory(Paths.document, 'people', personId, 'albums', albumId)
@@ -69,16 +76,19 @@ export async function persistAlbumImage(personId: string | null, albumId: string
   const destination = new File(targetDirectory, `${id}${extension}`);
   try {
     await new File(asset.uri).copy(temporary);
-    if (!temporary.exists || temporary.size <= 0) throw new Error('照片文件为空');
+    if (!temporary.exists || temporary.size <= 0) throw new Error('媒体文件为空');
     await temporary.move(destination);
     return {
       id,
       localPath: destination.uri,
-      mimeType: asset.mimeType ?? mimeTypeForExtension(extension),
+      mimeType: asset.mimeType ?? mimeTypeForExtension(extension, asset.type),
       width: asset.width || null,
       height: asset.height || null,
       checksum: destination.md5 ?? '',
       createdAt: new Date().toISOString(),
+      kind: asset.type === 'video' || asset.mimeType?.startsWith('video/') ? 'video' : 'image',
+      originalName: asset.fileName ?? null,
+      sizeBytes: destination.size,
     };
   } catch (cause) {
     if (temporary.exists) temporary.delete();
@@ -120,13 +130,22 @@ function fileExtension(asset: ImagePickerAsset): string {
   if (asset.mimeType === 'image/png') return '.png';
   if (asset.mimeType === 'image/webp') return '.webp';
   if (asset.mimeType === 'image/heic' || asset.mimeType === 'image/heif') return '.heic';
+  if (asset.mimeType === 'video/quicktime') return '.mov';
+  if (asset.mimeType === 'video/x-m4v') return '.m4v';
+  if (asset.mimeType === 'video/webm') return '.webm';
+  if (asset.type === 'video' || asset.mimeType?.startsWith('video/')) return '.mp4';
   return '.jpg';
 }
 
-function mimeTypeForExtension(extension: string): string {
+function mimeTypeForExtension(extension: string, assetType?: ImagePickerAsset['type']): string {
   if (extension === '.png') return 'image/png';
   if (extension === '.webp') return 'image/webp';
   if (extension === '.heic' || extension === '.heif') return 'image/heic';
+  if (extension === '.mov') return 'video/quicktime';
+  if (extension === '.m4v') return 'video/x-m4v';
+  if (extension === '.webm') return 'video/webm';
+  if (extension === '.3gp') return 'video/3gpp';
+  if (assetType === 'video' || extension === '.mp4') return 'video/mp4';
   return 'image/jpeg';
 }
 

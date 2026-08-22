@@ -273,7 +273,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'media', 'original_name', 'TEXT');
     await addColumnIfMissing(db, 'media', 'size_bytes', 'INTEGER');
     await db.execAsync(`
-      UPDATE media SET kind = CASE WHEN mime_type LIKE 'audio/%' THEN 'audio' ELSE 'image' END WHERE kind IS NULL;
+      UPDATE media SET kind = CASE WHEN mime_type LIKE 'audio/%' THEN 'audio' WHEN mime_type LIKE 'video/%' THEN 'video' ELSE 'image' END WHERE kind IS NULL;
       CREATE TABLE IF NOT EXISTS music_tracks (
         id TEXT PRIMARY KEY NOT NULL,
         media_id TEXT NOT NULL UNIQUE REFERENCES media(id) ON DELETE CASCADE,
@@ -402,6 +402,27 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'music_playlists', 'cover_media_id', 'TEXT REFERENCES media(id) ON DELETE SET NULL');
     await db.execAsync('PRAGMA user_version = 23;');
   }
+
+  if (currentVersion < 24) {
+    await addColumnIfMissing(db, 'books', 'last_read_at', 'TEXT');
+    await db.execAsync(`
+      UPDATE books SET last_read_at = updated_at
+      WHERE last_read_at IS NULL AND progress > 0;
+      PRAGMA user_version = 24;
+    `);
+  }
+
+  if (currentVersion < 25) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS person_books (
+      person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (person_id, book_id)
+    );
+    CREATE INDEX IF NOT EXISTS person_books_person_idx ON person_books(person_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS person_books_book_idx ON person_books(book_id, person_id);
+    PRAGMA user_version = 25;
+  `);
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {

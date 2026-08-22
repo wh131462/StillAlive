@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { Animated, Easing, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
@@ -12,6 +12,7 @@ import type { MusicQueueSource } from './music-player-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { useAppState } from '../../application/state/app-state';
 import { MusicCover } from './music-cover';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 type QueueSourceControl = MusicQueueSource | 'people';
 
@@ -23,9 +24,9 @@ const SOURCES: Array<{ id: QueueSourceControl; label: string }> = [
 
 const RECORD_ROTATION_DURATION = 16000;
 const TONEARM_ANIMATION_DURATION = 380;
-const QUEUE_SHEET_ENTRY_OFFSET = 520;
-const QUEUE_SHEET_DISMISS_THRESHOLD = 110;
-const QUEUE_SHEET_ANIMATION_DURATION = 240;
+const TITLE_MARQUEE_GAP = 48;
+const TITLE_MARQUEE_SPEED = 32;
+const TITLE_MARQUEE_PAUSE = 1200;
 
 export default function MusicPlayerScreen() {
   const router = useRouter();
@@ -64,19 +65,24 @@ export default function MusicPlayerScreen() {
     else router.replace('/music-box' as RelativePathString);
   };
 
+  const shareCurrentTrack = () => {
+    if (!current) return;
+    router.push({ pathname: '/editor', params: { musicTrackId: current.id } });
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <View style={styles.headerSide}><Pressable accessibilityLabel="最小化播放器" onPress={minimize} style={styles.headerButton}><SymbolView name={{ android: 'keyboard_arrow_down', ios: 'chevron.down', web: 'keyboard_arrow_down' }} size={24} tintColor={colors.inkSoft} type="hierarchical" /></Pressable></View>
         <View style={styles.headerCopy}><Text style={styles.headerTitle}>播放详情</Text><Text numberOfLines={1} style={styles.headerMeta}>{current ? currentQueueIndex >= 0 ? `${currentQueueIndex + 1} / ${player.queue.length}` : '当前曲目' : '未开始播放'}</Text></View>
-        <View style={styles.headerSide} />
+        <View style={[styles.headerSide, styles.headerSideRight]}>{current ? <Pressable accessibilityLabel={`分享到空间：${current.title}`} accessibilityRole="button" onPress={shareCurrentTrack} style={styles.headerButton}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={21} tintColor={colors.life} type="hierarchical" /></Pressable> : null}</View>
       </View>
 
       {current ? (
         <View style={styles.playerBody}>
           <View style={styles.recordArea}><RecordPlayer cover={media.find((item) => item.id === current.coverMediaId)} playing={player.playing} scale={recordScale} /></View>
           <View style={styles.controlPanel}>
-            <View style={styles.trackIdentity}><Text numberOfLines={2} style={styles.title}>{current.title}</Text><Text numberOfLines={1} style={styles.artist}>{current.artist || '未知艺术家'}{current.album ? ` / ${current.album}` : ''}</Text></View>
+            <View style={styles.trackIdentity}><ScrollingTrackTitle key={current.id} title={current.title} /><Text numberOfLines={1} style={styles.artist}>{current.artist || '未知艺术家'}{current.album ? ` / ${current.album}` : ''}</Text></View>
 
             <View style={styles.timeline}>
               <Pressable accessibilityRole="adjustable" onLayout={(event) => setProgressWidth(event.nativeEvent.layout.width)} onPress={(event) => { if (duration) void player.seekTo(duration * Math.max(0, Math.min(1, event.nativeEvent.locationX / progressWidth))); }} style={styles.progressTrack}>
@@ -113,6 +119,40 @@ export default function MusicPlayerScreen() {
   );
 }
 
+function ScrollingTrackTitle({ title }: { title: string }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [titleWidth, setTitleWidth] = useState(0);
+  const scrolling = viewportWidth > 0 && titleWidth > viewportWidth + 1;
+
+  useEffect(() => {
+    translateX.stopAnimation();
+    translateX.setValue(0);
+    if (!scrolling) return;
+    const distance = titleWidth + TITLE_MARQUEE_GAP;
+    const animation = Animated.loop(Animated.sequence([
+      Animated.delay(TITLE_MARQUEE_PAUSE),
+      Animated.timing(translateX, {
+        toValue: -distance,
+        duration: Math.round(distance / TITLE_MARQUEE_SPEED * 1000),
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [scrolling, titleWidth, translateX]);
+
+  return (
+    <View accessible accessibilityLabel={title} accessibilityRole="text" onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)} style={styles.titleViewport}>
+      <Animated.View style={[styles.titleTrack, !scrolling && styles.titleTrackStill, scrolling && { transform: [{ translateX }] }]}>
+        <Text numberOfLines={1} onTextLayout={(event) => setTitleWidth(event.nativeEvent.lines[0]?.width ?? 0)} style={styles.title}>{title}</Text>
+        {scrolling ? <><View style={styles.titleMarqueeGap} /><Text accessible={false} importantForAccessibility="no" numberOfLines={1} style={styles.title}>{title}</Text></> : null}
+      </Animated.View>
+    </View>
+  );
+}
+
 function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackId: string | null; onClose(): void; onSelect(track: MusicTrack): void; open: boolean }) {
   const insets = useSafeAreaInsets();
   const player = useMusicPlayer();
@@ -130,55 +170,9 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
   const sources: Array<{ id: QueueSourceControl; label: string }> = player.queuePlaylistId
     ? [{ id: 'playlist', label: '当前歌单' }, ...SOURCES]
     : SOURCES;
-  const translateY = useRef(new Animated.Value(0)).current;
-  const dismissing = useRef(false);
-
   useEffect(() => {
-    if (!open) return;
-    setSelectingPerson(false);
-    dismissing.current = false;
-    translateY.setValue(QUEUE_SHEET_ENTRY_OFFSET);
-    Animated.timing(translateY, {
-      toValue: 0,
-      duration: QUEUE_SHEET_ANIMATION_DURATION,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [open, translateY]);
-
-  const dismiss = useCallback(() => {
-    if (dismissing.current) return;
-    dismissing.current = true;
-    Animated.timing(translateY, {
-      toValue: QUEUE_SHEET_ENTRY_OFFSET,
-      duration: QUEUE_SHEET_ANIMATION_DURATION,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onClose();
-    });
-  }, [onClose, translateY]);
-
-  const pan = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 6 && gesture.dy > Math.abs(gesture.dx),
-    onPanResponderGrant: () => {
-      translateY.stopAnimation();
-    },
-    onPanResponderMove: (_, gesture) => {
-      translateY.setValue(Math.max(0, gesture.dy));
-    },
-    onPanResponderRelease: (_, gesture) => {
-      if (gesture.dy > QUEUE_SHEET_DISMISS_THRESHOLD || gesture.vy > 0.85) {
-        dismiss();
-        return;
-      }
-      Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 260, mass: 0.8, useNativeDriver: true }).start();
-    },
-    onPanResponderTerminate: () => {
-      Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 260, mass: 0.8, useNativeDriver: true }).start();
-    },
-  }), [dismiss, translateY]);
+    if (open) setSelectingPerson(false);
+  }, [open]);
 
   const selectSource = (source: QueueSourceControl) => {
     if (source === 'people') {
@@ -195,11 +189,7 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
   };
 
   return (
-    <Modal animationType="fade" onRequestClose={dismiss} transparent visible={open}>
-      <Pressable onPress={dismiss} style={styles.backdrop}>
-        <Animated.View style={[styles.queueSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md), transform: [{ translateY }] }]}>
-          <Pressable accessibilityLabel="播放队列" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.queueSheetTouch}>
-            <View {...pan.panHandlers} style={styles.queueGrabber}><View style={styles.handle} /></View>
+    <DraggableBottomSheet accessibilityLabel="播放队列，向下拖动关闭" backdropStyle={styles.backdrop} onClose={onClose} open={open} sheetStyle={[styles.queueSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
             <View style={styles.queueHeader}>
               {selectingPerson ? <Pressable accessibilityLabel="返回播放队列" onPress={() => setSelectingPerson(false)} style={styles.queueBack}><SymbolView name={{ android: 'arrow_back', ios: 'chevron.left', web: 'arrow_back' }} size={20} tintColor={colors.inkSoft} type="hierarchical" /></Pressable> : null}
               <View style={styles.queueHeaderCopy}><Text style={styles.queueTitle}>{selectingPerson ? '选择人物' : selectedPerson && player.queueSource === 'person' ? `${selectedPerson.name}喜欢的音乐` : '播放队列'}</Text><Text style={styles.queueCount}>{selectingPerson ? `${peopleWithMusic.length} 个人物有收藏` : `${player.queue.length} 首`}</Text></View>
@@ -222,10 +212,7 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
                 <ScrollView contentContainerStyle={styles.queueContent} style={styles.queueList}>{player.queue.map((track, index) => <Pressable key={track.id} onPress={() => onSelect(track)} style={({ pressed }) => [styles.queueRow, pressed && styles.pressed]}><View style={styles.queueState}><Text style={styles.queueIndex}>{index + 1}</Text></View><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={42} style={styles.queueCover} /><View style={styles.queueCopy}><Text numberOfLines={1} style={[styles.queueTrackTitle, track.id === currentTrackId && styles.queueTrackTitleActive]}>{track.title}</Text><Text numberOfLines={1} style={styles.queueTrackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>)}{player.queue.length === 0 ? <View style={styles.queueEmpty}><Text style={styles.emptyText}>当前来源没有音乐</Text></View> : null}</ScrollView>
               </>
             )}
-          </Pressable>
-        </Animated.View>
-      </Pressable>
-    </Modal>
+    </DraggableBottomSheet>
   );
 }
 
@@ -329,6 +316,7 @@ const styles = createThemedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.paper },
   header: { minHeight: 58, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
   headerSide: { width: 88, flexDirection: 'row', alignItems: 'center' },
+  headerSideRight: { justifyContent: 'flex-end' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, alignItems: 'center' },
   headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
@@ -356,7 +344,11 @@ const styles = createThemedStyles(() => ({
   tonearmNeedle: { position: 'absolute', bottom: -7, left: 10, width: 2, height: 9, backgroundColor: colors.life },
   controlPanel: { width: '100%', maxWidth: 480, alignItems: 'center' },
   trackIdentity: { width: '100%', minHeight: 62, alignItems: 'center', justifyContent: 'center' },
-  title: { maxWidth: '100%', color: colors.ink, fontFamily: typography.display, fontSize: 24, lineHeight: 31, textAlign: 'center' },
+  titleViewport: { width: '100%', height: 31, overflow: 'hidden' },
+  titleTrack: { flexDirection: 'row', alignItems: 'center' },
+  titleTrackStill: { alignSelf: 'center' },
+  title: { flexShrink: 0, color: colors.ink, fontFamily: typography.display, fontSize: 24, lineHeight: 31 },
+  titleMarqueeGap: { width: TITLE_MARQUEE_GAP },
   artist: { maxWidth: '100%', marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, textAlign: 'center' },
   timeline: { width: '100%', marginTop: spacing.md },
   progressTrack: { width: '100%', height: 24, justifyContent: 'center' },

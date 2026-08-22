@@ -2,9 +2,11 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
-import { Animated, FlatList, type ImageLoadEventData, type LayoutChangeEvent, Modal, type NativeScrollEvent, type NativeSyntheticEvent, PanResponder, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, FlatList, type ImageLoadEventData, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, PanResponder, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SelectedPreviewFile } from './file-preview.types';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { MediaVideo } from '../../shared/components/media-video';
 
 const DOUBLE_TAP_DELAY_MS = 280;
 const DOUBLE_TAP_DISTANCE = 36;
@@ -59,11 +61,11 @@ export default function FilePreviewScreen() {
       <StatusBar style="light" />
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <View style={styles.header}>
-          <Pressable accessibilityLabel="关闭图片预览" accessibilityRole="button" hitSlop={8} onPress={() => router.back()} style={({ pressed }) => [styles.closeButton, pressed && styles.controlPressed]}>
+          <Pressable accessibilityLabel="关闭媒体预览" accessibilityRole="button" hitSlop={8} onPress={() => router.back()} style={({ pressed }) => [styles.closeButton, pressed && styles.controlPressed]}>
             <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={21} tintColor="#FFFFFF" type="hierarchical" />
           </Pressable>
           {initialFiles.length ? <Text accessibilityLiveRegion="polite" style={styles.counter}>{currentIndex + 1} / {initialFiles.length}</Text> : null}
-          {currentFile ? <Pressable accessibilityLabel="查看图片信息" accessibilityRole="button" hitSlop={8} onPress={() => setInfoOpen(true)} style={({ pressed }) => [styles.infoButton, pressed && styles.controlPressed]}><SymbolView name={{ android: 'info', ios: 'info.circle', web: 'info' }} size={21} tintColor="#FFFFFF" type="hierarchical" /></Pressable> : <View style={styles.headerSpacer} />}
+          {currentFile ? <Pressable accessibilityLabel="查看媒体信息" accessibilityRole="button" hitSlop={8} onPress={() => setInfoOpen(true)} style={({ pressed }) => [styles.infoButton, pressed && styles.controlPressed]}><SymbolView name={{ android: 'info', ios: 'info.circle', web: 'info' }} size={21} tintColor="#FFFFFF" type="hierarchical" /></Pressable> : <View style={styles.headerSpacer} />}
         </View>
         <FlatList
           data={initialFiles}
@@ -71,10 +73,10 @@ export default function FilePreviewScreen() {
           horizontal
           initialScrollIndex={currentIndex}
           keyExtractor={(item, index) => `${item.url}_${index}`}
-          ListEmptyComponent={<View style={[styles.empty, { width }]}><Text style={styles.emptyText}>图片不可用</Text></View>}
+          ListEmptyComponent={<View style={[styles.empty, { width }]}><Text style={styles.emptyText}>媒体不可用</Text></View>}
           onMomentumScrollEnd={handleScrollEnd}
           pagingEnabled
-          renderItem={({ item, index }) => <View style={[styles.page, { width }]}><ZoomableImage active={index === currentIndex} index={index} onSourceSize={(size) => handleImageSize(index, size)} uri={item.url} /></View>}
+          renderItem={({ item, index }) => <View style={[styles.page, { width }]}>{isVideoFile(item) ? <MediaVideo active={index === currentIndex} style={styles.video} uri={item.url} /> : <ZoomableImage active={index === currentIndex} index={index} onSourceSize={(size) => handleImageSize(index, size)} uri={item.url} />}</View>}
           showsHorizontalScrollIndicator={false}
           style={styles.preview}
         />
@@ -89,20 +91,15 @@ function ImageInfoSheet({ file, onClose, open, size }: { file: SelectedPreviewFi
   if (!file) return null;
   const rows: InfoRow[] = [
     { icon: { android: 'aspect_ratio', ios: 'aspectratio', web: 'aspect_ratio' }, label: '分辨率', value: size ? `${Math.round(size.width)} × ${Math.round(size.height)}` : '未知' },
-    { detail: file.type, icon: { android: 'image', ios: 'photo', web: 'image' }, label: '格式', value: imageFormat(file.type) },
+    { detail: file.type, icon: { android: isVideoFile(file) ? 'videocam' : 'image', ios: isVideoFile(file) ? 'video' : 'photo', web: isVideoFile(file) ? 'videocam' : 'image' }, label: '格式', value: mediaFormat(file.type) },
     { icon: { android: 'hard_drive', ios: 'externaldrive', web: 'hard_drive' }, label: '文件大小', value: typeof file.size === 'number' ? formatBytes(file.size) : '未知' },
   ];
   if (file.createdAt) rows.push({ icon: { android: 'schedule', ios: 'clock', web: 'schedule' }, label: '添加时间', value: formatDateTime(file.createdAt) });
   return (
-    <Modal animationType="slide" onRequestClose={onClose} statusBarTranslucent transparent visible={open}>
-      <Pressable onPress={onClose} style={styles.infoBackdrop}>
-        <Pressable accessibilityLabel="图片信息" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={[styles.infoSheet, { paddingBottom: Math.max(22, insets.bottom + 12) }]}>
-          <View style={styles.infoHandle} />
-          <View style={styles.infoHeader}><View style={styles.infoTitleCopy}><Text style={styles.infoTitle}>图片信息</Text><Text numberOfLines={2} style={styles.infoName}>{file.name}</Text></View><Pressable accessibilityLabel="关闭图片信息" accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.infoClose, pressed && styles.controlPressed]}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor="rgba(255, 255, 255, 0.78)" type="hierarchical" /></Pressable></View>
+    <DraggableBottomSheet accessibilityLabel="媒体信息，向下拖动关闭" backdropStyle={styles.infoBackdrop} handleStyle={styles.infoHandle} onClose={onClose} open={open} sheetStyle={[styles.infoSheet, { paddingBottom: Math.max(22, insets.bottom + 12) }]} statusBarTranslucent>
+          <View style={styles.infoHeader}><View style={styles.infoTitleCopy}><Text style={styles.infoTitle}>{isVideoFile(file) ? '视频信息' : '图片信息'}</Text><Text numberOfLines={2} style={styles.infoName}>{file.name}</Text></View><Pressable accessibilityLabel="关闭媒体信息" accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.infoClose, pressed && styles.controlPressed]}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor="rgba(255, 255, 255, 0.78)" type="hierarchical" /></Pressable></View>
           <View style={styles.infoRows}>{rows.map((row) => <View key={row.label} style={styles.infoRow}><View style={styles.infoRowIcon}><SymbolView name={row.icon} size={20} tintColor="rgba(255, 255, 255, 0.7)" type="hierarchical" /></View><View style={styles.infoRowCopy}><Text style={styles.infoRowLabel}>{row.label}</Text><Text numberOfLines={1} style={styles.infoRowValue}>{row.value}</Text>{row.detail ? <Text numberOfLines={1} style={styles.infoRowDetail}>{row.detail}</Text> : null}</View></View>)}</View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </DraggableBottomSheet>
   );
 }
 
@@ -272,12 +269,16 @@ function previewFileSize(file: SelectedPreviewFile | undefined): Size | undefine
   return { width: file.width, height: file.height };
 }
 
-function imageFormat(mimeType: string): string {
+function mediaFormat(mimeType: string): string {
   const subtype = mimeType.split('/')[1]?.split(';')[0];
   if (!subtype) return '未知';
   if (subtype === 'jpeg') return 'JPEG';
   if (subtype === 'svg+xml') return 'SVG';
   return subtype.toUpperCase();
+}
+
+function isVideoFile(file: SelectedPreviewFile): boolean {
+  return file.type.startsWith('video/');
 }
 
 function formatBytes(bytes: number): string {
@@ -340,13 +341,14 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 44 },
   infoButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.1)' },
   preview: { flex: 1 },
+  video: { width: '100%', height: '100%' },
   page: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   zoomViewport: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   zoomPressable: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
   zoomImage: { flexGrow: 0, flexShrink: 0 },
   infoBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.48)' },
   infoSheet: { paddingTop: 10, paddingHorizontal: 20, borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: '#171717' },
-  infoHandle: { width: 36, height: 4, marginBottom: 12, alignSelf: 'center', borderRadius: 2, backgroundColor: 'rgba(255, 255, 255, 0.22)' },
+  infoHandle: { backgroundColor: 'rgba(255, 255, 255, 0.22)' },
   infoHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'flex-start' },
   infoTitleCopy: { flex: 1, minWidth: 0, paddingTop: 3 },
   infoTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
