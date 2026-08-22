@@ -16,7 +16,7 @@
 ## 3. Bookshelf and reading
 
 - [x] 3.1 Implement bookshelf import, metadata editing, sorting, search, delete and parse-status UI.
-- [x] 3.2 Implement reader adapter boundary and PDF rendering path; EPUB/MOBI/AZW/AZW3 remain explicit unsupported states until a bundle-compatible parser is added.
+- [x] 3.2 Implement reader adapter boundary and PDF rendering path; EPUB remains the initial reflow engine boundary.
 - [x] 3.3 Add book detail and reader screens with progress persistence and resume position.
 - [x] 3.4 Add excerpt selection/storage, excerpt list, delete and source-location display.
 - [x] 3.5 Extend existing editor entry flow to create reading reviews/notes with immutable quote blocks and book/excerpt source metadata.
@@ -55,10 +55,18 @@
 - [ ] 8.2 Build a minimal PDF renderer spike using `react-native-pdf` or an equivalent maintained native renderer; verify local large PDF, page count, page jump, zoom, rotation and safe-area layout on iOS and Android.
 - [x] 8.3 Replace the current DOM `<embed>` surface with `BookReaderAdapter` implementations and a capability-driven `ReaderSessionController`; retain `<embed>` only as a temporary fallback for unsupported web preview, never as the production reader.
 - [x] 8.4 Add `BookLocator`, `ReaderCapabilities`, chapter cache and per-book reading preferences; migrate existing `page:N` locations to `pdf-page` locators without losing progress.
-- [x] 8.5 Implement the reference interaction structure: immersive正文, tap-to-reveal controls, TOC/excerpts/notes drawer, display drawer, top/bottom safe-area insets, and no mini-player while the full reader is open.
+- [x] 8.5 Implement the reference interaction structure: full-screen immersive正文 with the system status bar hidden, bottom-right time/battery HUD, floating tap-to-reveal controls, TOC/excerpts/notes drawer, display drawer, safe-area-aware control states, and no mini-player while the full reader is open.
 - [x] 8.6 Implement EPUB selection-to-excerpt with CFI/context snapshots and PDF capability-gated selection/manual excerpt labeling; add highlighter restore where the selected engine supports it.
 - [x] 8.7 Add real-device acceptance for 50 MB+ books, background/foreground resume, orientation, dynamic font settings, failed/protected/unsupported states and backup restore.
-- [ ] 8.8 Only after the two engine spikes pass, decide whether any no-DRM MOBI/AZW/AZW3 parser is stable enough to change its status from `unsupported`; otherwise keep archive-only behavior.
+- [ ] 8.8 Only after the engine spikes pass, decide whether the no-DRM MOBI parser is stable enough for release; AZW/AZW3 remain outside the new import list and historical records stay archive-only.
+
+## 13. Extended reflow book formats
+
+- [x] 13.1 Remove AZW/AZW3 from new picker and directory import extensions while preserving historical records and backups.
+- [x] 13.2 Add no-DRM MOBI and FB2 parsing with a local, rebuildable EPUB cache and protected/failed status handling.
+- [x] 13.3 Add TXT and HTML/HTM normalization to the same reflow reader with safe script/link filtering.
+- [x] 13.4 Extend reflow locators, excerpts, settings and backup validation for converted formats.
+- [x] 13.5 Run typecheck, tests, build, strict OpenSpec validation and diff checks for the extended format matrix.
 
 ## 9. Book batch import and deduplication
 

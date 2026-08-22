@@ -10,7 +10,7 @@
 
 - 支持导入、管理和播放本地音乐；曲目与“我的音乐盒/人物喜欢”收藏关系分离。
 - 提供单一全局播放会话、队列、播放模式、悬浮播放器和完整播放页。
-- 支持导入和管理 PDF、EPUB、MOBI/AZW/AZW3；首版只阅读 PDF/EPUB，其他格式保留原始文件并归档。
+- 支持导入和管理 PDF、EPUB、无 DRM MOBI、TXT、HTML/HTM 和 FB2；PDF 使用固定版式阅读器，其余可读格式使用重排阅读器。加密 MOBI、AZW/AZW3 和 KFX 保留为受保护/不可读状态，不执行 DRM 绕过。
 - 提供阅读进度、摘抄、引用摘抄写观后感、书籍来源写读书笔记。
 - 所有结构化数据与原始文件可离线使用、删除和备份恢复。
 
@@ -102,13 +102,14 @@ DocumentPicker
 | `expo-pdf` | 搜索结果显示是较新的跨平台 PDF viewer，尚不足以作为当前生产基线 | 不选，避免以新库替换现有风险 |
 | `@likecoin/epub-ts` | 仅在 lockfile 中存在，未证明提供可直接使用的 RN 阅读表面 | 不直接作为 UI 内核，避免把转码库误当阅读器 |
 
-因此首版采用 EPUB.js/WebView + 原生 PDF renderer 的双内核。实际接入时确认 `@epubjs-react-native/expo-file-system@1.1.4` 仍从 Expo 57 根入口调用已移除的旧文件 API；生产实现保留 `@epubjs-react-native/core`，并在项目内提供仅桥接 `expo-file-system/legacy` 的薄适配器，避免打开本地 EPUB 时运行期报错。`react-native-pdf@7.0.5` 和 `react-native-webview@14.0.1` 的 Android library 脚本还会重复声明旧 AGP，项目通过 pnpm patch 移除子模块 buildscript，统一复用 Expo 57 根工程的 AGP/Kotlin 插件。MOBI/AZW/AZW3 继续只归档，直到独立 parser spike 证明无 DRM、章节和定位均可靠。原始文件始终保留，转换缓存可重建和删除。
+因此首版采用 EPUB.js/WebView + 原生 PDF renderer，并为 MOBI/FB2/TXT/HTML 增加统一的重排转换适配器。MOBI 和 FB2 通过纯 JS `rebook` 解析器生成可重建的临时 EPUB，TXT/HTML 使用本地安全转换器生成临时 EPUB，再继续复用 EPUB.js 的字号、主题、选区和翻页体验。实际接入时确认 `@epubjs-react-native/expo-file-system@1.1.4` 仍从 Expo 57 根入口调用已移除的旧文件 API；生产实现保留 `@epubjs-react-native/core`，并在项目内提供仅桥接 `expo-file-system/legacy` 的薄适配器，避免打开本地 EPUB 时运行期报错。`react-native-pdf@7.0.5` 和 `react-native-webview@14.0.1` 的 Android library 脚本还会重复声明旧 AGP，项目通过 pnpm patch 移除子模块 buildscript，统一复用 Expo 57 根工程的 AGP/Kotlin 插件。AZW/AZW3 不进入新导入列表；历史记录保留为归档，未来只有在独立 parser spike 通过后才重新开放。原始文件始终保留，转换缓存可重建和删除。
 
 ### 4.1.1 适配器接口与能力矩阵
 
 ```text
 ReaderScreen
   └─ ReaderSessionController
+       ├─ ReflowReaderAdapter -> rebook (MOBI/FB2) or local normalizer (TXT/HTML) -> EPUB.js WebView
        ├─ EpubReaderAdapter   -> epubjs-react-native / EPUB.js WebView
        └─ PdfReaderAdapter    -> native PDF renderer
 ```
@@ -133,6 +134,7 @@ interface BookReaderAdapter {
 ### 4.1.2 定位协议
 
 - EPUB：`type=epub-cfi`，保存 CFI range、章节 href、章节标题和全书 progression；locations 缓存用于显示章节进度，不作为唯一真相。
+- MOBI/FB2/TXT/HTML：`type=reflow-cfi`，保存转换后重排文档的 CFI、章节 href、章节标题和 progression；转换缓存可重建，不能把缓存路径当作持久来源。
 - PDF：`type=pdf-page`，保存当前页码；只有内核可靠返回总页数时才保存 `pageCount` 与 progression。
 - 手动摘抄：`type=manual`，保存当前页或章节快照并标记来源为手动录入。
 - 内核版本改变导致定位失效时，优先按章节 href/页码恢复，再显示“已恢复到附近位置”，不静默跳到第一页。
@@ -142,12 +144,14 @@ interface BookReaderAdapter {
 参考番茄小说公开资料中“正文优先、控制按需出现、阅读工具集中在底部”的交互层级，仅借鉴阅读路径，不复制品牌视觉、文案、商业入口或素材。移动端继续使用「仍在」主题与安全区规则。
 
 - 正文阅读面占据主要空间，不与书籍管理、摘抄列表或说明卡片混排。
-- 系统状态栏不隐藏；阅读背景延伸到安全区，顶部控制位于 `topInset` 之后，底部控制和抽屉使用 `bottomInset` 作为最小内边距。
-- 默认状态为沉浸态。点击正文中部切换控制态；控制态顶部显示返回、书名/章节和更多，底部显示上一章/页、真实位置、下一章/页，以及目录、主题、摘抄、设置。
+- 默认状态为沉浸态：顶部/底部控制和工具抽屉均隐藏时，系统状态栏隐藏，阅读背景与正文延伸到包含状态栏和底部手势区域在内的整个窗口。
+- 沉浸态右下角显示轻量 HUD，提供 `HH:mm` 时间、实时电量百分比和充电状态；HUD 避让底部手势安全区，点击后恢复阅读控制，不增加全屏手势拦截层。
+- 点击正文中部切换控制态；控制态恢复系统状态栏，顶部和底部控制以悬浮层覆盖正文，不参与正文布局。顶部控制位于 `topInset` 之后，底部控制和工具抽屉使用 `bottomInset` 作为最小内边距。
+- 控制态顶部显示返回、书名/章节和更多，底部显示上一章/页、真实位置、下一章/页，以及目录、主题、摘抄、设置；打开任一工具抽屉时同样保留系统状态栏和安全区。
 - EPUB 点击左右边缘翻页，正文中部只唤起控制层；PDF 保留滚动/缩放/选区手势，恢复入口必须是小型按钮而不是拦截全屏手势层。
 - PDF 纵向模式将当前可见页与主动页码跳转分离：滚动回调只记录进度，只有上一页、下一页和页码跳转操作才调用内核定位，避免滚动时吸附到页首。
 - 目录抽屉有“目录 / 摘抄 / 笔记”三个页签，设置抽屉独立存在；关闭任一抽屉不得改变阅读定位。
-- 设置首版只提供 EPUB 字号、行距、页边距、系统衬线/无衬线、左右翻页/上下滚动，以及统一四种阅读主题；PDF 只提供主题、缩放和页码跳转。
+- 设置首版为所有重排格式提供字号、行距、页边距、系统衬线/无衬线、左右翻页/上下滚动和统一四种阅读主题；PDF 只提供主题、缩放和页码跳转。
 - 删去下载、评论、分享、听书、自动阅读、在线字体、背景图片、仿真翻页和亮度控制，保持本地阅读器专注。
 
 ### 4.1.3 阅读状态机
@@ -177,16 +181,22 @@ stateDiagram-v2
 参考图只提取布局关系，不复制番茄小说的品牌资产：
 
 ```text
-┌─ status bar / topInset ───────────────────────┐
-│  [沉浸态：弱化章节标题]                        │
+┌─ full-bleed reading surface ──────────────────┐
+│  [沉浸态：隐藏系统状态栏]                      │
 │                                                │
 │              正文阅读面                        │
 │       20–28 px 中文正文 / 宽留白               │
 │                                                │
-├─ controls（仅点击正文后出现）─────────────────┤
+│                         23:48 · 82% · 设置      │
+└─ content extends behind bottom gesture area ──┘
+
+控制态（悬浮覆盖正文，不挤压阅读布局）：
+┌─ status bar / topInset / floating top bar ────┐
+│              正文阅读面                        │
+├─ floating bottom controls / bottomInset ──────┤
 │ 上一页/章       真实定位       下一页/章       │
 │ 目录        主题        摘抄        设置        │
-└─ bottomInset / home indicator ─────────────────┘
+└────────────────────────────────────────────────┘
 ```
 
 - 阅读正文不放卡片、不放浮层广告、不放长列表；正文最大宽度为屏幕宽度减去 20–24 pt 双侧留白。
@@ -195,7 +205,7 @@ stateDiagram-v2
 - 四套主题保持相同结构：纸白 `#F8F8F4`、暖黄 `#EEE3C9`、护眼绿 `#E6F0DC`、夜间 `#151916`；文本与分隔线按主题派生，不直接写死黑白。
 - 目录/摘抄/笔记抽屉占屏幕高度 76–88%，顶部圆角不超过 24 pt；章节行使用分隔线和当前章节色条，不使用厚重卡片。
 - 设置抽屉使用分组标题、分段控件、步进按钮和色板；不把长说明文字塞进阅读正文。
-- 状态栏、控制层和抽屉共享同一主题背景，切换主题时同步更新 `StatusBar` 样式，避免出现参考图中的顶部状态栏断层。
+- 沉浸态隐藏 `StatusBar`；控制层或抽屉出现时恢复状态栏，并使状态栏、控制层和抽屉共享同一主题背景与明暗样式，避免顶部断层。
 
 ### 5. 摘抄与笔记引用模型
 
@@ -219,7 +229,7 @@ stateDiagram-v2
 
 ## Risks / Trade-offs
 
-- **[格式兼容]** MOBI/AZW 生态复杂且可能带 DRM → 以适配器探测结果为准，失败状态可见，保留原文件；先保证 PDF/EPUB 和无 DRM 文件。
+- **[格式兼容]** MOBI 生态复杂且可能带 DRM → 仅承诺无 DRM MOBI，导入时解析探测，失败或加密状态可见并保留原文件；AZW/AZW3 不纳入新导入列表。
 - **[EPUB 依赖兼容]** `epubjs-react-native` 的 Expo 安装路径和 RN 0.86 新架构支持仍需真实双端 development build 验证；当前实现已接入书架主流程，验证未通过时应将该格式回退为保留原文件的不可读状态。
 - **[PDF 依赖兼容]** `react-native-pdf` 需要原生模块与文件访问依赖；当前已替换移动端 DOM `<embed>`，仍需在 iOS/Android 真机验证大文件、缩放、页码和选区。
 - **[依赖体积]** 电子书解析库可能增大 iOS/Android 包体 → 按格式拆分适配器，避免把解析库放入不需要的入口；构建后检查 bundle。
@@ -237,6 +247,6 @@ stateDiagram-v2
 
 ## 已决策问题
 
-- 首版可读格式为 EPUB + PDF；MOBI/AZW/AZW3 只导入归档，直到独立 parser spike 通过。
+- 首版可读格式为 PDF、EPUB、无 DRM MOBI、TXT、HTML/HTM 和 FB2；AZW/AZW3 不纳入新导入列表，既有文件只作为归档保留。
 - 阅读观后感和读书笔记继续作为普通 Post 进入空间时间线，同时保留书籍和摘抄来源元数据。
 - EPUB/PDF 已分别接入可重排与原生固定版式阅读内核；在 RN 0.86/Expo 57 双端真机验收通过前，保持发布门禁，不扩大可读格式范围。

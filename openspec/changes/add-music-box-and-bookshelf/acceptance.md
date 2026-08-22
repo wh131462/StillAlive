@@ -16,7 +16,8 @@
 - 拖动悬浮播放器到四角，确认不会被刘海、底部 Home Indicator 或 Tab Bar 遮挡，重启后位置恢复。
 - 导入大文件音频和 PDF，确认导入耗时、空间占用与失败提示可理解，失败不留下半成品。
 - 打开 PDF，翻页后退出再进入，确认页码与进度恢复；保存摘抄并从摘抄创建观后感。
-- 导入 DRM EPUB/MOBI/AZW，确认显示 unsupported/protected 状态且原始文件仍可删除或重新导入。
+- 导入无 DRM MOBI、TXT、HTML/HTM、FB2，确认重排阅读、目录（若有）、进度恢复和摘抄定位；导入加密 MOBI 时显示 protected，原始文件仍可删除或重新导入。
+- 选择 AZW/AZW3/KFX 时确认新导入流程拒绝并说明当前不支持；历史归档记录仍可查看文件信息和删除。
 - EPUB development build 验证目录、CFI 恢复、字号/行距/页边距/主题、选区摘抄和安全区。
 - PDF renderer 验证真实页码、总页数（若可用）、缩放、旋转、iOS 选区/Android 手动摘抄和 50 MB+ 文件。
 
