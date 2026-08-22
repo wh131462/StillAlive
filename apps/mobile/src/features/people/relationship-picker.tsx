@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 const RELATION_PRESETS = ['爸爸', '妈妈', '伴侣', '孩子', '兄弟姐妹', '亲人', '朋友', '挚友', '同学', '同事', '老师', '邻居'] as const;
 
@@ -40,11 +40,7 @@ export function RelationshipPicker({ onChange, value }: RelationshipPickerProps)
         <Text accessibilityElementsHidden style={styles.selectorArrow}>›</Text>
       </Pressable>
 
-      <Modal animationType="slide" onRequestClose={() => setOpen(false)} transparent visible={open}>
-        <AppKeyboardAvoidingView style={styles.flex}>
-          <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.backdrop}>
-            <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-              <View style={styles.handle} />
+      <DraggableBottomSheet keyboardAvoiding onClose={() => setOpen(false)} open={open} sheetStyle={styles.sheet}>
               <Text style={styles.sheetTitle}>选择关系</Text>
               <Text style={styles.sheetHint}>选择一个常用关系，或写下更准确的称呼。</Text>
 
@@ -84,10 +80,7 @@ export function RelationshipPicker({ onChange, value }: RelationshipPickerProps)
               </View>
 
               {normalizedValue ? <Pressable accessibilityRole="button" onPress={() => selectValue('')} style={styles.clearSelection}><Text style={styles.clearSelectionText}>暂不定义关系</Text></Pressable> : null}
-            </Pressable>
-          </Pressable>
-        </AppKeyboardAvoidingView>
-      </Modal>
+      </DraggableBottomSheet>
     </View>
   );
 }

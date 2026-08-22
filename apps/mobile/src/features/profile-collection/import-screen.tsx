@@ -16,6 +16,7 @@ import { formatGender } from '../people/gender-picker';
 import { formatBirthday } from '../people/person-profile';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { executeProfileCollectionCrypto, isNativeProfileCollectionCryptoAvailable } from './profile-collection-crypto';
 
 interface ImportContext {
@@ -155,10 +156,7 @@ export default function ProfileCollectionImportScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}>
-      <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-      <Text style={styles.headerTitle}>查看收到的回答</Text><View style={styles.headerButton} />
-    </View>
+    <ToolPageHeader onBack={() => router.back()} title="查看收到的回答" />
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       {!payload ? <>
         <View style={styles.intro}><Text style={styles.introTitle}>粘贴对方发回的内容</Text><Text style={styles.introText}>可以粘贴完整的回信链接或备用码。为了保护剪贴板内容，“仍在”不会自动读取。</Text></View>
@@ -210,9 +208,6 @@ function responseTagNames(ids: string[], newNames: string[], definitions: Array<
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 17, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   intro: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.sheet },
   introTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 23 },

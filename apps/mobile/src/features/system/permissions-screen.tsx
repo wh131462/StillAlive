@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { openAppSettings } from '../../infrastructure/platform/app-permissions';
 
 interface PermissionGuide {
@@ -43,10 +44,7 @@ export default function PermissionsScreen() {
     : '在“仍在”的应用信息页中，进入“权限”或“通知”，只开启当前功能需要的一项。不同手机的入口名称可能略有不同。';
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}>
-      <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-      <Text style={styles.headerTitle}>系统权限</Text><View style={styles.headerButton} />
-    </View>
+    <ToolPageHeader onBack={() => router.back()} title="系统权限" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.summary}>
         <View style={styles.summaryIcon}><SymbolView name={{ android: 'verified_user', ios: 'checkmark.shield', web: 'verified_user' }} size={26} tintColor={colors.life} type="hierarchical" /></View>
@@ -95,7 +93,7 @@ function GuideStep({ description, last = false, number, title }: { description: 
 }
 
 const styles = createThemedStyles(() => ({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
+  safeArea: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, summary: { padding: spacing.lg, alignItems: 'flex-start', borderRadius: radius.lg, backgroundColor: colors.lifeLight }, summaryIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.sheet }, summaryTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 20 }, summaryText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 19 },
   eyebrow: { marginTop: spacing.xl, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 }, sectionTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 },
   steps: { marginTop: spacing.lg }, step: { minHeight: 78, flexDirection: 'row' }, stepRail: { width: 36, alignItems: 'center' }, stepNumber: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.life }, stepNumberText: { color: colors.onLife, fontFamily: typography.mono, fontSize: typography.size.meta, fontWeight: '800' }, stepLine: { flex: 1, width: StyleSheet.hairlineWidth, marginVertical: 5, backgroundColor: colors.line }, stepCopy: { flex: 1, paddingLeft: spacing.sm, paddingBottom: spacing.lg }, stepTitle: { color: colors.ink, fontSize: typography.size.label, fontWeight: '700' }, stepDescription: { marginTop: 5, color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 18 },

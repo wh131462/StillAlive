@@ -13,6 +13,7 @@ import { useAppState } from '../../application/state/app-state';
 import { encodeProfileCollectionInvitation, PROFILE_COLLECTION_INVITATION_DAYS, profileCollectionInvitationUrl } from './profile-collection';
 import type { ProfileCollectionInvitationV1, ProfileCollectionTagOption } from './profile-collection';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { executeProfileCollectionCrypto, isNativeProfileCollectionCryptoAvailable } from './profile-collection-crypto';
 
 const FIELD_OPTIONS: Array<{ id: ProfileCollectionField; label: string; hint: string }> = [
@@ -103,13 +104,10 @@ export default function ProfileCollectionInviteScreen() {
     }
   }, [createProfileCollectionRequest, deleteProfileCollectionRequest, person, router, selectedFields, tagDefinitions, tagGroups]);
 
-  if (!person) return <SafeAreaView style={styles.safeArea}><Text style={styles.missing}>这个人物不存在或已被删除。</Text></SafeAreaView>;
+  if (!person) return <SafeAreaView style={styles.safeArea}><ToolPageHeader onBack={() => router.back()} title="邀请对方填写" /><Text style={styles.missing}>这个人物不存在或已被删除。</Text></SafeAreaView>;
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}>
-      <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-      <Text style={styles.headerTitle}>邀请对方填写</Text><View style={styles.headerButton} />
-    </View>
+    <ToolPageHeader onBack={() => router.back()} title="邀请对方填写" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.intro}>
         <Text style={styles.introEyebrow}>请本人补充</Text>
@@ -133,9 +131,6 @@ export default function ProfileCollectionInviteScreen() {
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   intro: { padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.life },
   introEyebrow: { color: colors.sun, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },

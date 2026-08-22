@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { MBTI_TYPES } from './person-profile';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 const ITEM_HEIGHT = 48;
 const DIMENSIONS = [['I', 'E'], ['N', 'S'], ['T', 'F'], ['J', 'P']] as const;
@@ -18,10 +19,7 @@ export function MbtiPickerField({ value, onChange }: { value: string; onChange(v
       <Text style={styles.label}>MBTI / 可选</Text>
       <View style={styles.fieldValueRow}><Text style={[styles.value, !value && styles.placeholder]}>{value || '请选择'}</Text><Text style={styles.fieldAction}>选择</Text></View>
     </Pressable>
-    <Modal animationType="slide" onRequestClose={() => setOpen(false)} transparent visible={open}>
-      <Pressable onPress={() => setOpen(false)} style={styles.backdrop}>
-        <Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}>
-          <View style={styles.handle} />
+    <DraggableBottomSheet onClose={() => setOpen(false)} open={open} sheetStyle={styles.sheet}>
           <View style={styles.header}><Pressable onPress={() => setOpen(false)} style={styles.headerAction}><Text style={styles.cancel}>取消</Text></Pressable><Text style={styles.title}>选择 MBTI</Text><Pressable onPress={() => { onChange(result); setOpen(false); }} style={styles.headerAction}><Text style={styles.confirm}>完成</Text></Pressable></View>
           <View style={styles.result}><Text style={styles.resultText}>{result}</Text></View>
           <View style={styles.picker}>
@@ -29,9 +27,7 @@ export function MbtiPickerField({ value, onChange }: { value: string; onChange(v
             {DIMENSIONS.map((items, index) => <LetterWheel key={index} accessibilityLabel={`MBTI 第 ${index + 1} 位`} items={[...items]} selected={draft[index]} onSelect={(letter) => setDraft((current) => { const next = [...current] as [string, string, string, string]; next[index] = letter; return next; })} />)}
           </View>
           {value ? <Pressable onPress={() => { onChange(''); setOpen(false); }} style={styles.clearButton}><Text style={styles.clearText}>清除 MBTI</Text></Pressable> : null}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </DraggableBottomSheet>
   </>;
 }
 

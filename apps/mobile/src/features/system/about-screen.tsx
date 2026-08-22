@@ -8,6 +8,7 @@ import { feedback } from '../../shared/feedback';
 import { useState } from 'react';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { AndroidUpdateDialog, type AndroidUpdateNotice } from './android-update-dialog';
 import { checkForAndroidUpdate, getCurrentAndroidVersion, type AndroidUpdateManifest } from './android-update';
 import { getPersistentLogFile, writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
@@ -61,11 +62,7 @@ export default function AboutScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}>
-      <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-      <Text style={styles.headerTitle}>关于</Text>
-      <View style={styles.headerButton} />
-    </View>
+    <ToolPageHeader onBack={() => router.back()} title="关于" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.hero}>
         <Pressable accessibilityLabel="仍在 Logo" accessibilityRole="button" onPress={() => router.push('/debug' as RelativePathString)} style={({ pressed }) => [styles.logoButton, pressed && styles.pressed]}>
@@ -113,9 +110,6 @@ export default function AboutScreen() {
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   hero: { alignItems: 'center', paddingVertical: spacing.xl },
   logoButton: { width: 132, height: 132, overflow: 'hidden', borderRadius: 34, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 },

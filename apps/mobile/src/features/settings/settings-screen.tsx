@@ -12,6 +12,7 @@ import { useAppState } from '../../application/state/app-state';
 import { TimePickerField } from '../people/date-time-picker';
 import { StyledName } from '../people/styled-name';
 import { NAME_STYLE_OPTIONS, THEME_OPTIONS, createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -33,10 +34,7 @@ export default function SettingsScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}>
-      <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-      <Text style={styles.headerTitle}>设置</Text><View style={styles.headerButton} />
-    </View>
+    <ToolPageHeader onBack={() => router.back()} title="设置" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.eyebrow}>APPEARANCE</Text>
       <View style={styles.appearanceGroup}>
@@ -126,7 +124,7 @@ function NameStylePicker({ includePersonalOnly = false, label, onChange, sample,
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
 
 const styles = createThemedStyles(() => ({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
+  safeArea: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, eyebrow: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
   appearanceGroup: { overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet }, appearanceSection: { padding: spacing.md }, appearanceTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' }, themeOptions: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm }, themeOption: { flex: 1, minWidth: 0, padding: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md }, themeOptionSelected: { borderColor: colors.life, backgroundColor: colors.lifeLight }, themePreview: { height: 48, padding: 6, justifyContent: 'flex-end', overflow: 'hidden', borderRadius: radius.sm }, themePreviewSheet: { height: 25, padding: 5, justifyContent: 'flex-end', borderTopRightRadius: 9, borderBottomLeftRadius: 9 }, themePreviewAccent: { width: '58%', height: 5, borderRadius: 3 }, themeLabel: { marginTop: 7, color: colors.inkSoft, fontSize: 11, fontWeight: '600' }, themeLabelSelected: { color: colors.life }, themeHint: { marginTop: 2, color: colors.inkFaint, fontSize: 8 },
   nameStyleSection: { padding: spacing.md }, nameStyleOptions: { marginTop: spacing.md, gap: spacing.sm }, nameStyleOption: { width: 96, minHeight: 70, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper }, nameStyleOptionSelected: { borderColor: colors.life, backgroundColor: colors.lifeLight }, nameStylePreview: { maxWidth: '100%', fontSize: 14 }, nameStyleLabel: { marginTop: 7, color: colors.inkFaint, fontSize: 9 }, nameStyleLabelSelected: { color: colors.life, fontWeight: '700' },

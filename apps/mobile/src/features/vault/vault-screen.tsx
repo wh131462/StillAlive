@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -10,6 +9,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { usePasswordVaultState } from './password-vault-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader, ToolPageHeaderAction, ToolPageOverview } from '../../shared/components/tool-page-header';
 
 export default function PasswordVaultScreen() {
   const router = useRouter();
@@ -48,10 +48,10 @@ export default function PasswordVaultScreen() {
 
   if (vault.phase === 'unlocked') {
     return <SafeAreaView style={styles.safeArea}>
-      <VaultHeader onBack={() => router.back()} right={<View style={styles.headerActions}><Pressable accessibilityLabel="立即锁定密码本" onPress={vault.lock} style={styles.headerButton}><SymbolView name={{ android: 'lock', ios: 'lock', web: 'lock' }} size={20} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Pressable accessibilityLabel="密码本安全设置" onPress={() => router.push('/vault/settings')} style={styles.headerButton}><SymbolView name={{ android: 'shield', ios: 'checkmark.shield', web: 'shield' }} size={20} tintColor={colors.life} type="hierarchical" /></Pressable></View>} />
+      <ToolPageHeader onBack={() => router.back()} right={<><ToolPageHeaderAction accessibilityLabel="立即锁定密码本" onPress={vault.lock}><SymbolView name={{ android: 'lock', ios: 'lock', web: 'lock' }} size={20} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="密码本安全设置" onPress={() => router.push('/vault/settings')}><SymbolView name={{ android: 'shield', ios: 'checkmark.shield', web: 'shield' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction></>} title="我的密码本" />
       <AppKeyboardAvoidingView key="unlocked" mode="system" style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}><View style={styles.heroSeal}><SymbolView name={{ android: 'key', ios: 'key', web: 'key' }} size={25} tintColor={colors.sun} type="hierarchical" /></View><Text style={styles.heroEyebrow}>PASSWORD VAULT</Text><Text style={styles.heroTitle}>密码本</Text><Text style={styles.heroText}>账号和密码会加密存储在本机。离开密码本后会立即锁定。</Text><View style={styles.heroRule} /></View>
+        <ToolPageOverview eyebrow="本机加密" icon={<SymbolView name={{ android: 'key', ios: 'key.fill', web: 'key' }} size={26} tintColor={colors.life} type="hierarchical" />} subtitle="账号和密码只保存在本机，离开后立即锁定。" title={`${vault.entries.length} 条密码记录`} />
         <View style={[styles.searchField, searchFocused && styles.searchFieldFocused]}>
           <View style={styles.searchIcon}><SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} pointerEvents="none" size={17} tintColor={searchFocused ? colors.life : colors.inkFaint} type="hierarchical" /></View>
           <TextInput accessibilityLabel="搜索密码名称、账号或网址" autoCapitalize="none" autoCorrect={false} importantForAutofill="no" maxLength={256} onBlur={() => setSearchFocused(false)} onChangeText={setSearchQuery} onFocus={() => setSearchFocused(true)} placeholder="搜索名称、账号或网址" placeholderTextColor={colors.inkFaint} returnKeyType="search" style={styles.searchInput} textContentType="none" value={searchQuery} />
@@ -65,7 +65,7 @@ export default function PasswordVaultScreen() {
   }
 
   return <SafeAreaView style={styles.safeArea}>
-    <VaultHeader onBack={() => router.back()} />
+    <ToolPageHeader onBack={() => router.back()} title="我的密码本" />
     <AppKeyboardAvoidingView key="auth" mode="system" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.lockIllustration}><View style={styles.lockRing}><SymbolView name={{ android: 'lock', ios: 'lock.fill', web: 'lock' }} size={31} tintColor={colors.life} type="hierarchical" /></View></View>
@@ -81,10 +81,6 @@ export default function PasswordVaultScreen() {
       </ScrollView>
     </AppKeyboardAvoidingView>
   </SafeAreaView>;
-}
-
-function VaultHeader({ onBack, right }: { onBack(): void; right?: ReactNode }) {
-  return <View style={styles.header}><View style={styles.headerSide}><Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={onBack} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable></View><Text style={styles.headerTitle}>密码本</Text><View style={styles.headerRight}>{right}</View></View>;
 }
 
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
@@ -105,8 +101,7 @@ function fuzzyMatch(value: string, query: string): boolean {
 
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, loading: { flex: 1, alignItems: 'center', justifyContent: 'center' }, loadingMark: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, loadingText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.caption },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerSide: { width: 88, alignItems: 'flex-start' }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, headerRight: { width: 88, alignItems: 'flex-end' }, headerActions: { flexDirection: 'row' },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl }, hero: { overflow: 'hidden', padding: spacing.xl, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeDeep }, heroSeal: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.onLifeLine, borderRadius: 26, backgroundColor: colors.onLifeLine }, heroEyebrow: { marginTop: spacing.lg, color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.4 }, heroTitle: { marginTop: spacing.xs, color: colors.onLife, fontFamily: typography.display, fontSize: 34 }, heroText: { maxWidth: 270, marginTop: spacing.sm, color: colors.onLifeMuted, fontSize: typography.size.caption, lineHeight: 19 }, heroRule: { position: 'absolute', right: -12, bottom: 24, width: 104, height: 2, backgroundColor: colors.sun },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   searchField: { height: 52, marginTop: spacing.lg, paddingLeft: 7, paddingRight: 6, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet }, searchFieldFocused: { borderColor: colors.life }, searchIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.lifeLight }, searchInput: { flex: 1, height: '100%', paddingHorizontal: spacing.sm, paddingVertical: 0, color: colors.ink, fontSize: typography.size.body }, clearSearchButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19 }, clearSearchButtonPressed: { backgroundColor: colors.lifeLight },
   listHeading: { marginTop: spacing.xl, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 }, sectionTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 21 }, addButton: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, backgroundColor: colors.life },
   entryList: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet }, entryCard: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft }, entryMonogram: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sunLight }, entryMonogramText: { color: colors.lifeDeep, fontFamily: typography.display, fontSize: 18 }, entryCopy: { flex: 1, marginHorizontal: spacing.md }, entryName: { color: colors.ink, fontSize: typography.size.body, fontWeight: '700' }, entryUsername: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },

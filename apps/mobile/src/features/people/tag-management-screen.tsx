@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { BuiltInTagSystem, TagGroup } from '@still-alive/types';
@@ -10,6 +10,8 @@ import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-av
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { MBTI_TYPES } from './person-profile';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 
 const BUILT_IN_OPTIONS: Record<Exclude<BuiltInTagSystem, 'custom'>, readonly string[]> = {
   mbti: MBTI_TYPES,
@@ -61,7 +63,7 @@ export default function TagManagementScreen() {
   const closeEditing = () => { setEditingTagId(null); setEditingGroupId(null); setEditingName(''); };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}><Pressable accessibilityLabel="返回" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>标签管理</Text><View style={styles.headerButton} /></View>
+    <ToolPageHeader onBack={() => router.back()} title="标签管理" />
     <AppKeyboardAvoidingView style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.typeGuide}><View style={styles.typeItem}><View style={styles.typeIcon}><SymbolView name={{ android: 'label', ios: 'tag', web: 'label' }} size={18} tintColor={colors.life} type="hierarchical" /></View><View><Text style={styles.typeTitle}>单条标签</Text><Text style={styles.typeHint}>可同时选择多个</Text></View></View><View style={styles.typeDivider} /><View style={styles.typeItem}><View style={styles.typeIcon}><SymbolView name={{ android: 'folder_open', ios: 'folder', web: 'folder_open' }} size={18} tintColor={colors.life} type="hierarchical" /></View><View><Text style={styles.typeTitle}>标签组</Text><Text style={styles.typeHint}>同组只能选择一个</Text></View></View></View>
@@ -88,7 +90,7 @@ export default function TagManagementScreen() {
       </ScrollView>
     </AppKeyboardAvoidingView>
 
-    <Modal animationType="slide" onRequestClose={closeEditing} transparent visible={Boolean(editingTagId || editingGroupId)}><AppKeyboardAvoidingView style={styles.flex}><Pressable onPress={closeEditing} style={styles.backdrop}><Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}><View style={styles.handle} /><Text style={styles.sheetTitle}>{editingGroupId ? '修改标签组' : '修改标签'}</Text><TextInput maxLength={24} onChangeText={setEditingName} onSubmitEditing={saveEditing} style={styles.editInput} value={editingName} /><Pressable disabled={!editingName.trim()} onPress={saveEditing} style={[styles.confirmButton, !editingName.trim() && styles.disabled]}><Text style={styles.confirmText}>保存修改</Text></Pressable></Pressable></Pressable></AppKeyboardAvoidingView></Modal>
+    <DraggableBottomSheet keyboardAvoiding onClose={closeEditing} open={Boolean(editingTagId || editingGroupId)} sheetStyle={styles.sheet}><Text style={styles.sheetTitle}>{editingGroupId ? '修改标签组' : '修改标签'}</Text><TextInput maxLength={24} onChangeText={setEditingName} onSubmitEditing={saveEditing} style={styles.editInput} value={editingName} /><Pressable disabled={!editingName.trim()} onPress={saveEditing} style={[styles.confirmButton, !editingName.trim() && styles.disabled]}><Text style={styles.confirmText}>保存修改</Text></Pressable></DraggableBottomSheet>
   </SafeAreaView>;
 }
 
@@ -99,7 +101,7 @@ function systemLabel(system: Exclude<BuiltInTagSystem, 'custom'>) { return { mbt
 function showError(cause: unknown) { feedback.alert('操作失败', cause instanceof Error ? cause.message : '请稍后重试。'); }
 
 const styles = createThemedStyles(() => ({
-  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   typeGuide: { minHeight: 76, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.lifeLight }, typeItem: { flex: 1, flexDirection: 'row', alignItems: 'center' }, typeIcon: { width: 36, height: 36, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.paper }, typeTitle: { color: colors.ink, fontSize: 11, fontWeight: '700' }, typeHint: { marginTop: 4, color: colors.inkFaint, fontSize: 8 }, typeDivider: { width: StyleSheet.hairlineWidth, height: 36, marginHorizontal: spacing.sm, backgroundColor: colors.line },
   eyebrow: { marginTop: spacing.xl, color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 }, sectionTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 }, sectionRule: { height: StyleSheet.hairlineWidth, marginTop: spacing.xl, backgroundColor: colors.line }, subheading: { marginTop: spacing.lg, color: colors.inkSoft, fontSize: 11, fontWeight: '700' },
   createRow: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm }, input: { flex: 1, minHeight: 50, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 14 }, addButton: { minWidth: 82, paddingHorizontal: spacing.md, flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life }, addText: { color: colors.onLife, fontSize: 10, fontWeight: '700' }, disabled: { opacity: 0.35 },

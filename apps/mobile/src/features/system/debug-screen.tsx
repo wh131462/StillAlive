@@ -1,13 +1,13 @@
 import { isRunningInExpoGo } from 'expo';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { getLastBirthdayNotificationResponse, expoBirthdayNotificationAdapter, scheduleDebugNotification } from '../../infrastructure/notifications/expo-notifications';
 import { AndroidUpdateDialog } from './android-update-dialog';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import type { AndroidUpdateManifest } from './android-update';
 
 type Permission = 'granted' | 'denied' | 'undetermined';
@@ -46,11 +46,7 @@ export default function DebugScreen() {
 
   const lastResponse = getLastBirthdayNotificationResponse();
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}>
-      <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-      <Text style={styles.headerTitle}>调试</Text>
-      <View style={styles.headerButton} />
-    </View>
+    <ToolPageHeader onBack={() => router.back()} title="调试" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.eyebrow}>NOTIFICATION LAB</Text>
       <Text style={styles.title}>通知测试</Text>
@@ -87,9 +83,6 @@ function StatusRow({ label, value }: { label: string; value: string }) {
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   eyebrow: { marginTop: spacing.xl, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
   title: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 30 },

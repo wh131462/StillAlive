@@ -4,7 +4,7 @@ import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
@@ -19,6 +19,8 @@ import type { DateParts } from './date-time-picker';
 import { birthdayForCalendar } from './person-profile';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 
 export default function EditPersonScreen() {
   const router = useRouter();
@@ -130,16 +132,12 @@ export default function EditPersonScreen() {
     }
   };
 
-  if (!person) return <SafeAreaView style={styles.safeArea}><Text style={styles.missing}>这个人物不存在或已被删除。</Text></SafeAreaView>;
+  if (!person) return <SafeAreaView style={styles.safeArea}><ToolPageHeader onBack={() => router.back()} title="编辑人物" /><Text style={styles.missing}>这个人物不存在或已被删除。</Text></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppKeyboardAvoidingView style={styles.flex}>
-        <View style={styles.header}>
-          <Pressable accessibilityLabel="返回" accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
-          <Text style={styles.headerTitle}>编辑人物</Text>
-          <Pressable accessibilityRole="button" disabled={saving} onPress={() => void handleSave()} style={styles.saveButton}><Text style={styles.saveText}>{saving ? '保存中' : '保存'}</Text></Pressable>
-        </View>
+        <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderTextAction disabled={saving} label={saving ? '保存中' : '保存'} onPress={() => void handleSave()} />} title="编辑人物" />
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.avatarCard}>
             <Pressable accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(true)} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="人物头像预览" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{name.trim().slice(0, 1) || '人'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={14} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
@@ -188,16 +186,11 @@ export default function EditPersonScreen() {
           {tagSystemSettings.find((item) => item.system === 'custom')?.enabled !== false ? <><View style={styles.field}><Text style={styles.fieldLabel}>单条标签 / 可多选</Text><View style={styles.chips}>{tagDefinitions.filter((tag) => !tag.groupId).map((tag) => <Pressable key={tag.id} onPress={() => setCustomTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} style={[styles.chip, customTagIds.includes(tag.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(tag.id) && styles.chipTextActive]}>{tag.name}</Text></Pressable>)}</View><View style={styles.inlineCreate}><TextInput maxLength={24} onChangeText={setNewTagName} placeholder="输入新标签" placeholderTextColor={colors.inkFaint} style={styles.inlineInput} value={newTagName} /><Pressable onPress={() => void createTag(newTagName).then((tag) => { setCustomTagIds((current) => [...current, tag.id]); setNewTagName(''); }, (cause: unknown) => feedback.alert('创建失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>添加</Text></Pressable></View></View>{tagGroups.map((group) => { const options = tagDefinitions.filter((tag) => tag.groupId === group.id); if (!options.length) return null; return <View key={group.id} style={styles.field}><Text style={styles.fieldLabel}>{group.name} / 单选</Text><View style={styles.chips}>{options.map((option) => <Pressable key={option.id} onPress={() => setCustomTagIds((current) => { const groupOptionIds = options.map((item) => item.id); const withoutGroup = current.filter((id) => !groupOptionIds.includes(id)); return current.includes(option.id) ? withoutGroup : [...withoutGroup, option.id]; })} style={[styles.chip, customTagIds.includes(option.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(option.id) && styles.chipTextActive]}>{option.name}</Text></Pressable>)}</View></View>; })}</> : null}
           <View style={styles.note}><Text style={styles.noteText}>资料只用于整理你的本地记忆，不会上传。</Text></View>
         </ScrollView>
-        <Modal animationType="slide" onRequestClose={() => setAvatarSourcePickerOpen(false)} transparent visible={avatarSourcePickerOpen}>
-          <Pressable onPress={() => setAvatarSourcePickerOpen(false)} style={styles.modalBackdrop}>
-            <Pressable accessibilityLabel="选择头像来源" accessibilityRole="menu" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={styles.sourceSheet}>
-              <View style={styles.sheetHandle} />
+        <DraggableBottomSheet accessibilityLabel="选择头像来源，向下拖动关闭" accessibilityRole="menu" onClose={() => setAvatarSourcePickerOpen(false)} open={avatarSourcePickerOpen} sheetStyle={styles.sourceSheet}>
               <AvatarSourceOption label="拍摄" onPress={() => void takeAvatarPhoto()} />
               <AvatarSourceOption label="从手机相册选择" onPress={() => void pickAvatarPhoto()} />
               <Pressable accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(false)} style={styles.sourceCancel}><Text style={styles.sourceCancelText}>取消</Text></Pressable>
-            </Pressable>
-          </Pressable>
-        </Modal>
+        </DraggableBottomSheet>
       </AppKeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -231,11 +224,6 @@ function SectionHeader({ description, index, title }: { description: string; ind
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  saveButton: { width: 44, minHeight: 44, justifyContent: 'center' },
-  saveText: { color: colors.life, fontSize: 11, fontWeight: '700', textAlign: 'right' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   avatarCard: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet },
   avatarButton: { alignItems: 'center' },

@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { useAppState } from '../../application/state/app-state';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
 import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 export default function PeopleScreen() {
   const router = useRouter();
@@ -142,21 +143,14 @@ export default function PeopleScreen() {
         </ScrollView>
       </AppKeyboardAvoidingView>
 
-      <Modal animationType="slide" onRequestClose={() => setCreating(false)} transparent visible={creating}>
-        <AppKeyboardAvoidingView style={styles.flex}>
-          <Pressable style={styles.backdrop} onPress={() => setCreating(false)}>
-            <Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
-              <View style={styles.handle} />
+      <DraggableBottomSheet keyboardAvoiding onClose={() => setCreating(false)} open={creating} sheetStyle={styles.sheet}>
               <Text style={styles.sheetTitle}>先记下一个名字</Text>
               <Text style={styles.sheetHint}>其他信息以后再补，也可以一直不补。</Text>
               <TextInput maxLength={40} onChangeText={setName} onSubmitEditing={() => void handleCreate()} placeholder="名字" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.input} value={name} />
               <Pressable accessibilityRole="button" disabled={!name.trim()} onPress={() => void handleCreate()} style={({ pressed }) => [styles.confirmButton, !name.trim() && styles.confirmButtonDisabled, pressed && styles.confirmButtonPressed]}>
                 <Text style={styles.confirmButtonText}>创建人物</Text>
               </Pressable>
-            </Pressable>
-          </Pressable>
-        </AppKeyboardAvoidingView>
-      </Modal>
+      </DraggableBottomSheet>
     </SafeAreaView>
   );
 }

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { Birthday, BirthdayCalendar } from '@still-alive/types';
 import { birthdayForCalendar, birthdaySolarDate, lunarLeapMonth, lunarMonthDayCount } from './person-profile';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 export interface DateParts { year: number; month: number; day: number }
 
@@ -57,10 +58,7 @@ export function DatePickerField({ calendar = 'solar', isLeapMonth = false, label
       <Text style={styles.label}>{label}</Text>
       <View style={styles.fieldValueRow}><Text style={[styles.value, !value && styles.placeholder]}>{value ? formatDate(value, calendar, isLeapMonth) : '请选择日期'}</Text><Text style={styles.fieldAction}>选择</Text></View>
     </Pressable>
-    <Modal animationType="slide" onRequestClose={() => setOpen(false)} transparent visible={open}>
-      <Pressable onPress={() => setOpen(false)} style={styles.backdrop}>
-        <Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}>
-          <View style={styles.handle} />
+    <DraggableBottomSheet onClose={() => setOpen(false)} open={open} sheetStyle={styles.sheet}>
           <View style={styles.header}><Pressable onPress={() => setOpen(false)} style={styles.headerAction}><Text style={styles.cancel}>取消</Text></Pressable><Text style={styles.title}>{label}</Text><Pressable onPress={() => { onChange(draft, calendar === 'lunar' && draftIsLeapMonth); setOpen(false); }} style={styles.headerAction}><Text style={styles.confirm}>完成</Text></Pressable></View>
           <View style={styles.picker}>
             <View pointerEvents="none" style={styles.selection} />
@@ -73,9 +71,7 @@ export function DatePickerField({ calendar = 'solar', isLeapMonth = false, label
             <Pressable onPress={() => { setDraft(maximumParts); setDraftIsLeapMonth(maximum.isLeapMonth); }} style={styles.shortcut}><Text style={styles.shortcutText}>今天</Text></Pressable>
             {value && onClear ? <Pressable onPress={() => { onClear(); setOpen(false); }} style={styles.shortcut}><Text style={styles.clearText}>清除日期</Text></Pressable> : null}
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </DraggableBottomSheet>
   </>;
 }
 
@@ -87,17 +83,14 @@ export function TimePickerField({ label, hour, minute, onChange }: { label: stri
 
   return <>
     <Pressable accessibilityRole="button" onPress={() => setOpen(true)} style={styles.field}><Text style={styles.label}>{label}</Text><View style={styles.fieldValueRow}><Text style={styles.value}>{pad(hour)}:{pad(minute)}</Text><Text style={styles.fieldAction}>修改</Text></View></Pressable>
-    <Modal animationType="slide" onRequestClose={() => setOpen(false)} transparent visible={open}>
-      <Pressable onPress={() => setOpen(false)} style={styles.backdrop}><Pressable onPress={(event) => event.stopPropagation()} style={styles.sheet}>
-        <View style={styles.handle} />
+    <DraggableBottomSheet onClose={() => setOpen(false)} open={open} sheetStyle={styles.sheet}>
         <View style={styles.header}><Pressable onPress={() => setOpen(false)} style={styles.headerAction}><Text style={styles.cancel}>取消</Text></Pressable><Text style={styles.title}>{label}</Text><Pressable onPress={() => { onChange(draftHour, draftMinute); setOpen(false); }} style={styles.headerAction}><Text style={styles.confirm}>完成</Text></Pressable></View>
         <View style={[styles.picker, styles.timePicker]}>
           <View pointerEvents="none" style={styles.selection} />
           <WheelColumn accessibilityLabel="小时" items={range(0, 23)} padValue selected={draftHour} suffix="时" onSelect={setDraftHour} />
           <WheelColumn accessibilityLabel="分钟" items={range(0, 59)} padValue selected={draftMinute} suffix="分" onSelect={setDraftMinute} />
         </View>
-      </Pressable></Pressable>
-    </Modal>
+    </DraggableBottomSheet>
   </>;
 }
 

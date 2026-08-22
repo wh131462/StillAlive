@@ -8,6 +8,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { usePasswordVaultState } from './password-vault-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader } from '../../shared/components/tool-page-header';
 
 const DELETE_CONFIRMATION = '永久删除密码本';
 
@@ -32,7 +33,7 @@ export default function ForgotPasswordScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}><Pressable accessibilityLabel="返回密码本" accessibilityRole="button" disabled={busy} onPress={() => router.back()} style={[styles.headerButton, busy && styles.disabled]}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>忘记主密码</Text><View style={styles.headerButton} /></View>
+    <ToolPageHeader backAccessibilityLabel="返回密码本" backDisabled={busy} onBack={() => router.back()} title="忘记主密码" />
     <AppKeyboardAvoidingView mode="system" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.notice}><View style={styles.noticeIcon}><SymbolView name={{ android: 'lock', ios: 'lock.fill', web: 'lock' }} size={28} tintColor={colors.life} type="hierarchical" /></View><Text style={styles.noticeTitle}>主密码无法找回</Text><Text style={styles.noticeText}>为了保护密码数据，主密码不能重置或绕过。你可以返回后再次尝试输入。</Text></View>
@@ -48,9 +49,6 @@ function errorMessage(cause: unknown) { return cause instanceof Error ? cause.me
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   notice: { padding: spacing.xl, alignItems: 'center' },
   noticeIcon: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: 34, backgroundColor: colors.sheet },

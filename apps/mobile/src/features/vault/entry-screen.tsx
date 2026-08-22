@@ -10,6 +10,7 @@ import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-av
 import { copyPasswordToClipboard } from './password-vault-clipboard';
 import { usePasswordVaultState } from './password-vault-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 
 export default function PasswordVaultEntryScreen() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function PasswordVaultEntryScreen() {
   }, []);
 
   if (vault.phase !== 'unlocked') return null;
-  if (entryId && !entry) return <SafeAreaView style={styles.safeArea}><View style={styles.missing}><Text style={styles.missingTitle}>这条记录不存在</Text><Pressable onPress={() => router.replace('/vault')} style={styles.inlineButton}><Text style={styles.inlineButtonText}>返回密码本</Text></Pressable></View></SafeAreaView>;
+  if (entryId && !entry) return <SafeAreaView style={styles.safeArea}><ToolPageHeader backAccessibilityLabel="返回密码本" onBack={() => router.back()} title="编辑密码记录" /><View style={styles.missing}><Text style={styles.missingTitle}>这条记录不存在</Text><Pressable onPress={() => router.replace('/vault')} style={styles.inlineButton}><Text style={styles.inlineButtonText}>返回密码本</Text></Pressable></View></SafeAreaView>;
 
   const save = async () => {
     try {
@@ -72,7 +73,7 @@ export default function PasswordVaultEntryScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}>
-    <View style={styles.header}><Pressable accessibilityLabel="返回密码本" onPress={() => router.back()} style={styles.headerButton}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" /></Pressable><Text style={styles.headerTitle}>{entry ? '编辑密码记录' : '新建密码记录'}</Text><Pressable accessibilityLabel="保存密码记录" disabled={busy} onPress={() => void save()} style={styles.headerButton}><Text style={[styles.saveText, busy && styles.disabled]}>{busy ? '保存中' : '保存'}</Text></Pressable></View>
+    <ToolPageHeader backAccessibilityLabel="返回密码本" onBack={() => router.back()} right={<ToolPageHeaderTextAction accessibilityLabel="保存密码记录" disabled={busy} label={busy ? '保存中' : '保存'} onPress={() => void save()} />} title={entry ? '编辑密码记录' : '新建密码记录'} />
     <AppKeyboardAvoidingView mode="system" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.archiveHeader}><View style={styles.archiveNumber}><Text style={styles.archiveNumberText}>{entry ? 'EDIT' : 'NEW'}</Text></View><View style={styles.archiveCopy}><Text style={styles.archiveEyebrow}>PASSWORD ENTRY</Text><Text style={styles.archiveTitle}>密码记录</Text></View></View>
@@ -97,7 +98,7 @@ function Field({ children, label }: { children: ReactNode; label: string }) { re
 function errorMessage(cause: unknown) { return cause instanceof Error ? cause.message : '请稍后重试。'; }
 
 const styles = createThemedStyles(() => ({
-  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 56, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, headerTitle: { flex: 1, color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' }, saveText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   archiveHeader: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeDeep }, archiveNumber: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.onLifeLine, borderRadius: 27 }, archiveNumberText: { color: colors.sun, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1 }, archiveCopy: { marginLeft: spacing.md }, archiveEyebrow: { color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 }, archiveTitle: { marginTop: 4, color: colors.onLife, fontFamily: typography.display, fontSize: 24 },
   formCard: { marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet }, field: { marginTop: spacing.lg }, fieldLabel: { marginBottom: 7, color: colors.inkSoft, fontSize: typography.size.meta, fontWeight: '700' }, input: { minHeight: 50, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, backgroundColor: colors.paper, fontSize: typography.size.body }, passwordRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.paper }, passwordInput: { flex: 1, minHeight: 48, paddingHorizontal: spacing.md, color: colors.ink, fontSize: typography.size.body }, iconButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }, passwordActions: { minHeight: 40, flexDirection: 'row', alignItems: 'center' }, copyButton: { minHeight: 40, flexDirection: 'row', gap: 6, alignItems: 'center' }, copyText: { color: colors.life, fontSize: typography.size.meta, fontWeight: '700' }, noteInput: { minHeight: 118, paddingTop: spacing.md }, securityNote: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 }, deleteButton: { minHeight: 50, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md }, deleteText: { color: colors.danger, fontSize: typography.size.caption, fontWeight: '800' }, missing: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg }, missingTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 20 }, inlineButton: { minHeight: 44, marginTop: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight }, inlineButtonText: { color: colors.life, fontWeight: '700' }, disabled: { opacity: 0.4 },
 }));
