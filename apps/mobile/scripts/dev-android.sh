@@ -3,8 +3,10 @@
 set -euo pipefail
 
 MOBILE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MACOS_JAVA_HOME_17="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
 JDK_CANDIDATES=(
   "${JAVA_HOME:-}"
+  "$MACOS_JAVA_HOME_17"
   "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
   "/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
   "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
@@ -23,7 +25,7 @@ for JDK_CANDIDATE in "${JDK_CANDIDATES[@]}"; do
   fi
 done
 
-if [[ -z "${JAVA_HOME:-}" || "$("$JAVA_HOME/bin/java" -version 2>&1)" != *'version "17.'* ]]; then
+if [[ -z "${JAVA_HOME:-}" || ! -x "$JAVA_HOME/bin/java" || ! -x "$JAVA_HOME/bin/javac" || ! -x "$JAVA_HOME/bin/jlink" || "$("$JAVA_HOME/bin/java" -version 2>&1)" != *'version "17.'* ]]; then
   printf 'Error: Android dev 构建需要完整的 JDK 17。\n' >&2
   exit 1
 fi
