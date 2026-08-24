@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
-import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { colors, spacing, typography } from '@still-alive/tokens';
 import type { MusicShare } from '../music-share';
 import { useAppState } from '../state/app-state';
 import { MusicCover } from '../../features/music/music-cover';
@@ -45,10 +45,10 @@ export function MusicShareCard({ share, variant = 'feed' }: { share: MusicShare;
 }
 
 const styles = createThemedStyles(() => ({
-  card: { minHeight: 74, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
+  card: { minHeight: 74, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
   cardComposer: { minHeight: 82, backgroundColor: colors.paper },
   cardPressed: { opacity: 0.7 },
-  cover: { borderRadius: radius.sm },
+  cover: { borderRadius: 0 },
   copy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   label: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
   title: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 15 },

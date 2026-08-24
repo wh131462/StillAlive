@@ -16,6 +16,7 @@ import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/to
 import { orderMusicTracksByCollectionEntries } from './music-library';
 import { useMusicPlayer } from './music-player-state';
 import { MusicCover } from './music-cover';
+import { MusicPlayCount } from './music-play-count';
 import { reportMusicImportFailure } from './music-import-coordinator';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
@@ -218,7 +219,7 @@ export default function MusicPlaylistScreen() {
 }
 
 function TrackRow({ media, onPlay, onRemove, selected, track }: { media: Media[]; onPlay(): void; onRemove(): void; selected: boolean; track: MusicTrack }) {
-  return <View style={styles.trackRow}><Pressable accessibilityRole="button" onPress={onPlay} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={44} style={styles.trackCover} /><View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable><Pressable accessibilityLabel={`将 ${track.title} 移出歌单`} onPress={onRemove} style={styles.removeButton}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={20} tintColor={colors.inkFaint} type="hierarchical" /></Pressable></View>;
+  return <View style={styles.trackRow}><Pressable accessibilityRole="button" onPress={onPlay} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={44} style={styles.trackCover} /><View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable><Pressable accessibilityLabel={`将 ${track.title} 移出歌单`} onPress={onRemove} style={styles.removeButton}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={20} tintColor={colors.inkFaint} type="hierarchical" /></Pressable></View>;
 }
 
 function VerticalMoreIcon() {
@@ -257,7 +258,8 @@ const styles = createThemedStyles(() => ({
   trackCopy: { flex: 1, minWidth: 0, marginLeft: spacing.sm },
   trackTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
   trackTitleActive: { color: colors.life },
-  trackMeta: { marginTop: 5, color: colors.inkFaint, fontSize: 10 },
+  trackMetaRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center' },
+  trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 10 },
   removeButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   empty: { paddingVertical: spacing.xxl, alignItems: 'center' },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center' },

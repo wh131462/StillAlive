@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 
 export interface AppStateValue {
@@ -19,6 +19,8 @@ export interface AppStateValue {
   musicCollectionEntries: MusicCollectionEntry[];
   musicPlaylists: MusicPlaylist[];
   musicPlaylistEntries: MusicPlaylistEntry[];
+  bookLists: BookList[];
+  bookListEntries: BookListEntry[];
   books: Book[];
   bookExcerpts: BookExcerpt[];
   readingNoteSources: ReadingNoteSource[];
@@ -80,6 +82,7 @@ export interface AppStateValue {
   importMusicTrack(item: Media, personId?: string | null): Promise<MusicTrack>;
   createMusicTrack(track: MusicTrack, collection?: MusicCollectionEntry): Promise<void>;
   updateMusicTrack(track: MusicTrack): Promise<void>;
+  incrementMusicTrackPlayCount(trackId: string): Promise<void>;
   setMusicTrackCover(trackId: string, cover: Media | null): Promise<void>;
   deleteMusicTrack(trackId: string): Promise<void>;
   addMusicCollectionEntry(entry: MusicCollectionEntry): Promise<void>;
@@ -90,6 +93,11 @@ export interface AppStateValue {
   deleteMusicPlaylist(playlistId: string): Promise<void>;
   addMusicTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void>;
   removeMusicTrackFromPlaylist(playlistId: string, trackId: string): Promise<void>;
+  createBookList(name: string): Promise<BookList>;
+  renameBookList(listId: string, name: string): Promise<void>;
+  deleteBookList(listId: string): Promise<void>;
+  addBooksToList(listId: string, bookIds: string[]): Promise<void>;
+  removeBookFromList(listId: string, bookId: string): Promise<void>;
   createBook(book: Book): Promise<void>;
   updateBook(book: Book): Promise<void>;
   deleteBook(bookId: string): Promise<void>;

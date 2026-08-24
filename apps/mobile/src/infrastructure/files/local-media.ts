@@ -127,6 +127,8 @@ function cleanupAlbumDirectories(albumsDirectory: Directory, referencedPaths: Se
 function fileExtension(asset: ImagePickerAsset): string {
   const match = asset.fileName?.match(/\.[a-zA-Z0-9]+$/);
   if (match) return match[0].toLowerCase();
+  const uriMatch = asset.uri.split(/[?#]/, 1)[0]?.match(/\.[a-zA-Z0-9]+$/);
+  if (uriMatch) return uriMatch[0].toLowerCase();
   if (asset.mimeType === 'image/png') return '.png';
   if (asset.mimeType === 'image/webp') return '.webp';
   if (asset.mimeType === 'image/heic' || asset.mimeType === 'image/heif') return '.heic';

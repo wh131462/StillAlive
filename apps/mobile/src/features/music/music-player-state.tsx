@@ -46,11 +46,22 @@ const MINI_PLAYER_COLLAPSED_SIZE = 44;
 const MINI_PLAYER_DRAG_SIZE = 56;
 const MINI_PLAYER_EDGE_PEEK = 9;
 const MINI_PLAYER_ANIMATION_DURATION = 200;
+const PLAY_COUNT_THRESHOLD = 0.8;
+const PLAYBACK_POSITION_TOLERANCE_SECONDS = 1;
+
+interface PlayCountSession {
+  trackId: string;
+  listenedSeconds: number;
+  lastPosition: number;
+  lastObservedAt: number;
+  counted: boolean;
+  pending: boolean;
+}
 
 export function MusicPlayerProvider({ children }: PropsWithChildren) {
   const router = useRouter();
   const pathname = usePathname();
-  const { media, musicCollectionEntries, musicPlaylistEntries, musicTracks, preferences, updatePreferences } = useAppState();
+  const { incrementMusicTrackPlayCount, media, musicCollectionEntries, musicPlaylistEntries, musicTracks, preferences, updatePreferences } = useAppState();
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
@@ -64,6 +75,7 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
   const loadRequestRef = useRef(0);
   const shuffleRemainingRef = useRef<string[]>([]);
   const shuffleHistoryRef = useRef<string[]>([]);
+  const playCountSessionRef = useRef<PlayCountSession | null>(null);
   const playing = Boolean(status.playing);
 
   const mediaIds = useMemo(() => new Set(media.map((item) => item.id)), [media]);
@@ -123,6 +135,7 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
         showNext: true,
         showClose: true,
       });
+      playCountSessionRef.current = createPlayCountSession(trackId, 0);
       setCurrentTrackId(trackId);
       setError(null);
       player.play();
@@ -207,6 +220,7 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
     setQueuePlaylistId(null);
     setError(null);
     setMiniPlayerCollapsed(true);
+    playCountSessionRef.current = null;
     shuffleRemainingRef.current = [];
     shuffleHistoryRef.current = [];
   }, [player]);
@@ -233,8 +247,42 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
   }, [close, currentTrack, currentTrackId, loadNextId, player, validQueueTrackIds]);
 
   useEffect(() => {
+    if (!currentTrackId || !currentTrack) {
+      playCountSessionRef.current = null;
+      return;
+    }
+    const now = Date.now();
+    let session = playCountSessionRef.current;
+    if (!session || session.trackId !== currentTrackId) {
+      session = createPlayCountSession(currentTrackId, status.currentTime, now);
+      playCountSessionRef.current = session;
+      return;
+    }
+
+    const elapsedSeconds = Math.max(0, (now - session.lastObservedAt) / 1_000);
+    const positionDelta = status.currentTime - session.lastPosition;
+    session.lastObservedAt = now;
+    session.lastPosition = status.currentTime;
+    if (session.counted || session.pending || (!status.playing && !status.didJustFinish)) return;
+    if (!Number.isFinite(positionDelta) || positionDelta <= 0 || positionDelta > elapsedSeconds + PLAYBACK_POSITION_TOLERANCE_SECONDS) return;
+
+    session.listenedSeconds += positionDelta;
+    const durationSeconds = status.duration > 0 ? status.duration : (currentTrack.durationMs ?? 0) / 1_000;
+    if (durationSeconds <= 0 || session.listenedSeconds < durationSeconds * PLAY_COUNT_THRESHOLD) return;
+
+    session.pending = true;
+    void incrementMusicTrackPlayCount(currentTrackId).then(() => {
+      session.counted = true;
+      session.pending = false;
+    }).catch(() => {
+      session.pending = false;
+    });
+  }, [currentTrack, currentTrackId, incrementMusicTrackPlayCount, status.currentTime, status.didJustFinish, status.duration, status.playing]);
+
+  useEffect(() => {
     if (!currentTrackId || !status.didJustFinish) return;
     if (mode === 'single') {
+      playCountSessionRef.current = createPlayCountSession(currentTrackId, 0);
       void player.seekTo(0).then(() => player.play());
       return;
     }
@@ -260,6 +308,10 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
   const value = useMemo(() => ({ currentTrack, queue, queueSource, queuePersonId, queuePlaylistId, playing, currentTime: status.currentTime, duration: status.duration, mode, error, playTrack, setQueueSource, toggle, next, previous, seekTo: seek, setMode, close }), [close, currentTrack, error, mode, next, playTrack, playing, previous, queue, queuePersonId, queuePlaylistId, queueSource, seek, setMode, setQueueSource, status.currentTime, status.duration, toggle]);
   const showMiniPlayer = Boolean(currentTrackId) && pathname !== '/music-player' && pathname !== '/reader';
   return <MusicPlayerContext.Provider value={value}>{children}{showMiniPlayer ? <MiniPlayer collapsed={miniPlayerCollapsed} onCollapse={collapseMiniPlayer} onExpand={expandMiniPlayer} onOpen={openMusicPlayer} /> : null}</MusicPlayerContext.Provider>;
+}
+
+function createPlayCountSession(trackId: string, position: number, observedAt = Date.now()): PlayCountSession {
+  return { trackId, listenedSeconds: 0, lastPosition: position, lastObservedAt: observedAt, counted: false, pending: false };
 }
 
 export function useMusicPlayer(): MusicPlayerValue {

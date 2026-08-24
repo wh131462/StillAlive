@@ -12,6 +12,7 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { orderMusicTracksByCollectionEntries } from './music-library';
 import { MusicCover } from './music-cover';
+import { MusicPlayCount } from './music-play-count';
 import { reportMusicImportFailure } from './music-import-coordinator';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
@@ -76,7 +77,7 @@ export default function PersonMusicScreen() {
           <View key={track.id} style={styles.trackRow}>
             <Pressable accessibilityRole="button" onPress={() => void playTrack(track.id)} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}>
               <MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={44} style={styles.trackCover} />
-              <View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, player.currentTrack?.id === track.id && styles.trackTitleActive]}>{track.title}</Text><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View>
+              <View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, player.currentTrack?.id === track.id && styles.trackTitleActive]}>{track.title}</Text><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View>
             </Pressable>
             <Pressable accessibilityLabel={`从喜欢的音乐中移除 ${track.title}`} onPress={() => person && void removeMusicCollectionEntry(track.id, 'person', person.id)} style={styles.removeButton}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={19} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
           </View>
@@ -104,7 +105,8 @@ const styles = createThemedStyles(() => ({
   trackCopy: { flex: 1, minWidth: 0, marginLeft: spacing.sm },
   trackTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
   trackTitleActive: { color: colors.life },
-  trackMeta: { marginTop: 5, color: colors.inkFaint, fontSize: 10 },
+  trackMetaRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center' },
+  trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 10 },
   removeButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   empty: { marginTop: spacing.xl, paddingVertical: spacing.xxl, alignItems: 'center' },
   emptyCover: { marginBottom: spacing.sm, borderRadius: 48 },

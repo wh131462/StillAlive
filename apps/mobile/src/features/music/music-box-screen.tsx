@@ -19,6 +19,7 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 import { ToolPageHeader, ToolPageHeaderAction, ToolPageOverview } from '../../shared/components/tool-page-header';
 import { orderMusicTracksByCollectionEntries } from './music-library';
 import { MusicCover } from './music-cover';
+import { MusicPlayCount } from './music-play-count';
 import { saveMusicCopy } from './music-downloads';
 import { reportMusicImportFailure } from './music-import-coordinator';
 
@@ -328,7 +329,7 @@ export default function MusicBoxScreen() {
 }
 
 function TrackRow({ media, selected, track, onMore, onPlay }: { media: Media[]; selected: boolean; track: MusicTrack; onMore(): void; onPlay(): void }) {
-  return <View style={[styles.trackRow, selected && styles.trackRowActive]}>{selected ? <View style={styles.playingRail} /> : null}<Pressable accessibilityRole="button" onPress={onPlay} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={46} style={styles.trackCover} /><View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable><Pressable accessibilityLabel={`管理 ${track.title}`} onPress={onMore} style={styles.moreButton}><VerticalMoreIcon /></Pressable></View>;
+  return <View style={[styles.trackRow, selected && styles.trackRowActive]}>{selected ? <View style={styles.playingRail} /> : null}<Pressable accessibilityRole="button" onPress={onPlay} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={46} style={styles.trackCover} /><View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable><Pressable accessibilityLabel={`管理 ${track.title}`} onPress={onMore} style={styles.moreButton}><VerticalMoreIcon /></Pressable></View>;
 }
 
 function TrackFileInfoSheet({ cover, file, loading, metadata, onClose, open, track }: { cover: Media | undefined; file: Media | undefined; loading: boolean; metadata: AudioFileMetadata | null; onClose(): void; open: boolean; track: MusicTrack | null }) {
@@ -499,7 +500,8 @@ const styles = createThemedStyles(() => ({
   trackCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   trackTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
   trackTitleActive: { color: colors.life },
-  trackMeta: { marginTop: 5, color: colors.inkFaint, fontSize: 11 },
+  trackMetaRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center' },
+  trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 11 },
   moreButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   moreIcon: { width: 4, height: 17, alignItems: 'center', justifyContent: 'space-between' },
   moreDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.inkFaint },

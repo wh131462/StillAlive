@@ -158,6 +158,7 @@ export async function importEncryptedMusicTrack(
       artist: unlocked.artist?.trim() || null,
       album: unlocked.album?.trim() || null,
       durationMs: null,
+      playCount: 0,
       createdAt: now,
       updatedAt: now,
     };
