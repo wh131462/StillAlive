@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "1.0.6",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.0.6.apk",
-  "releaseNotes": "新增加密资料收集，可邀请对方安全填写并导入姓名、生日、MBTI 及自定义标签；优化富文本编辑与预览、日历生日标记、移动端底栏及官网视觉；完善更新源回退与弹层体验，并提升定位和 WebView 稳定性。"
+  "versionCode": 9,
+  "versionName": "1.1.0",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.0.apk",
+  "releaseNotes": "新增本地音乐盒与书架，支持音乐导入解锁、播放列表、后台播放，以及多格式图书阅读、目录、进度和阅读随感；优化媒体预览、记录编辑与工具页交互，并修复通知栏播放、打卡定位、时间线排序和构建检测问题。注意:因为更新了包名,所以会产生两个同名APP,在安装完成新版本之后,请确保你已经导出旧版本内的数据,导入到新版本之后再卸载旧版本哦~一定要先在数据管理导出数据!"
 }
