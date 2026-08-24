@@ -1,5 +1,4 @@
 import type { Book, BookFormat, BookParseStatus, ReaderTocItem, ReadingPreferences } from '@still-alive/types';
-import { Platform } from 'react-native';
 
 export type BookLocator =
   | { type: 'epub-cfi'; cfi: string; href: string | null; chapterTitle: string | null; progression: number }
@@ -60,7 +59,7 @@ export function detectReaderCapability(book: Book): ReaderCapability {
 }
 
 const EPUB_CAPABILITIES: ReaderCapabilities = { reflow: true, toc: true, selection: true, highlights: true, fontSize: true, lineHeight: true, flow: true, pageJump: false, zoom: false };
-const PDF_CAPABILITIES: ReaderCapabilities = { reflow: false, toc: false, selection: Platform.OS === 'ios', highlights: false, fontSize: false, lineHeight: false, flow: false, pageJump: true, zoom: true };
+const PDF_CAPABILITIES: ReaderCapabilities = { reflow: false, toc: true, selection: true, highlights: false, fontSize: false, lineHeight: false, flow: false, pageJump: true, zoom: true };
 const UNSUPPORTED_CAPABILITIES: ReaderCapabilities = { reflow: false, toc: false, selection: false, highlights: false, fontSize: false, lineHeight: false, flow: false, pageJump: false, zoom: false };
 
 const ADAPTERS: Record<BookFormat, BookReaderAdapter> = {
@@ -109,6 +108,7 @@ export class ReaderSessionController {
 
 export const DEFAULT_READING_PREFERENCES: ReadingPreferences = {
   theme: 'paper',
+  showStatusBar: false,
   fontSize: 20,
   lineHeight: 1.8,
   pageMargin: 22,
@@ -187,6 +187,7 @@ function sanitizePreferences(value: unknown): ReadingPreferences {
   const candidate = value && typeof value === 'object' && !Array.isArray(value) ? value as Partial<ReadingPreferences> : {};
   return {
     theme: candidate.theme === 'warm' || candidate.theme === 'green' || candidate.theme === 'night' ? candidate.theme : 'paper',
+    showStatusBar: candidate.showStatusBar === true,
     fontSize: clampNumber(candidate.fontSize, 14, 32, DEFAULT_READING_PREFERENCES.fontSize),
     lineHeight: clampNumber(candidate.lineHeight, 1.3, 2.4, DEFAULT_READING_PREFERENCES.lineHeight),
     pageMargin: clampNumber(candidate.pageMargin, 12, 44, DEFAULT_READING_PREFERENCES.pageMargin),

@@ -2,10 +2,11 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import Constants, { AppOwnership } from 'expo-constants';
+import { File } from 'expo-file-system';
 import { Reader, useReader } from '@epubjs-react-native/core';
 import type { Annotation, Location, Section, Theme, Toc } from '@epubjs-react-native/core';
 import type Pdf from 'react-native-pdf';
-import type { PdfRef } from 'react-native-pdf';
+import type { PdfRef, TableContent } from 'react-native-pdf';
 import type { Book, BookExcerpt, ReaderTheme, ReaderTocItem, ReadingPreferences } from '@still-alive/types';
 import type { BookLocator, ReaderLocationEvent, ReaderSelection, ReaderSurfaceHandle } from './book-reader';
 import { createEpubLocator, createPdfLocator, createReflowLocator } from './book-reader';
@@ -24,6 +25,7 @@ interface BookReaderProps {
   onSelection(selection: ReaderSelection): void;
   onTocChange(toc: ReaderTocItem[]): void;
   onReady(): void;
+  onMetadata?(metadata: { title: string | null; author: string | null }): void;
   onError(message: string): void;
   onSingleTap(): void;
   sourceFormat?: 'epub' | 'reflow';
@@ -59,8 +61,8 @@ const ReflowBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(functi
   return <EpubBookReader {...props} ref={ref} sourceFormat="reflow" uri={source} />;
 });
 
-const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function EpubBookReader({ uri, initialLocator, preferences, contentPadding, excerpts, palette, onLocationChange, onSelection, onTocChange, onReady, onError, onSingleTap, sourceFormat = 'epub' }, ref) {
-  const { addAnnotation, changeFontFamily, changeFontSize, changeTheme, goNext, goPrevious, goToLocation, removeSelection, section } = useReader();
+const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function EpubBookReader({ uri, initialLocator, preferences, contentPadding, excerpts, palette, onLocationChange, onSelection, onTocChange, onReady, onMetadata, onError, onSingleTap, sourceFormat = 'epub' }, ref) {
+  const { addAnnotation, changeFontFamily, changeFontSize, changeTheme, getMeta, goNext, goPrevious, goToLocation, removeSelection, section } = useReader();
   const [dimensions, setDimensions] = useState({ width: 1, height: 1 });
   const theme = useMemo(() => epubTheme(preferences, palette), [palette, preferences]);
   const initialThemeRef = useRef(theme);
@@ -81,6 +83,18 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
     changeFontSize(`${preferences.fontSize}px`);
     changeFontFamily(preferences.fontFamily === 'serif' ? 'Georgia, "Songti SC", serif' : '-apple-system, "PingFang SC", sans-serif');
   }, [changeFontFamily, changeFontSize, changeTheme, preferences.fontFamily, preferences.fontSize, theme]);
+
+  useEffect(() => {
+    if (!onMetadata) return;
+    const metadata = getMeta();
+    onMetadata({ title: metadata.title.trim() || null, author: metadata.author.trim() || null });
+  }, [getMeta, onMetadata]);
+
+  const syncMetadata = () => {
+    if (!onMetadata) return;
+    const metadata = getMeta();
+    onMetadata({ title: metadata.title.trim() || null, author: metadata.author.trim() || null });
+  };
 
   const saveSelection = (cfiRange: string, text: string) => {
     const value = text.trim();
@@ -120,6 +134,7 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
             changeTheme(theme);
             changeFontSize(`${preferences.fontSize}px`);
             changeFontFamily(preferences.fontFamily === 'serif' ? 'Georgia, "Songti SC", serif' : '-apple-system, "PingFang SC", sans-serif');
+            syncMetadata();
             onReady();
           }}
           onSingleTap={onSingleTap}
@@ -134,12 +149,13 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
   );
 });
 
-const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function PdfBookReader({ uri, initialLocator, preferences, contentPadding, palette, onLocationChange, onSelection, onReady, onError, onSingleTap }, ref) {
+const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function PdfBookReader({ uri, initialLocator, preferences, contentPadding, palette, onLocationChange, onSelection, onTocChange, onReady, onMetadata, onError, onSingleTap }, ref) {
   const PdfComponent = useMemo(loadPdfComponent, []);
   const initialPageRef = useRef(initialLocator?.type === 'pdf-page' ? initialLocator.page : 1);
   const currentPageRef = useRef(initialPageRef.current);
   const pagePropRef = useRef(initialPageRef.current);
   const pageCountRef = useRef(initialLocator?.type === 'pdf-page' ? initialLocator.pageCount : null);
+  const tocRef = useRef<ReaderTocItem[]>([]);
   const horizontalRef = useRef(preferences.pdfHorizontal);
   const pdfRef = useRef<PdfRef>(null);
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,6 +182,15 @@ const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function 
 
   useEffect(() => setLoaded(false), [uri]);
 
+  useEffect(() => {
+    if (!onMetadata) return;
+    let active = true;
+    void probePdfMetadata(uri).then((metadata) => {
+      if (active && (metadata.title || metadata.author)) onMetadata(metadata);
+    });
+    return () => { active = false; };
+  }, [onMetadata, uri]);
+
   useImperativeHandle(ref, () => ({
     previous: () => pdfRef.current?.setPage(Math.max(1, currentPageRef.current - 1)),
     next: () => pdfRef.current?.setPage(Math.min(pageCountRef.current ?? currentPageRef.current + 1, currentPageRef.current + 1)),
@@ -180,9 +205,10 @@ const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function 
 
   const emitLocation = (nextPage: number, nextPageCount: number | null) => {
     const count = nextPageCount && nextPageCount > 0 ? nextPageCount : null;
+    const currentSection = pdfOutlineSection(tocRef.current, nextPage);
     currentPageRef.current = nextPage;
     pageCountRef.current = count;
-    onLocationChange({ locator: createPdfLocator(nextPage, count), progression: count ? (nextPage - 1) / Math.max(1, count - 1) : 0, chapterHref: null, chapterTitle: null, pageCount: count });
+    onLocationChange({ locator: createPdfLocator(nextPage, count), progression: count ? (nextPage - 1) / Math.max(1, count - 1) : 0, chapterHref: currentSection?.href ?? null, chapterTitle: currentSection?.label ?? null, pageCount: count });
   };
 
   if (!PdfComponent) return <NativeModuleUnavailable palette={palette} />;
@@ -202,16 +228,19 @@ const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function 
           enableAntialiasing
           enableDoubleTapZoom
           enableAnnotationRendering
-          enableTextSelection={Platform.OS === 'ios'}
+          enableTextSelection
           fitPolicy={0}
           spacing={preferences.pdfHorizontal ? 0 : 8}
           scrollEnabled
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
           progressContainerStyle={{ backgroundColor: palette.background }}
-          onLoadComplete={(count) => {
+          onLoadComplete={(count, _path, _size, tableContents) => {
             const firstPage = Math.min(count, Math.max(1, currentPageRef.current));
+            const outline = flattenPdfOutline(tableContents);
             pagePropRef.current = firstPage;
+            tocRef.current = outline;
+            onTocChange(outline);
             emitLocation(firstPage, count);
             setLoaded(true);
             onReady();
@@ -235,6 +264,26 @@ const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function 
   );
 });
 
+function flattenPdfOutline(items: TableContent[] | undefined, depth = 0): ReaderTocItem[] {
+  if (!items?.length) return [];
+  return items.flatMap((item) => {
+    const title = item.title?.trim();
+    const pageIndex = Number(item.pageIdx);
+    const page = Number.isFinite(pageIndex) && pageIndex >= 0 ? Math.floor(pageIndex) + 1 : 1;
+    const entry: ReaderTocItem[] = title ? [{ href: `pdf:${page}`, label: title, depth }] : [];
+    return [...entry, ...flattenPdfOutline(item.children, depth + (title ? 1 : 0))];
+  });
+}
+
+function pdfOutlineSection(items: ReaderTocItem[], page: number): ReaderTocItem | null {
+  let current: { item: ReaderTocItem; page: number } | null = null;
+  for (const item of items) {
+    const outlinePage = Number(item.href.match(/^pdf:(\d+)$/)?.[1]);
+    if (Number.isInteger(outlinePage) && outlinePage > 0 && outlinePage <= page && (!current || outlinePage >= current.page)) current = { item, page: outlinePage };
+  }
+  return current?.item ?? null;
+}
+
 function loadPdfComponent(): typeof Pdf | null {
   if (Constants.appOwnership === AppOwnership.Expo) return null;
   try {
@@ -243,6 +292,32 @@ function loadPdfComponent(): typeof Pdf | null {
   } catch {
     return null;
   }
+}
+
+async function probePdfMetadata(uri: string): Promise<{ title: string | null; author: string | null }> {
+  try {
+    const bytes = await new File(uri).bytes();
+    const source = new TextDecoder('latin1').decode(bytes);
+    return { title: pdfInfoValue(source, 'Title'), author: pdfInfoValue(source, 'Author') };
+  } catch {
+    return { title: null, author: null };
+  }
+}
+
+function pdfInfoValue(source: string, key: 'Title' | 'Author'): string | null {
+  const match = new RegExp(`\\/${key}\\s+(\\([^)]*(?:\\\\.[^)]*)*\\)|<([\\da-fA-F]+)>)`).exec(source);
+  if (!match) return null;
+  if (match[2]) {
+    const hex = match[2].length % 2 === 0 ? match[2] : `${match[2]}0`;
+    const bytes = Uint8Array.from(hex.match(/.{2}/g) ?? [], (part) => Number.parseInt(part, 16));
+    return cleanPdfMetadata(new TextDecoder('utf-8').decode(bytes)) ?? cleanPdfMetadata(new TextDecoder('latin1').decode(bytes));
+  }
+  return cleanPdfMetadata(match[1].slice(1, -1).replace(/\\([\\()])/g, '$1').replace(/\\n/g, '\n').replace(/\\r/g, '\r'));
+}
+
+function cleanPdfMetadata(value: string): string | null {
+  const cleaned = value.replace(/^\\uFEFF/, '').trim();
+  return cleaned || null;
 }
 
 function epubLocationEvent(location: Location, progression: number, section: Section | null, reflow: boolean): ReaderLocationEvent {

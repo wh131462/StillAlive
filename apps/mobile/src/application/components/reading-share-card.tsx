@@ -1,15 +1,15 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { Book, Media, ReadingNoteSource } from '@still-alive/types';
-import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { colors, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../state/app-state';
 import { readingSourceQuote, readingSourceTitle } from '../reading-share';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 
 type ReadingShareVariant = 'composer' | 'detail' | 'feed';
 
-export function ReadingShareCard({ source, variant = 'feed' }: { source: ReadingNoteSource; variant?: ReadingShareVariant }) {
+export function ReadingShareCard({ compact = false, source, variant = 'feed' }: { compact?: boolean; source: ReadingNoteSource; variant?: ReadingShareVariant }) {
   const router = useRouter();
   const { books, media } = useAppState();
   const book = source.bookId ? books.find((item) => item.id === source.bookId) ?? null : null;
@@ -17,10 +17,11 @@ export function ReadingShareCard({ source, variant = 'feed' }: { source: Reading
   const readable = Boolean(book?.parseStatus === 'ready' && media.some((item) => item.id === book.fileMediaId));
   const interactive = variant !== 'composer' && readable && book;
   const title = readingSourceTitle(source, book);
-  const label = variant === 'composer'
-    ? quote ? '即将引用一段书摘' : '即将引用一本书'
-    : book ? quote ? '引用了一段书摘' : '引用了一本书'
-    : '引用的书籍已不在书架';
+  const label = quote
+    ? variant === 'composer' ? '即将引用自' : book ? '书摘来自' : '来源书籍已移除'
+    : variant === 'composer' ? '即将引用一本书' : book ? '引用了一本书' : '引用的书籍已不在书架';
+  const quoteContent = quote ? <><View style={styles.quoteHeader}><SymbolView name={{ android: 'format_quote', ios: 'text.quote', web: 'format_quote' }} size={16} tintColor={colors.life} type="hierarchical" /><Text style={styles.quoteLabel}>书摘</Text></View><Text style={styles.quote}>{quote.text.trim()}</Text></> : null;
+  const showQuote = Boolean(quoteContent && !compact);
 
   return (
     <Pressable
@@ -34,15 +35,18 @@ export function ReadingShareCard({ source, variant = 'feed' }: { source: Reading
       }}
       style={({ pressed }) => [styles.card, variant === 'composer' && styles.cardComposer, pressed && styles.cardPressed]}
     >
-      <BookCover book={book} media={media} title={title} variant={variant} />
-      <View style={styles.copy}>
-        <Text style={styles.label}>{label}</Text>
-        <Text numberOfLines={1} style={styles.title}>{title}</Text>
-        <Text numberOfLines={1} style={styles.meta}>{bookMeta(book)}</Text>
-        {quote ? <Text numberOfLines={variant === 'feed' ? 2 : 3} style={styles.quote}>“{quote.text.trim()}”</Text> : null}
-      </View>
-      <View style={[styles.action, !readable && styles.actionUnavailable]}>
-        <SymbolView name={{ android: readable ? 'menu_book' : 'book_2', ios: readable ? 'book.pages.fill' : 'book.closed', web: readable ? 'menu_book' : 'book_2' }} size={17} tintColor={readable ? colors.onLife : colors.inkFaint} type="hierarchical" />
+      {showQuote && variant === 'composer' ? <ScrollView contentContainerStyle={styles.quoteBlock} nestedScrollEnabled showsVerticalScrollIndicator style={styles.composerQuoteScroll}>{quoteContent}</ScrollView> : null}
+      {showQuote && variant !== 'composer' ? <View style={styles.quoteBlock}>{quoteContent}</View> : null}
+      <View style={[styles.sourceRow, !showQuote && styles.sourceRowOnly]}>
+        <BookCover book={book} media={media} title={title} variant={variant} />
+        <View style={styles.sourceCopy}>
+          <Text style={styles.sourceLabel}>{label}</Text>
+          <Text numberOfLines={1} style={styles.title}>{title}</Text>
+          <Text numberOfLines={1} style={styles.meta}>{bookMeta(book)}</Text>
+        </View>
+        <View style={styles.action}>
+          <SymbolView name={{ android: readable ? 'chevron_right' : 'book_2', ios: readable ? 'chevron.right' : 'book.closed', web: readable ? 'chevron_right' : 'book_2' }} size={18} tintColor={readable ? colors.life : colors.inkFaint} type="hierarchical" />
+        </View>
       </View>
     </Pressable>
   );
@@ -68,20 +72,25 @@ function bookMeta(book: Book | null): string {
 }
 
 const styles = createThemedStyles(() => ({
-  card: { minHeight: 88, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.lifeLight },
-  cardComposer: { minHeight: 96, backgroundColor: colors.paper },
+  card: { minHeight: 88, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
+  cardComposer: { backgroundColor: colors.paper },
   cardPressed: { opacity: 0.7 },
-  cover: { flexShrink: 0, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.sm, borderBottomLeftRadius: radius.sm, backgroundColor: colors.sheet },
-  coverFeed: { width: 48, height: 66 },
-  coverLarge: { width: 54, height: 74 },
+  cover: { flexShrink: 0, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sheet },
+  coverFeed: { width: 40, height: 54 },
+  coverLarge: { width: 44, height: 60 },
   coverImage: { width: '100%', height: '100%' },
   coverFormat: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 7, letterSpacing: 0.5 },
-  coverInitial: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
-  copy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
-  label: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
-  title: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 15 },
+  coverInitial: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18 },
+  quoteBlock: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  composerQuoteScroll: { maxHeight: 152 },
+  quoteHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  quoteLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  quote: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 14, lineHeight: 23 },
+  sourceRow: { minHeight: 76, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lifeLine, backgroundColor: colors.paper },
+  sourceRowOnly: { borderTopWidth: 0 },
+  sourceCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
+  sourceLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
+  title: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 14 },
   meta: { marginTop: 3, color: colors.inkFaint, fontSize: 9 },
-  quote: { marginTop: 5, color: colors.inkSoft, fontFamily: typography.display, fontSize: 11, lineHeight: 16 },
-  action: { width: 34, height: 34, marginLeft: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.life },
-  actionUnavailable: { backgroundColor: colors.lineSoft },
+  action: { width: 32, height: 32, marginLeft: spacing.xs, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
 }));

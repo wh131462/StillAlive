@@ -423,6 +423,29 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS person_books_book_idx ON person_books(book_id, person_id);
     PRAGMA user_version = 25;
   `);
+
+  if (currentVersion < 26) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS book_lists (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS book_list_entries (
+      list_id TEXT NOT NULL REFERENCES book_lists(id) ON DELETE CASCADE,
+      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (list_id, book_id)
+    );
+    CREATE INDEX IF NOT EXISTS book_list_entries_list_idx ON book_list_entries(list_id, added_at);
+    CREATE INDEX IF NOT EXISTS book_list_entries_book_idx ON book_list_entries(book_id, list_id);
+    PRAGMA user_version = 26;
+  `);
+
+  if (currentVersion < 27) await db.execAsync(`
+    ALTER TABLE music_tracks ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0;
+    PRAGMA user_version = 27;
+  `);
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {

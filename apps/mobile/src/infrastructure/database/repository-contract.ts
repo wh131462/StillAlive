@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
@@ -56,6 +56,7 @@ export interface StillAliveRepository {
   importMusicTrack(media: Media, track: MusicTrack, collections: MusicCollectionEntry[], coverMedia?: Media | null): Promise<void>;
   createMusicTrack(track: MusicTrack, collection?: MusicCollectionEntry): Promise<void>;
   updateMusicTrack(track: MusicTrack): Promise<void>;
+  incrementMusicTrackPlayCount(trackId: string): Promise<void>;
   deleteMusicTrack(trackId: string): Promise<void>;
   listMusicCollectionEntries(): Promise<MusicCollectionEntry[]>;
   addMusicCollectionEntry(entry: MusicCollectionEntry): Promise<void>;
@@ -67,6 +68,13 @@ export interface StillAliveRepository {
   listMusicPlaylistEntries(): Promise<MusicPlaylistEntry[]>;
   addMusicPlaylistEntries(entries: MusicPlaylistEntry[]): Promise<void>;
   removeMusicPlaylistEntry(playlistId: string, trackId: string): Promise<void>;
+  listBookLists(): Promise<BookList[]>;
+  createBookList(list: BookList): Promise<void>;
+  updateBookList(list: BookList): Promise<void>;
+  deleteBookList(listId: string): Promise<void>;
+  listBookListEntries(): Promise<BookListEntry[]>;
+  addBookListEntries(entries: BookListEntry[]): Promise<void>;
+  removeBookListEntry(listId: string, bookId: string): Promise<void>;
   listBooks(): Promise<Book[]>;
   createBook(book: Book): Promise<void>;
   updateBook(book: Book): Promise<void>;

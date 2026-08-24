@@ -24,6 +24,7 @@ export interface ReaderTocItem {
 
 export interface ReadingPreferences {
   theme: ReaderTheme;
+  showStatusBar: boolean;
   fontSize: number;
   lineHeight: number;
   pageMargin: number;
@@ -175,6 +176,7 @@ export interface MusicTrack {
   artist: string | null;
   album: string | null;
   durationMs: number | null;
+  playCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -197,6 +199,19 @@ export interface MusicPlaylist {
 export interface MusicPlaylistEntry {
   playlistId: string;
   trackId: string;
+  addedAt: string;
+}
+
+export interface BookList {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookListEntry {
+  listId: string;
+  bookId: string;
   addedAt: string;
 }
 

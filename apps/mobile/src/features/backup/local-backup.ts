@@ -241,6 +241,8 @@ function validateSnapshot(value: BackupSnapshot): void {
   const musicCollectionEntries = value.musicCollectionEntries ?? [];
   const musicPlaylists = value.musicPlaylists ?? [];
   const musicPlaylistEntries = value.musicPlaylistEntries ?? [];
+  const bookLists = value.bookLists ?? [];
+  const bookListEntries = value.bookListEntries ?? [];
   const books = value.books ?? [];
   const bookExcerpts = value.bookExcerpts ?? [];
   const readingNoteSources = value.readingNoteSources ?? [];
@@ -249,6 +251,7 @@ function validateSnapshot(value: BackupSnapshot): void {
   assertUniqueIds(albums, '相册');
   assertUniqueIds(musicTracks, '音乐曲目');
   assertUniqueIds(musicPlaylists, '音乐歌单');
+  assertUniqueIds(bookLists, '书单');
   assertUniqueIds(books, '书籍');
   assertUniqueIds(bookExcerpts, '摘抄');
   const tagSystems = new Set<string>();
@@ -260,6 +263,7 @@ function validateSnapshot(value: BackupSnapshot): void {
   const personIds = new Set(value.people.map((person) => person.id));
   const mediaIds = new Set(value.media.map((item) => item.id));
   const bookIds = new Set(books.map((book) => book.id));
+  const bookListIds = new Set(bookLists.map((list) => list.id));
   const personBookKeys = new Set<string>();
   for (const relation of personBooks) {
     const key = `${relation.personId}:${relation.bookId}`;
@@ -272,6 +276,7 @@ function validateSnapshot(value: BackupSnapshot): void {
   for (const track of musicTracks) {
     if (!mediaIds.has(track.mediaId) || !value.media.find((item) => item.id === track.mediaId)?.mimeType.startsWith('audio/')) throw new Error('备份中的音乐文件关联无效');
     if (track.coverMediaId && !mediaIds.has(track.coverMediaId)) throw new Error('备份中的音乐封面关联无效');
+    if (!Number.isSafeInteger(track.playCount) || track.playCount < 0) throw new Error('备份中的音乐播放次数无效');
   }
   const collectionKeys = new Set<string>();
   for (const entry of musicCollectionEntries) {
@@ -298,6 +303,15 @@ function validateSnapshot(value: BackupSnapshot): void {
     if (book.locationType && !['epub-cfi', 'reflow-cfi', 'pdf-page', 'manual'].includes(book.locationType)) throw new Error('备份中的书籍定位类型无效');
     if (book.pageCount != null && (!Number.isInteger(book.pageCount) || book.pageCount < 1)) throw new Error('备份中的 PDF 页数无效');
     if (book.chapterCache && (!Array.isArray(book.chapterCache) || book.chapterCache.some((item) => !item || typeof item.href !== 'string' || typeof item.label !== 'string' || !Number.isInteger(item.depth)))) throw new Error('备份中的书籍目录无效');
+  }
+  for (const list of bookLists) {
+    if (typeof list.name !== 'string' || !list.name.trim() || list.name.length > 40 || !isValidDate(list.createdAt) || !isValidDate(list.updatedAt)) throw new Error('备份中的书单无效');
+  }
+  const bookListEntryKeys = new Set<string>();
+  for (const entry of bookListEntries) {
+    const key = `${entry.listId}:${entry.bookId}`;
+    if (!bookListIds.has(entry.listId) || !bookIds.has(entry.bookId) || !isValidDate(entry.addedAt) || bookListEntryKeys.has(key)) throw new Error('备份中的书单书籍关联无效');
+    bookListEntryKeys.add(key);
   }
   for (const excerpt of bookExcerpts) if (!bookIds.has(excerpt.bookId) || !excerpt.text.trim() || excerpt.text.length > 20_000 || (excerpt.locationType && !['epub-cfi', 'reflow-cfi', 'pdf-page', 'manual'].includes(excerpt.locationType)) || (excerpt.sourceKind && !['selection', 'manual'].includes(excerpt.sourceKind))) throw new Error('备份中的摘抄无效');
   for (const source of readingNoteSources) {
@@ -367,7 +381,12 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.musicCollectionEntries ??= [];
   value.musicPlaylists ??= [];
   value.musicPlaylistEntries ??= [];
-  for (const track of value.musicTracks) track.coverMediaId ??= null;
+  value.bookLists ??= [];
+  value.bookListEntries ??= [];
+  for (const track of value.musicTracks) {
+    track.coverMediaId ??= null;
+    track.playCount ??= 0;
+  }
   for (const playlist of value.musicPlaylists) playlist.coverMediaId ??= null;
   for (const track of value.musicTracks as Array<MusicTrack & { ownerType?: string; ownerId?: string | null }>) {
     if ((track.ownerType === 'self' || track.ownerType === 'person') && !value.musicCollectionEntries.some((entry) => entry.trackId === track.id && entry.targetType === track.ownerType && entry.targetId === (track.ownerId ?? null))) value.musicCollectionEntries.push({ trackId: track.id, targetType: track.ownerType, targetId: track.ownerType === 'person' ? track.ownerId ?? null : null, createdAt: track.createdAt });
@@ -422,6 +441,10 @@ function migrateSnapshot(value: BackupSnapshot): void {
 function validReminderTime(hour: number | null, minute: number | null): boolean {
   if (hour === null || minute === null) return hour === null && minute === null;
   return Number.isInteger(hour) && hour >= 0 && hour <= 23 && Number.isInteger(minute) && minute >= 0 && minute <= 59;
+}
+
+function isValidDate(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(new Date(value).getTime());
 }
 
 function migrateLegacyAudio(value: { bodyMarkdown: string; audioMediaId?: unknown; audioDurationMs?: unknown }): void {

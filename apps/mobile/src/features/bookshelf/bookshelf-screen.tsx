@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import type { Book, BookParseStatus, Media, ReaderTocItem } from '@still-alive/types';
+import type { Book, BookList, BookParseStatus, Media, ReaderTocItem } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { feedback } from '../../shared/feedback';
 import { useAppState } from '../../application/state/app-state';
@@ -17,19 +17,22 @@ import { classifyReflowError, clearReflowBookCache, isReflowBookFormat, probeRef
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
+import { BookListCover } from './book-list-cover';
 
 type SortMode = 'reading' | 'imported' | 'title';
 
 export default function BookshelfScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { books, createBook, deleteBook, discardMedia, media, saveMedia, updateBook } = useAppState();
+  const { bookListEntries, bookLists, books, createBook, createBookList, deleteBook, discardMedia, media, saveMedia, updateBook } = useAppState();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('reading');
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importOptionsVisible, setImportOptionsVisible] = useState(false);
   const [sortVisible, setSortVisible] = useState(false);
+  const [createListVisible, setCreateListVisible] = useState(false);
+  const [listName, setListName] = useState('');
   const [actionBook, setActionBook] = useState<Book | null>(null);
   const [infoBook, setInfoBook] = useState<Book | null>(null);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
@@ -103,6 +106,22 @@ export default function BookshelfScreen() {
         return compareDates(bReadAt ?? b.createdAt, aReadAt ?? a.createdAt);
       });
   }, [books, search, sort]);
+
+  const createList = async () => {
+    if (!listName.trim()) return;
+    try {
+      const list = await createBookList(listName);
+      setListName('');
+      setCreateListVisible(false);
+      router.push({ pathname: '/book-list', params: { id: list.id } } as never);
+    } catch (cause) {
+      feedback.alert('创建失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    }
+  };
+
+  const openList = (list: BookList) => {
+    router.push({ pathname: '/book-list', params: { id: list.id } } as never);
+  };
 
   const importBooks = async (source: 'files' | 'directory') => {
     setImportOptionsVisible(false);
@@ -299,6 +318,14 @@ export default function BookshelfScreen() {
     {importProgress ? <View style={styles.importProgress}><ActivityIndicator color={colors.life} size="small" /><View style={styles.importProgressCopy}><Text style={styles.importProgressTitle}>正在导入 {importProgress.current} / {importProgress.total}</Text><View style={styles.importProgressTrack}><View style={[styles.importProgressFill, { width: `${Math.round(importProgress.current / importProgress.total * 100)}%` }]} /></View></View></View> : null}
     {continueBook ? <ContinueReading book={continueBook} media={media} onPress={() => openBook(continueBook)} /> : null}
 
+    <View style={styles.bookListSection}>
+      <View style={styles.bookListHeader}><View style={styles.listTitleRow}><Text style={styles.listTitle}>书单</Text><Text style={styles.listCount}>{bookLists.length}</Text></View><Pressable accessibilityLabel="创建书单" onPress={() => setCreateListVisible(true)} style={styles.bookListAdd}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={21} tintColor={colors.life} type="hierarchical" /></Pressable></View>
+      {bookLists.length ? <ScrollView horizontal contentContainerStyle={styles.bookListContent} showsHorizontalScrollIndicator={false}>{bookLists.map((list) => {
+        const listBooks = bookListEntries.filter((entry) => entry.listId === list.id).map((entry) => books.find((book) => book.id === entry.bookId)).filter((book): book is Book => Boolean(book));
+        return <Pressable key={list.id} accessibilityRole="button" onPress={() => openList(list)} style={({ pressed }) => [styles.bookListCard, pressed && styles.pressed]}><BookListCover books={listBooks} media={media} size={86} /><Text numberOfLines={1} style={styles.bookListName}>{list.name}</Text><Text style={styles.bookListMeta}>{listBooks.length} 本书</Text></Pressable>;
+      })}</ScrollView> : <Pressable onPress={() => setCreateListVisible(true)} style={({ pressed }) => [styles.bookListEmpty, pressed && styles.pressed]}><View><Text style={styles.bookListEmptyTitle}>创建第一张书单</Text><Text style={styles.bookListEmptyText}>按主题整理你的私人藏书</Text></View><Text style={styles.bookListEmptyAction}>创建</Text></Pressable>}
+    </View>
+
     <View style={styles.controls}>
       <View style={styles.searchBar}>
         <SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
@@ -345,6 +372,10 @@ export default function BookshelfScreen() {
       <SheetTitle title="排序方式" subtitle="最近阅读只根据实际阅读进度更新。" />
       {(['reading', 'imported', 'title'] as SortMode[]).map((mode) => <Pressable key={mode} accessibilityRole="menuitem" onPress={() => { setSort(mode); setSortVisible(false); }} style={({ pressed }) => [styles.sortOption, pressed && styles.pressed]}><Text style={[styles.sortOptionText, sort === mode && styles.sortOptionTextActive]}>{sortLabel(mode)}</Text>{sort === mode ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={18} tintColor={colors.life} type="hierarchical" /> : null}</Pressable>)}
       <SheetCancel onPress={() => setSortVisible(false)} />
+    </DraggableBottomSheet>
+
+    <DraggableBottomSheet keyboardAvoiding onClose={() => setCreateListVisible(false)} open={createListVisible} sheetStyle={[styles.editSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
+      <Text style={styles.sheetTitle}>创建书单</Text><Text style={styles.editSectionLabel}>书单名称</Text><TextInput autoFocus maxLength={40} onChangeText={setListName} onSubmitEditing={() => void createList()} placeholder="例如：这个秋天想读" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.editInput} value={listName} /><Pressable accessibilityRole="button" disabled={!listName.trim()} onPress={() => void createList()} style={({ pressed }) => [styles.saveButton, !listName.trim() && styles.disabled, pressed && styles.pressed]}><Text style={styles.saveButtonText}>创建</Text></Pressable>
     </DraggableBottomSheet>
 
     <DraggableBottomSheet accessibilityLabel={actionBook ? `管理 ${actionBook.title}，向下拖动关闭` : undefined} accessibilityRole="menu" onClose={() => setActionBook(null)} open={Boolean(actionBook)} sheetStyle={[styles.actionSheet, { paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.md) }]}>
@@ -480,6 +511,17 @@ const styles = createThemedStyles(() => ({
   continueMeta: { marginTop: 5, color: colors.inkSoft, fontSize: 10 },
   continueProgress: { marginTop: 6, color: colors.lifeDeep, fontFamily: typography.mono, fontSize: 9 },
   continueAction: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.life },
+  bookListSection: { marginTop: spacing.xl },
+  bookListHeader: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  bookListAdd: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  bookListContent: { paddingTop: spacing.xs, paddingBottom: spacing.sm, gap: spacing.sm },
+  bookListCard: { width: 92 },
+  bookListName: { marginTop: spacing.sm, color: colors.ink, fontSize: 12, fontWeight: '600' },
+  bookListMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 10 },
+  bookListEmpty: { minHeight: 66, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
+  bookListEmptyTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' },
+  bookListEmptyText: { marginTop: 4, color: colors.inkFaint, fontSize: 11 },
+  bookListEmptyAction: { color: colors.life, fontSize: 12, fontWeight: '700' },
   controls: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   searchBar: { flex: 1, minHeight: 46, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.sheet },
   searchInput: { flex: 1, minHeight: 46, paddingHorizontal: spacing.sm, color: colors.ink, fontSize: 12 },
@@ -504,7 +546,7 @@ const styles = createThemedStyles(() => ({
   rowPositionWarm: { color: colors.sun },
   rowPositionDanger: { color: colors.danger },
   moreButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
-  cover: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderTopRightRadius: 8, borderBottomLeftRadius: 8 },
+  cover: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   coverSmall: { width: 50, height: 68 },
   coverMedium: { width: 56, height: 76 },
   coverLarge: { width: 72, height: 96 },

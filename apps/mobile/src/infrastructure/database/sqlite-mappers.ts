@@ -94,7 +94,7 @@ function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
 }
 
 export function mapMusicTrack(row: MusicTrackRow): MusicTrack {
-  return { id: row.id, mediaId: row.media_id, coverMediaId: row.cover_media_id, title: row.title, artist: row.artist, album: row.album, durationMs: row.duration_ms, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, mediaId: row.media_id, coverMediaId: row.cover_media_id, title: row.title, artist: row.artist, album: row.album, durationMs: row.duration_ms, playCount: row.play_count, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 export function mapBook(row: BookRow): Book {

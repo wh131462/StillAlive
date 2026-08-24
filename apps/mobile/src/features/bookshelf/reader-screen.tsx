@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Battery from 'expo-battery';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import type { BookExcerpt, ReaderTheme, ReaderTocItem, ReadingPreferences } from '@still-alive/types';
+import type { Book, BookExcerpt, Media, ReaderTheme, ReaderTocItem, ReadingPreferences } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { BookReader } from './book-reader-view';
@@ -16,7 +16,7 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 import type { BookLocator, ReaderLocationEvent, ReaderSelection, ReaderSurfaceHandle } from './book-reader';
 import { createEpubLocator, createPdfLocator, createReflowLocator, detectReaderCapability, locatorFromBook, pageFromBookLocation, ReaderSessionController, readingPreferencesForBook, serializeBookLocator, updateReadingPreferencesJson } from './book-reader';
 
-type ReaderSheet = 'library' | 'display' | 'jump' | null;
+type ReaderSheet = 'library' | 'display' | 'jump' | 'info' | null;
 type LibraryTab = 'toc' | 'excerpts' | 'notes';
 
 const READER_THEMES: Array<{ id: ReaderTheme; label: string; swatch: string }> = [
@@ -54,7 +54,28 @@ export default function ReaderScreen() {
   const readingPreferences = useMemo(() => book ? readingPreferencesForBook(preferences.readerPreferencesJson, book.id) : null, [book?.id, preferences.readerPreferencesJson]);
   const palette = useMemo(() => readerPalette(readingPreferences?.theme ?? 'paper'), [readingPreferences?.theme]);
 
-  bookRef.current = book;
+  useEffect(() => {
+    bookRef.current = book;
+  }, [book]);
+
+  const persistBookPatch = useCallback((changes: Partial<Book>) => {
+    const currentBook = bookRef.current;
+    if (!currentBook) return;
+    const nextBook = { ...currentBook, ...changes, updatedAt: new Date().toISOString() };
+    bookRef.current = nextBook;
+    void updateBook(nextBook);
+  }, [updateBook]);
+
+  const handleMetadata = useCallback(({ title, author }: { title: string | null; author: string | null }) => {
+    const currentBook = bookRef.current;
+    if (!currentBook) return;
+    const fallbackTitle = file?.originalName?.replace(/\.[^.]+$/, '').trim() || '';
+    const canUseMetadataTitle = Boolean(title && (!currentBook.title.trim() || currentBook.title === '未命名书籍' || currentBook.title === fallbackTitle));
+    const nextTitle = canUseMetadataTitle && title ? title : currentBook.title;
+    const nextAuthor = currentBook.author ?? author;
+    if (nextTitle === currentBook.title && nextAuthor === currentBook.author) return;
+    persistBookPatch({ title: nextTitle, author: nextAuthor });
+  }, [file?.originalName, persistBookPatch]);
 
   const flushLocation = useCallback(() => {
     const event = latestLocationEventRef.current;
@@ -63,7 +84,9 @@ export default function ReaderScreen() {
     latestLocationEventRef.current = null;
     if (pendingLocationRef.current) clearTimeout(pendingLocationRef.current);
     pendingLocationRef.current = null;
-    void updateBook(new ReaderSessionController(currentBook).applyLocation(event));
+    const nextBook = new ReaderSessionController(currentBook).applyLocation(event);
+    bookRef.current = nextBook;
+    void updateBook(nextBook);
   }, [updateBook]);
 
   useEffect(() => {
@@ -93,11 +116,15 @@ export default function ReaderScreen() {
   const capability = detectReaderCapability(book);
   const readable = capability.status === 'ready' && Boolean(file) && !runtimeError;
   const immersive = readable && !controlsVisible && sheet === null;
+  const currentPdfTocItem = book.format === 'pdf' && location?.type === 'pdf-page' ? pdfTocItemAtPage(toc, location.page) : null;
+  const currentChapterTitle = currentPdfTocItem?.label ?? chapterTitleFromLocator(location) ?? (book.chapterTitle?.trim() || null);
+  const immersiveChapterTitle = currentChapterTitle ?? book.title;
+
   // 阅读控制栏是覆盖层，不应参与正文布局。固定安全区可以避免展开/收起时
   // EPUB 重新分页或 PDF 可视区域变化，导致正文跳动。
   const readerContentPadding = {
-    top: Math.max(24, insets.top + 12),
-    bottom: Math.max(44, insets.bottom + 28),
+    top: Math.max(40, insets.top + 28),
+    bottom: insets.bottom + 44,
   };
 
   const persistLocation = (event: ReaderLocationEvent) => {
@@ -116,8 +143,8 @@ export default function ReaderScreen() {
 
   const handleTocChange = (items: ReaderTocItem[]) => {
     setToc(items);
-    if (sameToc(items, book.chapterCache ?? [])) return;
-    void updateBook({ ...book, chapterCache: items, engineVersion: session.adapter.engineVersion, updatedAt: new Date().toISOString() });
+    if (sameToc(items, bookRef.current?.chapterCache ?? [])) return;
+    persistBookPatch({ chapterCache: items, engineVersion: session.adapter.engineVersion });
   };
 
   const openLibrary = (tab: LibraryTab) => {
@@ -193,12 +220,13 @@ export default function ReaderScreen() {
 
   const locationLabel = formatLocation(book.format, location, book.progress);
   const hudProgressLabel = formatHudProgress(book.format, location, book.progress);
+  const currentTocHref = currentTocItemHref(book.format, location, book.chapterHref ?? null, toc);
   const controlBarOpacity = controlsProgress;
   const immersiveHudOpacity = controlsProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
 
   return (
     <SafeAreaView edges={[]} style={[styles.safe, { backgroundColor: palette.background }]}>
-      <StatusBar animated hidden={immersive} hideTransitionAnimation="fade" style={readingPreferences.theme === 'night' ? 'light' : 'dark'} />
+      <StatusBar animated hidden={readable && !readingPreferences.showStatusBar} hideTransitionAnimation="fade" style={readingPreferences.theme === 'night' ? 'light' : 'dark'} />
 
       <Animated.View
         accessibilityElementsHidden={!controlsVisible}
@@ -218,9 +246,9 @@ export default function ReaderScreen() {
       >
         <IconButton label="返回书架" name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} onPress={() => { flushLocation(); router.back(); }} tint={palette.text} />
         <View style={styles.headerCopy}>
-          <Text numberOfLines={1} style={[styles.headerTitle, { color: palette.text }]}>{book.title}</Text>
+          <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.headerTitle, { color: palette.text }]}>{book.title}</Text>
         </View>
-        <IconButton label="收起阅读控制" name={{ android: 'fullscreen', ios: 'arrow.up.left.and.arrow.down.right', web: 'fullscreen' }} onPress={() => setControlsVisible(false)} tint={palette.text} />
+        <IconButton label="查看阅读信息" name={{ android: 'info', ios: 'info.circle', web: 'info' }} onPress={() => setSheet('info')} tint={palette.text} />
       </Animated.View>
 
       <View style={[styles.readerSurface, { backgroundColor: palette.background }]}>
@@ -238,14 +266,33 @@ export default function ReaderScreen() {
             onSelection={handleSelection}
             onTocChange={handleTocChange}
             onReady={() => {
-              if (book.engineVersion !== session.adapter.engineVersion) void updateBook({ ...book, engineVersion: session.adapter.engineVersion, updatedAt: new Date().toISOString() });
+              if (bookRef.current?.engineVersion !== session.adapter.engineVersion) persistBookPatch({ engineVersion: session.adapter.engineVersion });
             }}
+            onMetadata={handleMetadata}
             onError={(message) => setRuntimeError(message || '书籍无法打开')}
             onSingleTap={() => setControlsVisible((visible) => !visible)}
           />
         ) : (
           <ReaderError palette={palette} status={runtimeError ? (isProtectedReaderError(runtimeError) ? 'protected' : 'failed') : capability.status} message={runtimeError || capability.message || (file ? null : '书籍文件不存在')} onBack={() => router.back()} />
         )}
+
+        {readable && sheet === null ? (
+          <Animated.View
+            accessibilityElementsHidden={!immersive}
+            importantForAccessibility={immersive ? 'auto' : 'no-hide-descendants'}
+            pointerEvents="none"
+            style={[
+              styles.immersiveChapterLayer,
+              {
+                top: insets.top + spacing.xs,
+                opacity: immersiveHudOpacity,
+                transform: [{ translateY: controlsProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }],
+              },
+            ]}
+          >
+            <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.immersiveChapterTitle, { color: palette.muted }]}>{immersiveChapterTitle}</Text>
+          </Animated.View>
+        ) : null}
 
         {readable && sheet === null ? (
           <Animated.View
@@ -304,37 +351,35 @@ export default function ReaderScreen() {
         <Pressable onPress={jumpToPage} style={({ pressed }) => [styles.primaryAction, { backgroundColor: palette.accent }, pressed && styles.pressed]}><Text style={styles.primaryActionText}>前往该页</Text></Pressable>
       </ReaderSheetShell>
 
+      <ReaderSheetShell compact onClose={() => setSheet(null)} open={sheet === 'info'} palette={palette} paddingBottom={Math.max(spacing.lg, insets.bottom + spacing.md)} title="阅读信息">
+        <ReadingInfoPanel book={book} file={file ?? null} locationLabel={currentChapterTitle ?? locationLabel} outlineCount={toc.length} palette={palette} progressLabel={readingProgressLabel(book, location)} />
+      </ReaderSheetShell>
+
       <ReaderSheetShell onClose={() => setSheet(null)} open={sheet === 'library'} palette={palette} paddingBottom={Math.max(spacing.lg, insets.bottom + spacing.md)} title="阅读工具">
         <View style={[styles.tabs, { borderBottomColor: palette.line }]}>
           <SheetTab active={libraryTab === 'toc'} disabled={!session.capabilities.toc} label="目录" onPress={() => setLibraryTab('toc')} palette={palette} />
           <SheetTab active={libraryTab === 'excerpts'} label={`书摘 ${excerpts.length}`} onPress={() => setLibraryTab('excerpts')} palette={palette} />
           <SheetTab active={libraryTab === 'notes'} label="笔记" onPress={() => setLibraryTab('notes')} palette={palette} />
         </View>
-        {libraryTab === 'toc' ? <TocPanel currentHref={book.chapterHref ?? null} items={toc} onSelect={(item) => {
-          readerRef.current?.goTo(book.format === 'epub'
-            ? createEpubLocator('', item.href, item.label, book.progress)
-            : createReflowLocator('', item.href, item.label, book.progress));
+        {libraryTab === 'toc' ? <TocPanel currentHref={currentTocHref} items={toc} onSelect={(item) => {
+          const locator = tocItemLocator(book, location, item);
+          if (locator) readerRef.current?.goTo(locator);
           setSheet(null);
         }} palette={palette} /> : null}
         {libraryTab === 'excerpts' ? <ExcerptPanel draft={excerptDraft} excerpts={excerpts} manual={!session.capabilities.selection || !pendingSelection} onChangeDraft={setExcerptDraft} onDelete={removeExcerpt} onSave={() => void saveExcerpt()} onWrite={writeNote} palette={palette} /> : null}
         {libraryTab === 'notes' ? <View style={styles.notesPanel}><Text style={[styles.notesTitle, { color: palette.text }]}>关于《{book.title}》</Text><Text style={[styles.notesCopy, { color: palette.muted }]}>笔记会进入时间线，并保留当前书籍来源。</Text><Pressable onPress={() => writeNote()} style={[styles.primaryAction, { backgroundColor: palette.accent }]}><Text style={styles.primaryActionText}>写读书笔记</Text></Pressable></View> : null}
       </ReaderSheetShell>
 
-      <ReaderSheetShell onClose={() => setSheet(null)} open={sheet === 'display'} palette={palette} paddingBottom={Math.max(spacing.lg, insets.bottom + spacing.md)} title="显示设置">
+      <ReaderSheetShell compact onClose={() => setSheet(null)} open={sheet === 'display'} palette={palette} paddingBottom={Math.max(spacing.md, insets.bottom + spacing.sm)} title="显示设置">
         <ScrollView contentContainerStyle={styles.displayContent} showsVerticalScrollIndicator={false}>
-          <SettingLabel color={palette.muted}>阅读界面</SettingLabel>
-          <Pressable onPress={() => { setSheet(null); setControlsVisible(false); }} style={({ pressed }) => [styles.immersiveAction, { backgroundColor: palette.surface, borderColor: palette.line }, pressed && styles.pressed]}>
-            <View style={[styles.immersiveActionIcon, { backgroundColor: palette.chrome }]}><SymbolView name={{ android: 'fullscreen', ios: 'arrow.up.left.and.arrow.down.right', web: 'fullscreen' }} size={20} tintColor={palette.accent} type="hierarchical" /></View>
-            <View style={styles.immersiveActionCopy}><Text style={[styles.immersiveActionTitle, { color: palette.text }]}>进入沉浸阅读</Text><Text style={[styles.immersiveActionHint, { color: palette.muted }]}>隐藏系统状态栏，底部保留进度、时间与电量</Text></View>
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: readingPreferences.showStatusBar }} onPress={() => persistPreferences({ ...readingPreferences, showStatusBar: !readingPreferences.showStatusBar })} style={({ pressed }) => [styles.statusBarSetting, { borderBottomColor: palette.line }, pressed && styles.pressed]}>
+            <Text style={[styles.settingRowLabel, { color: palette.text }]}>显示系统状态栏</Text>
+            <View style={[styles.switchTrack, { backgroundColor: readingPreferences.showStatusBar ? palette.accent : palette.line }]}><View style={[styles.switchThumb, readingPreferences.showStatusBar && styles.switchThumbOn]} /></View>
           </Pressable>
           <SettingLabel color={palette.muted}>阅读主题</SettingLabel>
           <View style={styles.themeOptions}>{READER_THEMES.map((option) => <Pressable key={option.id} accessibilityState={{ selected: readingPreferences.theme === option.id }} onPress={() => persistPreferences({ ...readingPreferences, theme: option.id })} style={({ pressed }) => [styles.themeOption, { borderColor: readingPreferences.theme === option.id ? palette.accent : palette.line }, pressed && styles.pressed]}><View style={[styles.themeSwatch, { backgroundColor: option.swatch }]} /><Text style={[styles.themeLabel, { color: readingPreferences.theme === option.id ? palette.accent : palette.text }]}>{option.label}</Text></Pressable>)}</View>
-
-          {session.capabilities.fontSize ? <><SettingLabel color={palette.muted}>字号</SettingLabel><Stepper label={`${readingPreferences.fontSize} px`} onDecrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.max(14, readingPreferences.fontSize - 1) })} onIncrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.min(32, readingPreferences.fontSize + 1) })} palette={palette} /></> : null}
-          {session.capabilities.lineHeight ? <><SettingLabel color={palette.muted}>行距</SettingLabel><Stepper label={readingPreferences.lineHeight.toFixed(1)} onDecrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.max(1.3, Number((readingPreferences.lineHeight - 0.1).toFixed(1))) })} onIncrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.min(2.4, Number((readingPreferences.lineHeight + 0.1).toFixed(1))) })} palette={palette} /></> : null}
-          {session.capabilities.reflow ? <><SettingLabel color={palette.muted}>页边距</SettingLabel><Stepper label={`${readingPreferences.pageMargin} px`} onDecrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.max(12, readingPreferences.pageMargin - 2) })} onIncrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.min(44, readingPreferences.pageMargin + 2) })} palette={palette} /></> : null}
-          {session.capabilities.reflow ? <><SettingLabel color={palette.muted}>字体与翻页</SettingLabel><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.fontFamily === 'serif'} label="衬线" onPress={() => persistPreferences({ ...readingPreferences, fontFamily: 'serif' })} palette={palette} /><Segment active={readingPreferences.fontFamily === 'sans'} label="无衬线" onPress={() => persistPreferences({ ...readingPreferences, fontFamily: 'sans' })} palette={palette} /></View><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.flow === 'paginated'} label="左右翻页" onPress={() => persistPreferences({ ...readingPreferences, flow: 'paginated' })} palette={palette} /><Segment active={readingPreferences.flow === 'scrolled'} label="上下滚动" onPress={() => persistPreferences({ ...readingPreferences, flow: 'scrolled' })} palette={palette} /></View></> : null}
-          {session.capabilities.zoom ? <><SettingLabel color={palette.muted}>PDF 页面配色</SettingLabel><Text style={[styles.settingHint, { color: palette.muted }]}>跟随主题会同步纸张与文字明暗；插图或扫描件偏色时可保留原色。</Text><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfThemeEnabled} label="跟随主题" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: true })} palette={palette} /><Segment active={!readingPreferences.pdfThemeEnabled} label="保留原色" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: false })} palette={palette} /></View><SettingLabel color={palette.muted}>PDF 缩放</SettingLabel><Stepper label={`${readingPreferences.pdfScale.toFixed(1)}x`} onDecrease={() => setPdfZoom(readingPreferences.pdfScale - 0.25)} onIncrease={() => setPdfZoom(readingPreferences.pdfScale + 0.25)} palette={palette} /><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfScale === 1} label="适合宽度" onPress={() => setPdfZoom(1)} palette={palette} /><Segment active={readingPreferences.pdfScale === 1.5} label="150%" onPress={() => setPdfZoom(1.5)} palette={palette} /></View><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={!readingPreferences.pdfHorizontal} label="纵向滚动" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: false })} palette={palette} /><Segment active={readingPreferences.pdfHorizontal} label="横向翻页" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: true })} palette={palette} /></View></> : null}
+          {session.capabilities.reflow ? <><SettingLabel color={palette.muted}>排版</SettingLabel><View>{session.capabilities.fontSize ? <SettingRow label="字号" palette={palette}><Stepper label={`${readingPreferences.fontSize} px`} onDecrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.max(14, readingPreferences.fontSize - 1) })} onIncrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.min(32, readingPreferences.fontSize + 1) })} palette={palette} /></SettingRow> : null}{session.capabilities.lineHeight ? <SettingRow label="行距" palette={palette}><Stepper label={readingPreferences.lineHeight.toFixed(1)} onDecrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.max(1.3, Number((readingPreferences.lineHeight - 0.1).toFixed(1))) })} onIncrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.min(2.4, Number((readingPreferences.lineHeight + 0.1).toFixed(1))) })} palette={palette} /></SettingRow> : null}<SettingRow label="页边距" palette={palette}><Stepper label={`${readingPreferences.pageMargin} px`} onDecrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.max(12, readingPreferences.pageMargin - 2) })} onIncrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.min(44, readingPreferences.pageMargin + 2) })} palette={palette} /></SettingRow><SettingRow label="字体" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.fontFamily === 'serif'} label="衬线" onPress={() => persistPreferences({ ...readingPreferences, fontFamily: 'serif' })} palette={palette} /><Segment active={readingPreferences.fontFamily === 'sans'} label="无衬线" onPress={() => persistPreferences({ ...readingPreferences, fontFamily: 'sans' })} palette={palette} /></View></SettingRow><SettingRow label="翻页" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.flow === 'paginated'} label="左右" onPress={() => persistPreferences({ ...readingPreferences, flow: 'paginated' })} palette={palette} /><Segment active={readingPreferences.flow === 'scrolled'} label="上下" onPress={() => persistPreferences({ ...readingPreferences, flow: 'scrolled' })} palette={palette} /></View></SettingRow></View></> : null}
+          {session.capabilities.zoom ? <><SettingLabel color={palette.muted}>PDF 页面</SettingLabel><View><SettingRow label="配色" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfThemeEnabled} label="跟随主题" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: true })} palette={palette} /><Segment active={!readingPreferences.pdfThemeEnabled} label="保留原色" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: false })} palette={palette} /></View></SettingRow><SettingRow label="缩放" palette={palette}><Stepper label={`${readingPreferences.pdfScale.toFixed(1)}x`} onDecrease={() => setPdfZoom(readingPreferences.pdfScale - 0.25)} onIncrease={() => setPdfZoom(readingPreferences.pdfScale + 0.25)} palette={palette} /></SettingRow><SettingRow label="快捷缩放" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfScale === 1} label="适合宽度" onPress={() => setPdfZoom(1)} palette={palette} /><Segment active={readingPreferences.pdfScale === 1.5} label="150%" onPress={() => setPdfZoom(1.5)} palette={palette} /></View></SettingRow><SettingRow label="阅读方向" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={!readingPreferences.pdfHorizontal} label="纵向" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: false })} palette={palette} /><Segment active={readingPreferences.pdfHorizontal} label="横向" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: true })} palette={palette} /></View></SettingRow></View></> : null}
         </ScrollView>
       </ReaderSheetShell>
     </SafeAreaView>
@@ -347,7 +392,30 @@ function ReaderError({ palette, status, message, onBack }: { palette: ReturnType
 }
 
 function TocPanel({ items, currentHref, onSelect, palette }: { items: ReaderTocItem[]; currentHref: string | null; onSelect(item: ReaderTocItem): void; palette: ReturnType<typeof readerPalette> }) {
-  return <ScrollView contentContainerStyle={styles.toolList} style={styles.toolScroll}>{items.map((item) => <Pressable key={`${item.href}:${item.label}`} onPress={() => onSelect(item)} style={[styles.tocRow, { paddingLeft: spacing.md + Math.min(item.depth, 3) * spacing.md, borderBottomColor: palette.line }]}><View style={[styles.currentBar, { backgroundColor: currentHref === item.href ? palette.accent : 'transparent' }]} /><Text numberOfLines={2} style={[styles.tocLabel, { color: currentHref === item.href ? palette.accent : palette.text }]}>{item.label}</Text></Pressable>)}{items.length === 0 ? <Text style={[styles.emptyText, { color: palette.muted }]}>目录载入后会显示在这里</Text> : null}</ScrollView>;
+  return <ScrollView contentContainerStyle={styles.tocList} style={styles.toolScroll}>{items.map((item, index) => {
+    const active = currentHref === item.href;
+    const page = pdfPageFromTocHref(item.href);
+    return <Pressable key={`${item.href}:${item.label}:${index}`} accessibilityState={{ selected: active }} onPress={() => onSelect(item)} style={({ pressed }) => [styles.tocRow, { paddingLeft: spacing.xs + Math.min(item.depth, 4) * spacing.md, borderBottomColor: palette.line }, pressed && styles.pressed]}><View style={[styles.tocCurrentMark, { backgroundColor: active ? palette.accent : 'transparent' }]} /><Text numberOfLines={2} style={[styles.tocLabel, item.depth === 0 && styles.tocRootLabel, { color: active ? palette.accent : palette.text }]}>{item.label}</Text>{page ? <Text style={[styles.tocPage, { color: active ? palette.accent : palette.muted }]}>{page}</Text> : null}</Pressable>;
+  })}{items.length === 0 ? <Text style={[styles.emptyText, { color: palette.muted }]}>这本书没有可用大纲</Text> : null}</ScrollView>;
+}
+
+function ReadingInfoPanel({ book, file, locationLabel, outlineCount, palette, progressLabel }: { book: Book; file: Media | null; locationLabel: string; outlineCount: number; palette: ReturnType<typeof readerPalette>; progressLabel: string }) {
+  return <View style={styles.readingInfo}>
+    <Text numberOfLines={2} style={[styles.readingInfoTitle, { color: palette.text }]}>{book.title}</Text>
+    <Text numberOfLines={1} style={[styles.readingInfoAuthor, { color: palette.muted }]}>{book.author?.trim() || '未知作者'}</Text>
+    <View style={styles.readingInfoRows}>
+      <ReadingInfoRow label="阅读进度" palette={palette} value={progressLabel} />
+      <ReadingInfoRow label="当前位置" palette={palette} value={locationLabel} />
+      <ReadingInfoRow label="文件格式" palette={palette} value={book.format.toUpperCase()} />
+      <ReadingInfoRow label="大纲" palette={palette} value={outlineCount ? `${outlineCount} 项` : '无可用大纲'} />
+      <ReadingInfoRow label="原始文件" palette={palette} value={file?.originalName?.trim() || '未知'} />
+      <ReadingInfoRow label="文件大小" palette={palette} value={formatFileSize(file?.sizeBytes ?? null)} />
+    </View>
+  </View>;
+}
+
+function ReadingInfoRow({ label, palette, value }: { label: string; palette: ReturnType<typeof readerPalette>; value: string }) {
+  return <View style={[styles.readingInfoRow, { borderBottomColor: palette.line }]}><Text style={[styles.readingInfoLabel, { color: palette.muted }]}>{label}</Text><Text numberOfLines={2} style={[styles.readingInfoValue, { color: palette.text }]}>{value}</Text></View>;
 }
 
 function ExcerptPanel({ draft, excerpts, manual, onChangeDraft, onDelete, onSave, onWrite, palette }: { draft: string; excerpts: BookExcerpt[]; manual: boolean; onChangeDraft(value: string): void; onDelete(id: string): void; onSave(): void; onWrite(id: string): void; palette: ReturnType<typeof readerPalette> }) {
@@ -407,8 +475,8 @@ function IconButton({ label, name, onPress, tint }: { label: string; name: Compo
   return <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><SymbolView name={name} size={20} tintColor={tint} type="hierarchical" /></Pressable>;
 }
 
-function ReaderSheetShell({ children, onClose, open, paddingBottom, palette, title }: PropsWithChildren<{ onClose(): void; open: boolean; paddingBottom: number; palette: ReturnType<typeof readerPalette>; title: string }>) {
-  return <DraggableBottomSheet handleStyle={{ backgroundColor: palette.line }} keyboardAvoiding onClose={onClose} open={open} sheetStyle={[styles.sheet, { paddingBottom, backgroundColor: palette.chrome }]}><View style={styles.sheetHeader}><Text style={[styles.sheetTitle, { color: palette.text }]}>{title}</Text><IconButton label="关闭" name={{ android: 'close', ios: 'xmark', web: 'close' }} onPress={onClose} tint={palette.muted} /></View>{children}</DraggableBottomSheet>;
+function ReaderSheetShell({ children, compact = false, onClose, open, paddingBottom, palette, title }: PropsWithChildren<{ compact?: boolean; onClose(): void; open: boolean; paddingBottom: number; palette: ReturnType<typeof readerPalette>; title: string }>) {
+  return <DraggableBottomSheet handleStyle={{ backgroundColor: palette.line }} keyboardAvoiding onClose={onClose} open={open} sheetStyle={[styles.sheet, compact && styles.compactSheet, { paddingBottom, backgroundColor: palette.chrome }]}><View style={[styles.sheetHeader, compact && styles.compactSheetHeader]}><Text style={[styles.sheetTitle, { color: palette.text }]}>{title}</Text></View>{children}</DraggableBottomSheet>;
 }
 
 function SheetTab({ active, disabled = false, label, onPress, palette }: { active: boolean; disabled?: boolean; label: string; onPress(): void; palette: ReturnType<typeof readerPalette> }) {
@@ -419,12 +487,16 @@ function SettingLabel({ children, color }: PropsWithChildren<{ color: string }>)
   return <Text style={[styles.settingLabel, { color }]}>{children}</Text>;
 }
 
+function SettingRow({ children, label, palette }: PropsWithChildren<{ label: string; palette: ReturnType<typeof readerPalette> }>) {
+  return <View style={[styles.settingRow, { borderBottomColor: palette.line }]}><Text style={[styles.settingRowLabel, { color: palette.text }]}>{label}</Text><View style={styles.settingRowControl}>{children}</View></View>;
+}
+
 function Stepper({ label, onDecrease, onIncrease, palette }: { label: string; onDecrease(): void; onIncrease(): void; palette: ReturnType<typeof readerPalette> }) {
-  return <View style={[styles.stepper, { backgroundColor: palette.surface }]}><IconButton label="减小" name={{ android: 'remove', ios: 'minus', web: 'remove' }} onPress={onDecrease} tint={palette.text} /><Text style={[styles.stepperValue, { color: palette.text }]}>{label}</Text><IconButton label="增大" name={{ android: 'add', ios: 'plus', web: 'add' }} onPress={onIncrease} tint={palette.text} /></View>;
+  return <View style={[styles.stepper, { backgroundColor: palette.surface }]}><Pressable accessibilityLabel="减小" onPress={onDecrease} style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed]}><SymbolView name={{ android: 'remove', ios: 'minus', web: 'remove' }} size={16} tintColor={palette.text} type="hierarchical" /></Pressable><Text style={[styles.stepperValue, { color: palette.text }]}>{label}</Text><Pressable accessibilityLabel="增大" onPress={onIncrease} style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed]}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={16} tintColor={palette.text} type="hierarchical" /></Pressable></View>;
 }
 
 function Segment({ active, label, onPress, palette }: { active: boolean; label: string; onPress(): void; palette: ReturnType<typeof readerPalette> }) {
-  return <Pressable onPress={onPress} style={[styles.segment, active && { backgroundColor: palette.chrome }]}><Text style={[styles.segmentText, { color: active ? palette.accent : palette.muted }]}>{label}</Text></Pressable>;
+  return <Pressable accessibilityState={{ selected: active }} onPress={onPress} style={[styles.segment, active && { backgroundColor: palette.chrome }]}><Text numberOfLines={1} style={[styles.segmentText, { color: active ? palette.accent : palette.muted }]}>{label}</Text></Pressable>;
 }
 
 function manualLocator(format: string, location: BookLocator | null, chapterTitle: string | null): BookLocator {
@@ -443,6 +515,61 @@ function formatLocation(format: string, locator: BookLocator | null, progression
   }
   const value = locator?.type === 'epub-cfi' || locator?.type === 'reflow-cfi' ? locator.progression : progression;
   return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+function tocItemLocator(book: Book, location: BookLocator | null, item: ReaderTocItem): BookLocator | null {
+  if (book.format === 'pdf') {
+    const page = pdfPageFromTocHref(item.href);
+    const pageCount = location?.type === 'pdf-page' ? location.pageCount : book.pageCount ?? null;
+    return page ? createPdfLocator(page, pageCount) : null;
+  }
+  if (book.format === 'epub') return createEpubLocator('', item.href, item.label, book.progress);
+  if (['mobi', 'txt', 'html', 'fb2'].includes(book.format)) return createReflowLocator('', item.href, item.label, book.progress);
+  return null;
+}
+
+function currentTocItemHref(format: Book['format'], location: BookLocator | null, chapterHref: string | null, items: ReaderTocItem[]): string | null {
+  if (format !== 'pdf') {
+    if (location?.type === 'epub-cfi' || location?.type === 'reflow-cfi') return location.href ?? chapterHref;
+    return chapterHref;
+  }
+  if (location?.type !== 'pdf-page') return null;
+  return pdfTocItemAtPage(items, location.page)?.href ?? null;
+}
+
+function pdfTocItemAtPage(items: ReaderTocItem[], currentPage: number): ReaderTocItem | null {
+  let current: { item: ReaderTocItem; page: number } | null = null;
+  for (const item of items) {
+    const page = pdfPageFromTocHref(item.href);
+    if (page && page <= currentPage && (!current || page >= current.page)) current = { item, page };
+  }
+  return current?.item ?? null;
+}
+
+function pdfPageFromTocHref(href: string): number | null {
+  const page = Number(href.match(/^pdf:(\d+)$/)?.[1]);
+  return Number.isInteger(page) && page > 0 ? page : null;
+}
+
+function readingProgressLabel(book: Book, location: BookLocator | null): string {
+  const value = location?.type === 'epub-cfi' || location?.type === 'reflow-cfi'
+    ? location.progression
+    : location?.type === 'pdf-page' && location.pageCount
+      ? (location.page - 1) / Math.max(1, location.pageCount - 1)
+      : book.progress;
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (bytes === null || !Number.isFinite(bytes) || bytes < 0) return '未知';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function chapterTitleFromLocator(locator: BookLocator | null): string | null {
+  if (locator?.type !== 'epub-cfi' && locator?.type !== 'reflow-cfi' && locator?.type !== 'manual') return null;
+  return locator.chapterTitle?.trim() || null;
 }
 
 function formatHudProgress(format: string, locator: BookLocator | null, progression: number) {
@@ -492,8 +619,8 @@ const styles = createThemedStyles(() => ({
   missingSafe: { flex: 1, backgroundColor: colors.paper },
   missing: { margin: spacing.lg, color: colors.inkSoft },
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
-  headerCopy: { flex: 1, minWidth: 0, alignItems: 'center' },
-  headerTitle: { maxWidth: '100%', fontFamily: typography.display, fontSize: 15 },
+  headerCopy: { flex: 1, minWidth: 0, paddingVertical: spacing.xs, alignItems: 'flex-start' },
+  headerTitle: { maxWidth: '100%', fontFamily: typography.display, fontSize: 14, lineHeight: 18 },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   readerSurface: { flex: 1 },
   readerError: { flex: 1, paddingHorizontal: spacing.xl, alignItems: 'center', justifyContent: 'center' },
@@ -502,26 +629,30 @@ const styles = createThemedStyles(() => ({
   readerErrorText: { maxWidth: 300, marginTop: spacing.sm, fontSize: 12, lineHeight: 20, textAlign: 'center' },
   secondaryAction: { minWidth: 128, minHeight: 46, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm },
   secondaryActionText: { fontSize: 12, fontWeight: '600' },
+  immersiveChapterLayer: { position: 'absolute', left: spacing.md, right: spacing.md, zIndex: 18, minHeight: 24, justifyContent: 'center' },
+  immersiveChapterTitle: { maxWidth: '100%', fontFamily: typography.display, fontSize: 11, lineHeight: 16, opacity: 0.72 },
   immersiveHudLayer: { position: 'absolute', left: spacing.md, right: spacing.md, zIndex: 18 },
   immersiveHud: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   immersiveHudRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   immersiveHudMeta: { fontFamily: typography.mono, fontSize: 10, fontVariant: ['tabular-nums'], opacity: 0.72 },
   immersiveBattery: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  bottomControls: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, paddingHorizontal: spacing.sm, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth },
-  positionControls: { minHeight: 48, flexDirection: 'row', alignItems: 'center' },
+  bottomControls: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, paddingHorizontal: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
+  positionControls: { minHeight: 52, flexDirection: 'row', alignItems: 'center' },
   positionAction: { width: 82, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   positionActionText: { fontSize: 11, fontWeight: '600' },
   positionLabel: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   positionText: { fontFamily: typography.mono, fontSize: 11 },
-  readerTools: { minHeight: 66, flexDirection: 'row', justifyContent: 'space-around' },
-  readerTool: { width: 74, minHeight: 60, alignItems: 'center', justifyContent: 'center' },
+  readerTools: { minHeight: 72, flexDirection: 'row', justifyContent: 'space-around' },
+  readerTool: { width: 74, minHeight: 66, alignItems: 'center', justifyContent: 'center' },
   readerToolText: { maxWidth: 68, marginTop: 5, fontSize: 10 },
   disabled: { opacity: 0.32 },
   pressed: { opacity: 0.58 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
   sheet: { height: '82%', paddingTop: spacing.sm, paddingHorizontal: spacing.lg, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  compactSheet: { height: '72%' },
   handle: { width: 36, height: 4, marginBottom: spacing.sm, alignSelf: 'center', borderRadius: 2 },
   sheetHeader: { minHeight: 46, flexDirection: 'row', alignItems: 'center' },
+  compactSheetHeader: { minHeight: 38 },
   sheetTitle: { flex: 1, fontFamily: typography.display, fontSize: 18 },
   sheetHint: { marginTop: spacing.sm, fontSize: 11, lineHeight: 18 },
   sheetInput: { minHeight: 52, marginTop: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radius.sm, fontFamily: typography.mono, fontSize: 16 },
@@ -532,9 +663,12 @@ const styles = createThemedStyles(() => ({
   tabText: { fontSize: 11, fontWeight: '600' },
   toolScroll: { flex: 1 },
   toolList: { paddingBottom: spacing.lg },
-  tocRow: { minHeight: 52, paddingRight: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
-  currentBar: { width: 3, height: 20, marginRight: spacing.sm, borderRadius: 2 },
-  tocLabel: { flex: 1, fontSize: 13, lineHeight: 20 },
+  tocList: { paddingTop: spacing.xs, paddingBottom: spacing.lg },
+  tocRow: { minHeight: 48, paddingRight: spacing.xs, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  tocCurrentMark: { width: 2, height: 16, marginRight: spacing.sm, borderRadius: 1 },
+  tocLabel: { flex: 1, fontFamily: typography.display, fontSize: 13, lineHeight: 20 },
+  tocRootLabel: { fontSize: 14, fontWeight: '600' },
+  tocPage: { width: 38, marginLeft: spacing.sm, fontFamily: typography.mono, fontSize: 9, textAlign: 'right' },
   emptyText: { paddingVertical: spacing.xl, fontSize: 11, textAlign: 'center' },
   excerptPanel: { flex: 1 },
   excerptInput: { minHeight: 96, maxHeight: 150, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.sm, fontSize: 13, lineHeight: 21 },
@@ -547,21 +681,30 @@ const styles = createThemedStyles(() => ({
   notesPanel: { paddingTop: spacing.xl },
   notesTitle: { fontFamily: typography.display, fontSize: 18 },
   notesCopy: { marginTop: spacing.sm, fontSize: 11, lineHeight: 18 },
-  displayContent: { paddingBottom: spacing.xl },
-  immersiveAction: { minHeight: 66, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm },
-  immersiveActionIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21 },
-  immersiveActionCopy: { flex: 1, minWidth: 0, marginLeft: spacing.sm },
-  immersiveActionTitle: { fontSize: 12, fontWeight: '700' },
-  immersiveActionHint: { marginTop: 3, fontSize: 10, lineHeight: 15 },
-  settingLabel: { marginTop: spacing.lg, marginBottom: spacing.sm, fontSize: 10, fontWeight: '600' },
-  settingHint: { marginTop: -spacing.xs, marginBottom: spacing.sm, fontSize: 10, lineHeight: 16 },
-  themeOptions: { flexDirection: 'row', gap: spacing.sm },
-  themeOption: { flex: 1, minWidth: 0, minHeight: 66, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm },
-  themeSwatch: { width: 28, height: 28, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.16)', borderRadius: 14 },
-  themeLabel: { marginTop: 5, fontSize: 10, fontWeight: '600' },
-  stepper: { minHeight: 50, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.sm },
+  readingInfo: { paddingTop: spacing.xs },
+  readingInfoTitle: { fontFamily: typography.display, fontSize: 20, lineHeight: 27 },
+  readingInfoAuthor: { marginTop: spacing.xs, fontSize: 11 },
+  readingInfoRows: { marginTop: spacing.md },
+  readingInfoRow: { minHeight: 44, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  readingInfoLabel: { width: 72, flexShrink: 0, fontSize: 10 },
+  readingInfoValue: { flex: 1, minWidth: 0, fontSize: 11, lineHeight: 17, textAlign: 'right' },
+  displayContent: { paddingBottom: spacing.sm },
+  statusBarSetting: { minHeight: 44, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  switchTrack: { width: 40, height: 24, marginLeft: spacing.md, padding: 2, borderRadius: 12 },
+  switchThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.paper },
+  switchThumbOn: { alignSelf: 'flex-end' },
+  settingLabel: { marginTop: spacing.md, marginBottom: spacing.xs, fontSize: 9, fontWeight: '700' },
+  themeOptions: { flexDirection: 'row', gap: spacing.xs },
+  themeOption: { flex: 1, minWidth: 0, minHeight: 42, paddingHorizontal: spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm },
+  themeSwatch: { width: 18, height: 18, flexShrink: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.16)', borderRadius: 9 },
+  themeLabel: { fontSize: 9, fontWeight: '600' },
+  settingRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  settingRowLabel: { flex: 1, minWidth: 0, marginRight: spacing.sm, fontSize: 11, fontWeight: '600' },
+  settingRowControl: { width: '68%', maxWidth: 210, minWidth: 176 },
+  stepper: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.sm },
+  stepperButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   stepperValue: { fontFamily: typography.mono, fontSize: 13 },
-  segmented: { minHeight: 46, marginBottom: spacing.sm, padding: 3, flexDirection: 'row', borderRadius: radius.sm },
-  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
-  segmentText: { fontSize: 11, fontWeight: '600' },
+  segmented: { minHeight: 38, padding: 2, flexDirection: 'row', borderRadius: radius.sm },
+  segment: { flex: 1, minWidth: 0, minHeight: 34, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  segmentText: { fontSize: 10, fontWeight: '600' },
 }));
