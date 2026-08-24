@@ -32,7 +32,9 @@ export default function CalendarScreen() {
     [preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth],
   );
   const selectedCheckIn = checkIns.find((item) => item.dayKey === selectedDay);
-  const selectedPosts = posts.filter((post) => post.dayKey === selectedDay).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const selectedPosts = posts
+    .filter((post) => post.dayKey === selectedDay)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id));
 
   const openEditorForDay = (dayKey: DayKey) => {
     if (dayKey === today && !todayCheckIn) {

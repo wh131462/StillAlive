@@ -25,7 +25,7 @@ import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/component
 export default function EditPersonScreen() {
   const router = useRouter();
  const { id } = useLocalSearchParams<{ id: string }>();
-  const { createTag, discardMedia, media, notificationPermission, openNotificationSettings, people, personTags, preferences, saveMedia, setBirthdayNotificationsEnabled, tagDefinitions, tagGroups, tagSystemSettings, updatePerson } = useAppState();
+  const { albums, createTag, deletePerson, discardMedia, media, notificationPermission, openNotificationSettings, people, personTags, preferences, saveMedia, setBirthdayNotificationsEnabled, tagDefinitions, tagGroups, tagSystemSettings, updatePerson } = useAppState();
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const currentAvatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
   const [name, setName] = useState(person?.name ?? '');
@@ -132,6 +132,18 @@ export default function EditPersonScreen() {
     }
   };
 
+  const confirmDelete = () => {
+    if (!person) return;
+    const albumCount = albums.filter((album) => album.personId === person.id).length;
+    feedback.alert(`删除 ${person.name}？`, `人物会被删除，历史日记会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中媒体。` : ''}此操作无法恢复。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除人物', style: 'destructive', onPress: () => void deletePerson(person.id).then(
+        () => router.replace('/people'),
+        (cause: unknown) => feedback.alert('删除失败', cause instanceof Error ? cause.message : '请稍后重试。'),
+      ) },
+    ]);
+  };
+
   if (!person) return <SafeAreaView style={styles.safeArea}><ToolPageHeader onBack={() => router.back()} title="编辑人物" /><Text style={styles.missing}>这个人物不存在或已被删除。</Text></SafeAreaView>;
 
   return (
@@ -185,6 +197,13 @@ export default function EditPersonScreen() {
           {tagSystemSettings.find((item) => item.system === 'mbti')?.enabled !== false ? <MbtiPickerField onChange={setMbti} value={mbti} /> : null}
           {tagSystemSettings.find((item) => item.system === 'custom')?.enabled !== false ? <><View style={styles.field}><Text style={styles.fieldLabel}>单条标签 / 可多选</Text><View style={styles.chips}>{tagDefinitions.filter((tag) => !tag.groupId).map((tag) => <Pressable key={tag.id} onPress={() => setCustomTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} style={[styles.chip, customTagIds.includes(tag.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(tag.id) && styles.chipTextActive]}>{tag.name}</Text></Pressable>)}</View><View style={styles.inlineCreate}><TextInput maxLength={24} onChangeText={setNewTagName} placeholder="输入新标签" placeholderTextColor={colors.inkFaint} style={styles.inlineInput} value={newTagName} /><Pressable onPress={() => void createTag(newTagName).then((tag) => { setCustomTagIds((current) => [...current, tag.id]); setNewTagName(''); }, (cause: unknown) => feedback.alert('创建失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>添加</Text></Pressable></View></View>{tagGroups.map((group) => { const options = tagDefinitions.filter((tag) => tag.groupId === group.id); if (!options.length) return null; return <View key={group.id} style={styles.field}><Text style={styles.fieldLabel}>{group.name} / 单选</Text><View style={styles.chips}>{options.map((option) => <Pressable key={option.id} onPress={() => setCustomTagIds((current) => { const groupOptionIds = options.map((item) => item.id); const withoutGroup = current.filter((id) => !groupOptionIds.includes(id)); return current.includes(option.id) ? withoutGroup : [...withoutGroup, option.id]; })} style={[styles.chip, customTagIds.includes(option.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(option.id) && styles.chipTextActive]}>{option.name}</Text></Pressable>)}</View></View>; })}</> : null}
           <View style={styles.note}><Text style={styles.noteText}>资料只用于整理你的本地记忆，不会上传。</Text></View>
+          <View style={styles.dangerZone}>
+            <Text style={styles.dangerTitle}>危险操作</Text>
+            <Text style={styles.dangerHint}>删除人物不会删除历史日记，但会永久删除其相册及其中媒体。</Text>
+            <Pressable accessibilityRole="button" onPress={confirmDelete} style={({ pressed }) => [styles.deleteButton, pressed && styles.deletePressed]}>
+              <Text style={styles.deleteText}>删除这个人物</Text>
+            </Pressable>
+          </View>
         </ScrollView>
         <DraggableBottomSheet accessibilityLabel="选择头像来源，向下拖动关闭" accessibilityRole="menu" onClose={() => setAvatarSourcePickerOpen(false)} open={avatarSourcePickerOpen} sheetStyle={styles.sourceSheet}>
               <AvatarSourceOption label="拍摄" onPress={() => void takeAvatarPhoto()} />
@@ -283,5 +302,11 @@ const styles = createThemedStyles(() => ({
   inlineButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
   note: { marginTop: spacing.xl, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.lifeLight },
   noteText: { color: colors.life, fontSize: 9, lineHeight: 17, textAlign: 'center' },
+  dangerZone: { marginTop: spacing.xxl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.dangerLine },
+  dangerTitle: { color: colors.danger, fontFamily: typography.display, fontSize: 17 },
+  dangerHint: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 10, lineHeight: 17 },
+  deleteButton: { minHeight: 48, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md },
+  deletePressed: { opacity: 0.58 },
+  deleteText: { color: colors.danger, fontSize: typography.size.meta, fontWeight: '700' },
   missing: { margin: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
 }));

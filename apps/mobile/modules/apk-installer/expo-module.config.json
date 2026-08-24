@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["com.wh131462.stillalive.apkinstaller.ApkInstallerModule"]
+    "modules": ["com.eternalheart.stillalive.apkinstaller.ApkInstallerModule"]
   }
 }

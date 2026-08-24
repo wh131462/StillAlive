@@ -10,6 +10,9 @@ import { richTextSurfaceCss } from './rich-text-content-css';
 import { decorateRichTextContent, renderRichTextMarkdown, RICH_TEXT_AUDIO_ORIGIN, RICH_TEXT_MEDIA_ORIGIN } from './rich-text-markdown';
 import { createAudioEmbed, formatAudioDuration } from './embedded-media';
 
+const VIDEO_CONTROLS_HIDE_DELAY_MS = 2200;
+const videoControlsHideTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
 interface RichTextEditorProps {
   initialMarkdown: string;
   placeholder: string;
@@ -24,7 +27,6 @@ interface RichTextEditorProps {
   onMention(): void;
   onReplaceImage(mediaId: string): void;
   onStopRecording(): void;
-  readLocalFile(uri: string): Promise<string>;
   dom?: DOMProps;
 }
 
@@ -42,14 +44,12 @@ export default function RichTextEditor({
   onMention,
   onReplaceImage,
   onStopRecording,
-  readLocalFile,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const pendingEmptyBlockRef = useRef<HTMLElement | null>(null);
   const lastCommandRef = useRef(0);
   const mediaRef = useRef<EditorMediaSource[]>([]);
-  const mediaDataUrlCacheRef = useRef(new Map<string, string>());
   const historyRef = useRef({ current: initialMarkdown, redo: [] as string[], undo: [] as string[] });
 
   const initialHtml = useMemo(() => renderRichTextMarkdown(initialMarkdown), [initialMarkdown]);
@@ -92,28 +92,10 @@ export default function RichTextEditor({
   }, [initialHtml]);
 
   useEffect(() => {
-    let cancelled = false;
-    const resolveMedia = async () => {
-      const resolved = await Promise.all(media.map(async (item) => {
-        if (!item.uri.startsWith('file://') || (!item.mimeType?.startsWith('image/') && !item.mimeType?.startsWith('audio/'))) return item;
-        const cached = mediaDataUrlCacheRef.current.get(item.uri);
-        if (cached) return { ...item, uri: cached };
-        try {
-          const uri = `data:${item.mimeType};base64,${await readLocalFile(item.uri)}`;
-          mediaDataUrlCacheRef.current.set(item.uri, uri);
-          return { ...item, uri };
-        } catch {
-          return item;
-        }
-      }));
-      if (cancelled) return;
-      mediaRef.current = resolved;
-      const editor = editorRef.current;
-      if (editor) decorateEditor(editor, resolved);
-    };
-    void resolveMedia();
-    return () => { cancelled = true; };
-  }, [media, readLocalFile]);
+    mediaRef.current = media;
+    const editor = editorRef.current;
+    if (editor) decorateEditor(editor, media);
+  }, [media]);
 
   useEffect(() => {
     if (!command || command.id === lastCommandRef.current) return;
@@ -195,6 +177,23 @@ export default function RichTextEditor({
     if (target?.closest('.audio-recording-stop')) {
       event.preventDefault();
       onStopRecording();
+      return;
+    }
+    const videoControl = target?.closest<HTMLElement>('.video-controls');
+    const videoFrame = target?.closest<HTMLElement>('.media-frame');
+    const video = videoFrame?.querySelector<HTMLVideoElement>('video');
+    if (video && videoFrame && (videoControl || target?.closest('video'))) {
+      event.preventDefault();
+      if (videoControl?.querySelector('.video-progress') && target?.closest('.video-progress')) {
+        const progress = target.closest<HTMLElement>('.video-progress');
+        if (progress) seekVideoAtClientX(video, progress, event.clientX);
+        revealVideoControls(videoFrame, video);
+      } else if (videoControl?.querySelector('.video-play')) {
+        if (video.paused) void video.play().catch(() => markVideoPlaybackFailure(video, videoFrame));
+        else video.pause();
+      } else if (target?.closest('video')) {
+        revealVideoControls(videoFrame, video, !video.paused && !video.ended);
+      }
       return;
     }
     const mediaFrame = target?.closest<HTMLElement>('.media-frame');
@@ -347,6 +346,10 @@ function createTurndownService(): TurndownService {
     filter: (node) => node.nodeName === 'SPAN' && node.classList.contains('media-actions'),
     replacement: () => '',
   });
+  service.addRule('videoControls', {
+    filter: (node) => node.nodeName === 'SPAN' && node.classList.contains('video-controls'),
+    replacement: () => '',
+  });
   service.addRule('localAudio', {
     filter: (node) => node.nodeName === 'FIGURE' && Boolean(node.getAttribute('data-audio-id')),
     replacement: (_content, node) => createAudioEmbed(node.getAttribute('data-audio-id') ?? '', Number(node.getAttribute('data-duration-ms') ?? 0)),
@@ -393,7 +396,7 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
     const mediaItem = mediaById.get(id);
     if (mediaItem?.mimeType?.startsWith('video/')) {
       const video = document.createElement('video');
-      video.controls = true;
+      video.controls = false;
       video.playsInline = true;
       video.preload = 'metadata';
       video.dataset.mediaId = id;
@@ -427,27 +430,170 @@ function decorateVisualMedia(element: HTMLImageElement | HTMLVideoElement, id: s
     const actions = document.createElement('span');
     actions.className = 'media-actions';
     actions.contentEditable = 'false';
-    actions.innerHTML = '<button class="media-replace" type="button">替换</button><button class="media-remove" type="button">删除</button>';
+    actions.innerHTML = '<button aria-label="替换媒体" class="media-replace" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4.5 6.5h10v9h-10zM6 13l2.3-2.5 2.1 2 1.5-1.5 2.1 2.2M17 8h3l-1.5-1.5M20 8l-1.5 1.5M20 16h-3l1.5 1.5M17 16l1.5-1.5" /></svg><span>替换</span></button><button aria-label="删除媒体" class="media-remove" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg><span>删除</span></button>';
     frame.append(actions);
   }
   const source = element.getAttribute('src') ?? '';
-  const loaded = () => frame?.classList.remove('is-media-error');
-  const failed = () => frame?.classList.add('is-media-error');
+  const loaded = () => {
+    if (element instanceof HTMLVideoElement) element.dataset.mediaHasFrame = 'true';
+    frame?.classList.remove('is-media-error');
+  };
+  const failed = () => {
+    if (element instanceof HTMLVideoElement && hasUsableVideoFrame(element)) {
+      frame?.classList.remove('is-media-error');
+      return;
+    }
+    if (retryLocalFileSource(element)) return;
+    frame?.classList.add('is-media-error');
+  };
   if (element instanceof HTMLImageElement) {
     element.onload = loaded;
     element.onerror = failed;
   } else {
-    element.controls = true;
+    element.controls = false;
     element.playsInline = true;
     element.preload = 'metadata';
+    element.oncanplay = loaded;
     element.onloadeddata = loaded;
     element.onerror = failed;
+    ensureVideoControls(frame, element);
   }
   if (uri) {
     const shouldRetry = element instanceof HTMLImageElement && element.complete && element.naturalWidth === 0;
+    const shouldLoadVideo = element instanceof HTMLVideoElement && element.dataset.mediaLoadRequested !== uri;
     frame.classList.remove('is-media-error');
-    if (source !== uri || shouldRetry) element.setAttribute('src', uri);
+    if (source !== uri || shouldRetry || shouldLoadVideo) {
+      if (source !== uri || shouldRetry) {
+        delete element.dataset.localFileFallback;
+        if (element instanceof HTMLVideoElement) delete element.dataset.mediaHasFrame;
+        element.setAttribute('src', uri);
+      }
+      if (element instanceof HTMLVideoElement) {
+        element.dataset.mediaLoadRequested = uri;
+        element.load();
+      }
+    }
   } else if (source.startsWith(RICH_TEXT_MEDIA_ORIGIN) || !source) frame.classList.add('is-media-error');
+}
+
+function hasUsableVideoFrame(video: HTMLVideoElement): boolean {
+  return video.dataset.mediaHasFrame === 'true'
+    || video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    || video.currentTime > 0
+    || video.ended;
+}
+
+function markVideoPlaybackFailure(video: HTMLVideoElement, frame: HTMLElement): void {
+  if (!hasUsableVideoFrame(video)) frame.classList.add('is-media-error');
+}
+
+function retryLocalFileSource(element: HTMLImageElement | HTMLMediaElement): boolean {
+  if (element.dataset.localFileFallback === 'true') return false;
+  const source = element.getAttribute('src') ?? '';
+  let fallback = '';
+  try {
+    const url = new URL(source);
+    const isLocalTransport = url.protocol === 'stillalive-media:' || (url.protocol === 'https:' && url.hostname === 'media.stillalive.local');
+    if (isLocalTransport) fallback = url.searchParams.get('uri') ?? '';
+  } catch {
+    return false;
+  }
+  if (!fallback || fallback === source) return false;
+  element.dataset.localFileFallback = 'true';
+  element.setAttribute('src', fallback);
+  if (element instanceof HTMLMediaElement) {
+    element.dataset.mediaLoadRequested = fallback;
+    element.load();
+  }
+  return true;
+}
+
+function ensureVideoControls(frame: HTMLElement, video: HTMLVideoElement) {
+  let controls = frame.querySelector<HTMLElement>('.video-controls');
+  if (!controls) {
+    controls = document.createElement('span');
+    controls.className = 'video-controls';
+    controls.contentEditable = 'false';
+    controls.innerHTML = '<button aria-label="播放视频" class="video-play" type="button"><span class="video-play-icon"></span></button><span aria-label="调整视频进度" aria-valuemax="0" aria-valuemin="0" aria-valuenow="0" class="video-progress" role="slider" tabindex="0"><span class="video-progress-fill"></span></span><span class="video-time">0:00 / 0:00</span>';
+    frame.append(controls);
+  }
+  if (controls.dataset.bound !== 'true') {
+    const sync = () => syncVideoControls(video, controls!);
+    const loadPreviewFrame = () => {
+      if (video.duration > 0 && video.currentTime === 0) video.currentTime = Math.min(0.1, video.duration / 2);
+      sync();
+    };
+    video.addEventListener('play', () => { sync(); revealVideoControls(frame, video, true); });
+    video.addEventListener('pause', () => { sync(); revealVideoControls(frame, video); });
+    video.addEventListener('timeupdate', sync);
+    video.addEventListener('loadedmetadata', loadPreviewFrame);
+    video.addEventListener('seeked', sync);
+    video.addEventListener('ended', () => { sync(); revealVideoControls(frame, video); });
+    let dragging = false;
+    const progress = controls.querySelector<HTMLElement>('.video-progress');
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!progress) return;
+      const target = event.target instanceof Element ? event.target.closest('.video-progress') : null;
+      if (!target) return;
+      event.preventDefault();
+      dragging = true;
+      progress.setPointerCapture?.(event.pointerId);
+      seekVideoAtClientX(video, progress, event.clientX);
+      revealVideoControls(frame, video);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragging || !progress) return;
+      event.preventDefault();
+      seekVideoAtClientX(video, progress, event.clientX);
+    };
+    const handlePointerEnd = () => {
+      if (!dragging) return;
+      dragging = false;
+      revealVideoControls(frame, video, !video.paused && !video.ended);
+    };
+    controls.addEventListener('pointerdown', handlePointerDown);
+    controls.addEventListener('pointermove', handlePointerMove);
+    controls.addEventListener('pointerup', handlePointerEnd);
+    controls.addEventListener('pointercancel', handlePointerEnd);
+    controls.dataset.bound = 'true';
+  }
+  revealVideoControls(frame, video);
+  syncVideoControls(video, controls);
+}
+
+function seekVideoAtClientX(video: HTMLVideoElement, progress: HTMLElement, clientX: number): void {
+  const bounds = progress.getBoundingClientRect();
+  if (bounds.width <= 0 || video.duration <= 0) return;
+  video.currentTime = Math.max(0, Math.min(video.duration, ((clientX - bounds.left) / bounds.width) * video.duration));
+}
+
+function revealVideoControls(frame: HTMLElement, video: HTMLVideoElement, scheduleHide = false): void {
+  const previousTimer = videoControlsHideTimers.get(frame);
+  if (previousTimer) clearTimeout(previousTimer);
+  frame.classList.remove('is-controls-hidden');
+  if (scheduleHide && !video.paused && !video.ended) {
+    videoControlsHideTimers.set(frame, setTimeout(() => frame.classList.add('is-controls-hidden'), VIDEO_CONTROLS_HIDE_DELAY_MS));
+  }
+}
+
+function syncVideoControls(video: HTMLVideoElement, controls: HTMLElement) {
+  const playButton = controls.querySelector<HTMLButtonElement>('.video-play');
+  const progressFill = controls.querySelector<HTMLElement>('.video-progress-fill');
+  const time = controls.querySelector<HTMLElement>('.video-time');
+  const progressControl = controls.querySelector<HTMLElement>('.video-progress');
+  const progress = video.duration > 0 ? Math.min(100, (video.currentTime / video.duration) * 100) : 0;
+  playButton?.classList.toggle('is-playing', !video.paused && !video.ended);
+  playButton?.setAttribute('aria-label', !video.paused && !video.ended ? '暂停视频' : '播放视频');
+  if (progressFill) progressFill.style.width = `${progress}%`;
+  progressControl?.setAttribute('aria-valuemax', String(Number.isFinite(video.duration) ? video.duration : 0));
+  progressControl?.setAttribute('aria-valuenow', String(Number.isFinite(video.currentTime) ? video.currentTime : 0));
+  if (time) time.textContent = `${formatVideoTime(video.currentTime)} / ${formatVideoTime(video.duration)}`;
+}
+
+function formatVideoTime(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return '0:00';
+  const seconds = Math.floor(value);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function createAudioFrame(audio: EditorAudio): HTMLElement {
@@ -483,11 +629,18 @@ function decorateAudioFrame(frame: HTMLElement, mediaById: Map<string, string>) 
   const audio = frame.querySelector('audio');
   if (!audio) return;
   const uri = mediaById.get(id) ?? audio.getAttribute('src') ?? '';
-  if (uri && audio.getAttribute('src') !== uri) audio.setAttribute('src', uri);
+  if (uri && audio.getAttribute('src') !== uri) {
+    delete audio.dataset.localFileFallback;
+    audio.setAttribute('src', uri);
+    audio.load();
+  }
   frame.classList.toggle('is-audio-error', !uri);
   const update = () => updateAudioFrame(frame, audio);
   audio.onended = update;
-  audio.onerror = () => frame.classList.add('is-audio-error');
+  audio.onerror = () => {
+    if (retryLocalFileSource(audio)) return;
+    frame.classList.add('is-audio-error');
+  };
   audio.onloadedmetadata = () => {
     if (Number.isFinite(audio.duration)) frame.dataset.durationMs = String(Math.round(audio.duration * 1000));
     update();
@@ -858,7 +1011,7 @@ function replaceImage(editor: HTMLDivElement, replacement: EditorImageReplacemen
   next.setAttribute('alt', replacement.alt);
   next.setAttribute('src', replacement.uri);
   if (next instanceof HTMLVideoElement) {
-    next.controls = true;
+    next.controls = false;
     next.playsInline = true;
     next.preload = 'metadata';
   }
@@ -1006,7 +1159,7 @@ function insertImages(images: EditorImage[]) {
     mediaElement.setAttribute('alt', item.alt);
     mediaElement.dataset.mediaId = item.id;
     if (mediaElement instanceof HTMLVideoElement) {
-      mediaElement.controls = true;
+      mediaElement.controls = false;
       mediaElement.playsInline = true;
       mediaElement.preload = 'metadata';
     }
@@ -1191,10 +1344,26 @@ const editorCss = (theme: EditorTheme) => `
   ${richTextSurfaceCss(theme)}
   figure { margin: 1.2em 0; }
   .media-frame { display: block; position: relative; overflow: hidden; margin: 1.2em 0; border-radius: 4px; cursor: pointer; }
-  .media-actions { position: absolute; top: 10px; right: 10px; display: flex; overflow: hidden; border-radius: 4px; background: ${theme.overlay}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
-  .media-actions button { min-width: 56px; height: 44px; padding: 0 10px; border: 0; background: transparent; color: ${theme.codeForeground}; font: inherit; font-size: 11px; }
-  .media-actions button + button { border-left: 1px solid rgba(255, 255, 255, 0.28); }
-  .media-actions .media-remove { color: #fff2ef; }
+  .media-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
+  .media-actions button { display: inline-flex; height: 32px; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid ${theme.line}; border-radius: 16px; background: rgba(250, 249, 243, 0.92); box-shadow: 0 3px 10px rgba(16, 24, 20, 0.14); color: ${theme.ink}; font: inherit; font-size: 10px; cursor: pointer; }
+  .media-actions button:active { transform: scale(0.96); }
+  .media-actions button:hover { background: ${theme.paper}; }
+  .media-actions .media-remove { border-color: ${theme.dangerLine}; background: rgba(255, 238, 234, 0.94); color: ${theme.danger}; }
+  .media-actions .media-remove:hover { background: ${theme.dangerLight}; }
+  .media-actions svg { display: block; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+  .video-controls { position: absolute; right: 10px; bottom: 10px; left: 10px; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border-radius: 18px; background: ${theme.overlay}; color: ${theme.codeForeground}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; opacity: 1; transform: translateY(0); transition: opacity 180ms ease, transform 180ms ease; }
+  .media-frame.is-controls-hidden .video-controls { opacity: 0; pointer-events: none; transform: translateY(8px); }
+  .video-play { display: grid; flex: 0 0 auto; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.55); border-radius: 50%; background: ${theme.life}; color: ${theme.onLife}; cursor: pointer; }
+  .video-play-icon { display: block; width: 0; height: 0; margin-left: 2px; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 8px solid currentColor; }
+  .video-play.is-playing .video-play-icon { position: relative; width: 9px; height: 11px; margin-left: 0; border: 0; }
+  .video-play.is-playing .video-play-icon::before, .video-play.is-playing .video-play-icon::after { position: absolute; top: 0; width: 3px; height: 11px; border-radius: 1px; background: currentColor; content: ""; }
+  .video-play.is-playing .video-play-icon::before { left: 0; }
+  .video-play.is-playing .video-play-icon::after { right: 0; }
+  .video-progress { position: relative; display: flex; flex: 1; align-items: center; height: 20px; cursor: pointer; }
+  .video-progress::before, .video-progress-fill { position: absolute; left: 0; height: 3px; border-radius: 2px; content: ""; }
+  .video-progress::before { right: 0; background: rgba(255, 255, 255, 0.28); }
+  .video-progress-fill { width: 0; background: ${theme.life}; }
+  .video-time { flex: 0 0 auto; color: rgba(255, 255, 255, 0.82); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: 0.02em; }
   .media-frame.is-media-error { min-height: 220px; border: 1px solid ${theme.line}; background: ${theme.paper}; }
   .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "媒体暂时无法显示 轻触替换"; color: ${theme.inkSoft}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
   .media-frame.is-media-error img, .media-frame.is-media-error video { visibility: hidden; }

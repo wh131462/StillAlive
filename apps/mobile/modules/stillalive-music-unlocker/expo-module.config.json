@@ -5,6 +5,6 @@
     "podspecPath": "StillAliveMusicUnlocker.podspec"
   },
   "android": {
-    "modules": ["com.wh131462.stillalive.musicunlocker.StillAliveMusicUnlockerModule"]
+    "modules": ["com.eternalheart.stillalive.musicunlocker.StillAliveMusicUnlockerModule"]
   }
 }

@@ -3,13 +3,13 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
-group = 'com.wh131462.stillalive'
+group = 'com.eternalheart.stillalive'
 version = '0.1.0'
 
 def reactNativeArchitectures = (findProperty('reactNativeArchitectures') ?: 'armeabi-v7a,arm64-v8a,x86,x86_64').split(',')
 
 android {
-  namespace 'com.wh131462.stillalive.musicunlocker'
+  namespace 'com.eternalheart.stillalive.musicunlocker'
   externalNativeBuild {
     cmake {
       path file('src/main/cpp/CMakeLists.txt')

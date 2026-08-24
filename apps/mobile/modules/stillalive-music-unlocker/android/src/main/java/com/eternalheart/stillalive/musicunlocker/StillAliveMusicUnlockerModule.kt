@@ -1,4 +1,4 @@
-package com.wh131462.stillalive.musicunlocker
+package com.eternalheart.stillalive.musicunlocker
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition

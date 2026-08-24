@@ -1,4 +1,4 @@
-package com.wh131462.stillalive.persistentnotification
+package com.eternalheart.stillalive.persistentnotification
 
 import android.content.BroadcastReceiver
 import android.content.Context

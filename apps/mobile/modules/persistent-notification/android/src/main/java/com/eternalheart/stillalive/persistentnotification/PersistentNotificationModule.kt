@@ -1,4 +1,4 @@
-package com.wh131462.stillalive.persistentnotification
+package com.eternalheart.stillalive.persistentnotification
 
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module

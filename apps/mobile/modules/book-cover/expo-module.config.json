@@ -5,6 +5,6 @@
     "podspecPath": "StillAliveBookCover.podspec"
   },
   "android": {
-    "modules": ["com.wh131462.stillalive.bookcover.StillAliveBookCoverModule"]
+    "modules": ["com.eternalheart.stillalive.bookcover.StillAliveBookCoverModule"]
   }
 }

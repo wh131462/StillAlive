@@ -6,6 +6,7 @@
     "autolinking": {
       "android": {
         "buildFromSource": [
+          "expo-dom-webview",
           "expo-audio"
         ]
       }

@@ -3,11 +3,11 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
-group = 'com.wh131462.stillalive'
+group = 'com.eternalheart.stillalive'
 version = '1.0.0'
 
 android {
-  namespace 'com.wh131462.stillalive.persistentnotification'
+  namespace 'com.eternalheart.stillalive.persistentnotification'
   defaultConfig {
     versionCode 1
     versionName '1.0.0'

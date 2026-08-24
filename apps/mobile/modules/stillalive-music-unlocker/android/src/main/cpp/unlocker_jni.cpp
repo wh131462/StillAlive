@@ -7,7 +7,7 @@ extern "C" int stillalive_unlock_file(
     const char* metadata_path);
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_wh131462_stillalive_musicunlocker_StillAliveMusicUnlockerModule_unlockNative(
+Java_com_eternalheart_stillalive_musicunlocker_StillAliveMusicUnlockerModule_unlockNative(
     JNIEnv* env,
     jobject,
     jstring input_path,

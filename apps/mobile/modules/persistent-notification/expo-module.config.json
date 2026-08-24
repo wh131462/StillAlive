@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["com.wh131462.stillalive.persistentnotification.PersistentNotificationModule"]
+    "modules": ["com.eternalheart.stillalive.persistentnotification.PersistentNotificationModule"]
   }
 }

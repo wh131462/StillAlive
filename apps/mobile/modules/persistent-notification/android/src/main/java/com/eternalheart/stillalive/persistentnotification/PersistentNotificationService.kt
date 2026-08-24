@@ -1,4 +1,4 @@
-package com.wh131462.stillalive.persistentnotification
+package com.eternalheart.stillalive.persistentnotification
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -204,8 +204,8 @@ class PersistentNotificationService : Service() {
     private const val DATABASE_BUSY_TIMEOUT_MS = 5000
     private const val PREFERENCES_NAME = "still_alive_persistent_notification"
     private const val ENABLED_KEY = "enabled"
-    private const val ACTION_REFRESH = "com.wh131462.stillalive.persistentnotification.REFRESH"
-    private const val ACTION_CHECK_IN = "com.wh131462.stillalive.persistentnotification.CHECK_IN"
+    private const val ACTION_REFRESH = "com.eternalheart.stillalive.persistentnotification.REFRESH"
+    private const val ACTION_CHECK_IN = "com.eternalheart.stillalive.persistentnotification.CHECK_IN"
     private const val REQUEST_CHECK_IN = 41002
 
     @Volatile

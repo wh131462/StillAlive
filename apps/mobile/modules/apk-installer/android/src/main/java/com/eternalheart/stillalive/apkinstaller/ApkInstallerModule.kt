@@ -1,4 +1,4 @@
-package com.wh131462.stillalive.apkinstaller
+package com.eternalheart.stillalive.apkinstaller
 
 import android.content.Intent
 import android.net.Uri

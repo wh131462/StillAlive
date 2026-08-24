@@ -1,4 +1,4 @@
-package com.wh131462.stillalive.bookcover
+package com.eternalheart.stillalive.bookcover
 
 import android.graphics.Bitmap
 import android.graphics.Color

@@ -3,12 +3,12 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import { File } from 'expo-file-system';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import {
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -76,6 +76,7 @@ export default function EditorScreen() {
   const [customLocation, setCustomLocation] = useState('');
   const [locating, setLocating] = useState<'address' | 'city' | null>(null);
   const [draftStatus, setDraftStatus] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(() => Keyboard.isVisible());
   const [saving, setSaving] = useState(false);
   const [audioSaving, setAudioSaving] = useState(false);
   const [mediaSaving, setMediaSaving] = useState(false);
@@ -170,6 +171,14 @@ export default function EditorScreen() {
   }, [people, personId]);
 
   useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => { showSubscription.remove(); hideSubscription.remove(); };
+  }, []);
+
+  useEffect(() => {
     if (activeFormats.includes('table')) {
       setShowMore(false);
       setShowTextSize(false);
@@ -244,7 +253,7 @@ export default function EditorScreen() {
 
   const editorMedia = useMemo<EditorMediaSource[]>(() => {
     const ids = new Set(extractEmbeddedMediaIds(body));
-    return media.filter((item) => ids.has(item.id)).map((item) => ({ id: item.id, mimeType: item.mimeType, uri: item.localPath }));
+    return media.filter((item) => ids.has(item.id)).map((item) => ({ id: item.id, mimeType: item.mimeType, uri: editorMediaUri(item) }));
   }, [body, media]);
 
   const handleBodyChange = (markdown: string) => {
@@ -330,7 +339,7 @@ export default function EditorScreen() {
       await saveMedia(item);
       const durationMs = Math.max(recorderState.durationMillis, Math.round(audioRecorder.currentTime * 1000));
       createdMediaRef.current = [...createdMediaRef.current, item];
-      sendCommand('audio', { durationMs, id: item.id, uri: await mediaDataUrl(item) });
+      sendCommand('audio', { durationMs, id: item.id, uri: editorMediaUri(item) });
       setDraftStatus('语音已保存到本机');
     } catch (cause: unknown) {
       if (importedAudio) {
@@ -409,7 +418,7 @@ export default function EditorScreen() {
         await saveMedia(item);
         createdMediaRef.current = [...createdMediaRef.current, item];
       }
-      const editorMediaItems = await Promise.all(importedItems.map(async (item) => ({ id: item.id, mimeType: item.mimeType, uri: await editorMediaUri(item), alt: item.mimeType.startsWith('video/') ? '视频' : '照片' })));
+      const editorMediaItems = importedItems.map((item) => ({ id: item.id, mimeType: item.mimeType, uri: editorMediaUri(item), alt: item.mimeType.startsWith('video/') ? '视频' : '照片' }));
       sendCommand('images', editorMediaItems);
       setDraftStatus('媒体已保存到本机');
     } catch (cause: unknown) {
@@ -429,7 +438,7 @@ export default function EditorScreen() {
     setImageSourcePickerOpen(true);
   };
 
-  const handleTakePhoto = async () => {
+  const handleTakeMedia = async (mediaType: 'images' | 'videos') => {
     setImageSourcePickerOpen(false);
     if (editorBusy) return;
     const remaining = remainingMediaSlots();
@@ -437,7 +446,7 @@ export default function EditorScreen() {
 
     if (!await ensureAppPermission('camera')) return;
 
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 });
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: [mediaType], quality: 0.9 });
     if (result.canceled) return;
     await importPickedMedia(result.assets, remaining);
   };
@@ -466,7 +475,7 @@ export default function EditorScreen() {
     setReplaceImageSourcePickerOpen(true);
   };
 
-  const replaceImageFromSource = async (source: 'camera' | 'photos') => {
+  const replaceImageFromSource = async (source: 'camera' | 'photos', mediaType: 'images' | 'videos' = 'images') => {
     const mediaId = replaceImageId;
     setReplaceImageSourcePickerOpen(false);
     setReplaceImageId(null);
@@ -474,7 +483,7 @@ export default function EditorScreen() {
     let replacement: Media | null = null;
     if (!await ensureAppPermission(source)) return;
     const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 })
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: [mediaType], quality: 0.9 })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 });
     if (result.canceled) return;
     try {
@@ -483,7 +492,7 @@ export default function EditorScreen() {
       replacement = await persistPickedMedia(result.assets[0]);
       await saveMedia(replacement);
       createdMediaRef.current = [...createdMediaRef.current, replacement];
-      sendCommand('replaceImage', { ...replacement, alt: replacement.mimeType.startsWith('video/') ? '视频' : '照片', mimeType: replacement.mimeType, previousId: mediaId, uri: await editorMediaUri(replacement) });
+      sendCommand('replaceImage', { ...replacement, alt: replacement.mimeType.startsWith('video/') ? '视频' : '照片', mimeType: replacement.mimeType, previousId: mediaId, uri: editorMediaUri(replacement) });
       setDraftStatus('媒体已替换');
     } catch (cause: unknown) {
       if (replacement) {
@@ -548,7 +557,7 @@ export default function EditorScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <AppKeyboardAvoidingView style={styles.flex}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ToolPageHeader
           backDisabled={editorBusy}
           onBack={() => router.back()}
@@ -557,7 +566,7 @@ export default function EditorScreen() {
           title={readingSource && !postId ? '阅读随感' : musicShare && !postId ? '分享音乐' : postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}
         />
 
-        {initialized && readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} variant="composer" /></View> : null}
+        {initialized && readingSource ? <View style={styles.readingShare}><ReadingShareCard compact={keyboardVisible} source={readingSource} variant="composer" /></View> : null}
         {initialized && musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} variant="composer" /></View> : null}
 
         {initialized ? (
@@ -565,7 +574,7 @@ export default function EditorScreen() {
             audioSaving={audioSaving}
             command={command}
             disabled={editorBusy}
-            dom={{ allowFileAccess: true, keyboardDisplayRequiresUserAction: false, style: styles.domEditor }}
+            dom={{ allowFileAccess: true, allowFileAccessFromFileURLs: true, allowingReadAccessToURL: 'file://', keyboardDisplayRequiresUserAction: false, style: styles.domEditor }}
             initialMarkdown={initialBodyRef.current}
             media={editorMedia}
             onChange={handleBodyChange}
@@ -574,7 +583,6 @@ export default function EditorScreen() {
             onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
             onStopRecording={() => void stopRecording()}
             placeholder={readingSource ? '这段阅读让你想到了什么？\n从这里写下感受…' : musicShare ? '这首歌让你想起了什么？\n从这里写下感受…' : `${isPastEntry ? '那天' : '今天'}有什么，想让以后的自己记得？\n从这里开始写…`}
-            readLocalFile={readLocalFile}
             recordingDurationMs={recorderState.isRecording ? recorderState.durationMillis : null}
             theme={editorTheme()}
           />
@@ -638,13 +646,15 @@ export default function EditorScreen() {
         </View>
 
         <DraggableBottomSheet accessibilityLabel="选择媒体来源，向下拖动关闭" accessibilityRole="menu" onClose={() => setImageSourcePickerOpen(false)} open={imageSourcePickerOpen} sheetStyle={styles.imageSourceSheet}>
-              <ImageSourceOption label="拍摄照片或视频" onPress={() => void handleTakePhoto()} />
+              <ImageSourceOption label="拍摄照片" onPress={() => void handleTakeMedia('images')} />
+              <ImageSourceOption label="拍摄视频" onPress={() => void handleTakeMedia('videos')} />
               <ImageSourceOption label="从手机相册选择" onPress={() => void handlePickImages()} />
               <Pressable accessibilityRole="button" onPress={() => setImageSourcePickerOpen(false)} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
         </DraggableBottomSheet>
 
         <DraggableBottomSheet accessibilityLabel="选择替换媒体来源，向下拖动关闭" accessibilityRole="menu" onClose={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} open={replaceImageSourcePickerOpen} sheetStyle={styles.imageSourceSheet}>
-              <ImageSourceOption label="拍摄照片或视频" onPress={() => void replaceImageFromSource('camera')} />
+              <ImageSourceOption label="拍摄照片" onPress={() => void replaceImageFromSource('camera', 'images')} />
+              <ImageSourceOption label="拍摄视频" onPress={() => void replaceImageFromSource('camera', 'videos')} />
               <ImageSourceOption label="从手机相册选择" onPress={() => void replaceImageFromSource('photos')} />
               <Pressable accessibilityRole="button" onPress={() => { setReplaceImageSourcePickerOpen(false); setReplaceImageId(null); }} style={({ pressed }) => [styles.imageSourceCancel, pressed && styles.imageSourceOptionPressed]}><Text style={styles.imageSourceCancelText}>取消</Text></Pressable>
         </DraggableBottomSheet>
@@ -703,21 +713,31 @@ export default function EditorScreen() {
             </Pressable>
           </AppKeyboardAvoidingView>
         </Modal>
-      </AppKeyboardAvoidingView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-async function readLocalFile(uri: string): Promise<string> {
-  return new File(uri).base64();
+function editorMediaUri(item: Media): string {
+  if (Platform.OS === 'web') return item.localPath;
+  const routeName = `${encodeURIComponent(item.id)}${mediaFileExtension(item)}`;
+  const query = `uri=${encodeURIComponent(item.localPath)}&mime=${encodeURIComponent(item.mimeType || 'application/octet-stream')}`;
+  if (Platform.OS === 'android') return `https://media.stillalive.local/local/${routeName}?${query}`;
+  return `stillalive-media://local/${routeName}?${query}`;
 }
 
-async function mediaDataUrl(item: Media): Promise<string> {
-  return `data:${item.mimeType || 'application/octet-stream'};base64,${await readLocalFile(item.localPath)}`;
-}
-
-async function editorMediaUri(item: Media): Promise<string> {
-  return item.mimeType.startsWith('video/') ? item.localPath : mediaDataUrl(item);
+function mediaFileExtension(item: Media): string {
+  const extension = item.localPath.split(/[?#]/, 1)[0]?.match(/\.[a-zA-Z0-9]+$/)?.[0];
+  if (extension) return extension.toLowerCase();
+  if (item.mimeType === 'video/quicktime') return '.mov';
+  if (item.mimeType === 'video/x-m4v') return '.m4v';
+  if (item.mimeType.startsWith('video/')) return '.mp4';
+  if (item.mimeType === 'audio/mpeg') return '.mp3';
+  if (item.mimeType.startsWith('audio/')) return '.m4a';
+  if (item.mimeType === 'image/png') return '.png';
+  if (item.mimeType === 'image/webp') return '.webp';
+  if (item.mimeType === 'image/heic' || item.mimeType === 'image/heif') return '.heic';
+  return '.jpg';
 }
 
 function TableActionButton({ active = false, androidIcon, destructive = false, icon, label, onPress, text }: { active?: boolean; androidIcon: AndroidSymbol; destructive?: boolean; icon: SFSymbol; label: string; onPress(): void; text: string }) {

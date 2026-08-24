@@ -3,11 +3,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { feedback } from '../../shared/feedback';
 import type { Post } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
-import { formatGender } from './gender-picker';
+import { genderOption } from './gender-picker';
 import { extractAudioEmbeds } from '../journal/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from './person-profile';
 import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
@@ -19,10 +18,11 @@ import { MediaThumbnail } from '../../shared/components/media-thumbnail';
 export default function PersonScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { albums, deletePerson, getPostsByPerson, media, musicCollectionEntries, people, personBooks, personTags, posts: allPosts, preferences, readingNoteSources, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
+  const { albums, getPostsByPerson, media, musicCollectionEntries, people, personBooks, personTags, posts: allPosts, preferences, readingNoteSources, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
+  const gender = genderOption(person?.gender ?? null);
   const personAssignments = personTags.filter((item) => item.personId === person?.id);
   const enabledSystems = new Set(tagSystemSettings.filter((item) => item.enabled).map((item) => item.system));
   const labels = person ? [
@@ -41,17 +41,6 @@ export default function PersonScreen() {
     if (ready && !person) router.replace('/people');
   }, [person, ready, router]);
 
-  const confirmDelete = () => {
-    if (!person) return;
-    const albumCount = albums.filter((album) => album.personId === person.id).length;
-    feedback.alert(`删除 ${person.name}？`, `人物会被删除，历史日记会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中媒体。` : ''}`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除人物', style: 'destructive', onPress: () => void deletePerson(person.id).then(
-        () => router.replace('/people'),
-        (cause: unknown) => feedback.alert('删除失败', cause instanceof Error ? cause.message : '请稍后重试。'),
-      ) },
-    ]);
-  };
   const personMusicCount = person ? musicCollectionEntries.filter((entry) => entry.targetType === 'person' && entry.targetId === person.id).length : 0;
   const personBookCount = person ? personBooks.filter((entry) => entry.personId === person.id).length : 0;
 
@@ -83,7 +72,7 @@ export default function PersonScreen() {
             <View style={styles.profileCard}>
               <View style={styles.profileRow}>
                 <Text style={styles.profileLabel}>性别</Text>
-                <View style={styles.profileValue}><Text style={person.gender ? styles.profileMetaTitle : styles.profileEmpty}>{formatGender(person.gender)}</Text></View>
+                <View style={styles.profileValue}>{gender ? <View style={styles.genderValue}><SymbolView fallback={<Text style={styles.genderFallback}>{gender.glyph}</Text>} name={gender.icon} size={16} tintColor={colors.life} type="hierarchical" /><Text style={styles.profileMetaTitle}>{gender.label}</Text></View> : <Text style={styles.profileEmpty}>未设置</Text>}</View>
               </View>
               <View style={styles.profileDivider} />
               <View style={styles.profileRow}>
@@ -151,7 +140,6 @@ export default function PersonScreen() {
                 </Pressable>
               );
             })}
-            <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.deleteButton}><Text style={styles.deleteText}>删除这个人物</Text></Pressable>
           </>
         ) : ready ? (
           <Text style={styles.missing}>这个人物不存在或已被删除。</Text>
@@ -192,6 +180,8 @@ const styles = createThemedStyles(() => ({
   tagRow: { alignItems: 'flex-start' },
   profileLabel: { width: 58, paddingTop: 1, color: colors.inkFaint, fontSize: 11 },
   profileValue: { flex: 1 },
+  genderValue: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  genderFallback: { width: 16, color: colors.life, fontSize: 16, lineHeight: 19, textAlign: 'center' },
   profileMetaTitle: { color: colors.ink, fontSize: 12 },
   profileMetaHint: { marginTop: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   profileEmpty: { color: colors.inkFaint, fontSize: 10 },
@@ -226,6 +216,4 @@ const styles = createThemedStyles(() => ({
   memoryImage: { width: '100%', height: 190, marginTop: spacing.md, backgroundColor: colors.lifeLight },
   body: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 28 },
   missing: { marginTop: spacing.xxl, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
-  deleteButton: { minHeight: 48, marginTop: spacing.xxl, alignItems: 'center', justifyContent: 'center' },
-  deleteText: { color: colors.danger, fontSize: typography.size.meta },
 }));

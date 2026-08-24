@@ -1,8 +1,355 @@
+diff --git a/android/src/main/java/expo/modules/webview/DomWebView.kt b/android/src/main/java/expo/modules/webview/DomWebView.kt
+index 125ad1d..51eb2d4 100644
+--- a/android/src/main/java/expo/modules/webview/DomWebView.kt
++++ b/android/src/main/java/expo/modules/webview/DomWebView.kt
+@@ -7,2 +7,3 @@ import android.annotation.SuppressLint
+ import android.content.Context
++import android.net.Uri
+ import android.graphics.Bitmap
+@@ -13,2 +14,6 @@ import android.view.View
+ import android.view.View.OnTouchListener
++import android.webkit.MimeTypeMap
++import android.webkit.WebResourceRequest
++import android.webkit.WebResourceResponse
++import android.util.Log
+ import android.view.ViewGroup
+@@ -22,2 +26,6 @@ import expo.modules.kotlin.viewevent.EventDispatcher
+ import expo.modules.kotlin.views.ExpoView
++import java.io.ByteArrayInputStream
++import java.io.File
++import java.io.FileInputStream
++import java.io.InputStream
+ import kotlinx.coroutines.runBlocking
+@@ -208,2 +216,7 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
+   private fun createWebViewClient() = object : WebViewClient() {
++    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
++      val mediaResponse = request?.let { createMediaResponse(it) }
++      return mediaResponse ?: super.shouldInterceptRequest(view, request)
++    }
++
+     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+@@ -249,2 +262,90 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
+     }
++  private fun createMediaResponse(request: WebResourceRequest): WebResourceResponse? {
++    val uri = request.url
++    val isMediaRequest = uri.scheme == MEDIA_SCHEME || ((uri.scheme == "http" || uri.scheme == "https") && uri.host == MEDIA_HTTPS_HOST && (uri.path == "/local" || uri.path?.startsWith("/local/") == true))
++    if (!isMediaRequest) return null
++    val file = resolveMediaFile(uri) ?: return mediaErrorResponse(404, "Not Found")
++    val size = file.length()
++    val requestedRange = request.requestHeaders.entries.firstOrNull { it.key.equals("Range", ignoreCase = true) }?.value
++    val range = parseMediaRange(requestedRange, size)
++    if (requestedRange != null && range == null) return mediaErrorResponse(416, "Range Not Satisfiable", mapOf("Content-Range" to "bytes */$size"))
++    val start = range?.first ?: 0L
++    val end = range?.second ?: (size - 1L)
++    val contentLength = if (size > 0) end - start + 1 else 0
++    val partial = requestedRange != null
++    Log.d("StillAliveMedia", "serve ${request.url.path} requestedRange=${requestedRange ?: "none"} start=$start length=$contentLength")
++    val headers = mutableMapOf(
++      "Accept-Ranges" to "bytes",
++      "Access-Control-Allow-Origin" to "*",
++      "Cache-Control" to "no-store",
++      "Content-Length" to contentLength.toString()
++    )
++    if (partial) headers["Content-Range"] = "bytes $start-$end/$size"
++    val stream: InputStream = if (request.method.equals("HEAD", ignoreCase = true) || contentLength == 0L) {
++      ByteArrayInputStream(ByteArray(0))
++    } else {
++      MediaRangeInputStream(file, start, contentLength)
++    }
++    return WebResourceResponse(
++      mediaMimeType(uri, file),
++      null,
++      if (partial) 206 else 200,
++      if (partial) "Partial Content" else "OK",
++      headers,
++      stream
++    )
++  }
++
++  private fun resolveMediaFile(uri: Uri): File? {
++    val fileUri = uri.getQueryParameter("uri")?.let(Uri::parse) ?: return null
++    if (fileUri.scheme != "file") return null
++    val file = fileUri.path?.let(::File)?.canonicalFile ?: return null
++    if (!file.isFile) return null
++    val roots = buildList {
++      add(context.filesDir)
++      add(context.cacheDir)
++      add(context.noBackupFilesDir)
++      addAll(context.getExternalFilesDirs(null).filterNotNull())
++      addAll(context.externalCacheDirs.filterNotNull())
++    }.mapNotNull { runCatching { it.canonicalFile }.getOrNull() }
++    return file.takeIf { candidate ->
++      roots.any { root -> candidate.path == root.path || candidate.path.startsWith(root.path + File.separator) }
++    }
++  }
++
++  private fun mediaMimeType(uri: Uri, file: File): String {
++    val requested = uri.getQueryParameter("mime")
++    if (requested != null && MEDIA_MIME_PATTERN.matches(requested)) return requested
++    val extension = file.extension.lowercase()
++    return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
++  }
++
++  private fun parseMediaRange(header: String?, size: Long): Pair<Long, Long>? {
++    if (header == null) return null
++    if (size <= 0 || !header.startsWith("bytes=") || header.contains(',')) return null
++    val parts = header.removePrefix("bytes=").split('-', limit = 2)
++    if (parts.size != 2) return null
++    val start: Long
++    val end: Long
++    if (parts[0].isEmpty()) {
++      val suffixLength = parts[1].toLongOrNull() ?: return null
++      if (suffixLength <= 0) return null
++      start = maxOf(0L, size - suffixLength)
++      end = size - 1
++    } else {
++      start = parts[0].toLongOrNull() ?: return null
++      if (start < 0 || start >= size) return null
++      end = if (parts[1].isEmpty()) size - 1 else minOf(parts[1].toLongOrNull() ?: return null, size - 1)
++      if (end < start) return null
++    }
++    return start to end
++  }
++
++
++  private fun mediaErrorResponse(status: Int, reason: String, extraHeaders: Map<String, String> = emptyMap()): WebResourceResponse {
++    val headers = mutableMapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "no-store")
++    headers.putAll(extraHeaders)
++    return WebResourceResponse("text/plain", "utf-8", status, reason, headers, ByteArrayInputStream(ByteArray(0)))
++  }
++
+   }
+@@ -271,2 +372,5 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
+   companion object {
++    private const val MEDIA_HTTPS_HOST = "media.stillalive.local"
++    private const val MEDIA_SCHEME = "stillalive-media"
++    private val MEDIA_MIME_PATTERN = Regex("^(image|audio|video)/[A-Za-z0-9.+-]+$")
+     private val log = Logger(listOf(LogHandlers.createOSLogHandler("DomWebView")))
+@@ -274 +378,24 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
+ }
++
++private class MediaRangeInputStream(file: File, start: Long, private var remaining: Long) : InputStream() {
++  private val input = FileInputStream(file).apply { channel.position(start); Log.d("StillAliveMedia", "open start=$start remaining=$remaining available=${available()}") }
++
++  override fun read(): Int {
++    if (remaining <= 0) return -1
++    val value = input.read()
++    if (value >= 0) remaining -= 1
++    return value
++  }
++
++  override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
++    if (remaining <= 0) return -1
++    val count = input.read(buffer, offset, minOf(length.toLong(), remaining).toInt())
++    if (count > 0) remaining -= count
++    if (count < 0) Log.d("StillAliveMedia", "eof remaining=$remaining")
++    return count
++  }
++
++  override fun available(): Int = minOf(remaining, Int.MAX_VALUE.toLong()).toInt()
++
++  override fun close() = input.close()
++}
+diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
+index d18e5cb..9180574 100644
+--- a/ios/DomWebView.swift
++++ b/ios/DomWebView.swift
+@@ -26,2 +26,3 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+   private var injectedJSBeforeContentLoaded: WKUserScript?
++  private let mediaSchemeHandler = DomWebViewMediaSchemeHandler()
+   private var injectedObjectJsonScript: WKUserScript?
+@@ -297,2 +298,3 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+     let config = WKWebViewConfiguration()
++    config.setURLSchemeHandler(mediaSchemeHandler, forURLScheme: DomWebViewMediaSchemeHandler.scheme)
+     config.userContentController = WKUserContentController()
+@@ -415 +417,180 @@ internal final class DomWebView: ExpoView, UIScrollViewDelegate, WKUIDelegate, W
+ }
++
++private final class DomWebViewMediaSchemeHandler: NSObject, WKURLSchemeHandler {
++  static let scheme = "stillalive-media"
++
++  private let queue = DispatchQueue(label: "expo.dom-webview.local-media", qos: .userInitiated, attributes: .concurrent)
++  private let lock = NSLock()
++  private var activeTasks = Set<ObjectIdentifier>()
++
++  func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
++    let identifier = ObjectIdentifier(urlSchemeTask as AnyObject)
++    setTask(identifier, active: true)
++    queue.async { [weak self] in
++      self?.serve(urlSchemeTask, identifier: identifier)
++    }
++  }
++
++  func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
++    setTask(ObjectIdentifier(urlSchemeTask as AnyObject), active: false)
++  }
++
++  private func serve(_ task: WKURLSchemeTask, identifier: ObjectIdentifier) {
++    guard let url = task.request.url,
++      let fileURL = resolveMediaFile(url),
++      let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
++      let sizeNumber = attributes[.size] as? NSNumber else {
++      fail(task, identifier: identifier, code: NSURLErrorFileDoesNotExist)
++      return
++    }
++    let size = sizeNumber.int64Value
++    let requestedRange = task.request.value(forHTTPHeaderField: "Range")
++    guard let range = mediaRange(requestedRange, size: size) else {
++      respond(task, identifier: identifier, status: 416, reason: "Range Not Satisfiable", headers: ["Content-Range": "bytes */\(size)"])
++      return
++    }
++    let partial = requestedRange != nil
++    let contentLength = size > 0 ? range.upperBound - range.lowerBound + 1 : 0
++    var headers = [
++      "Accept-Ranges": "bytes",
++      "Access-Control-Allow-Origin": "*",
++      "Cache-Control": "no-store",
++      "Content-Length": String(contentLength),
++      "Content-Type": mediaMimeType(url, fileURL: fileURL)
++    ]
++    if partial {
++      headers["Content-Range"] = "bytes \(range.lowerBound)-\(range.upperBound)/\(size)"
++    }
++    guard sendResponse(task, identifier: identifier, url: url, status: partial ? 206 : 200, reason: partial ? "Partial Content" : "OK", headers: headers) else { return }
++    if task.request.httpMethod?.uppercased() == "HEAD" || contentLength == 0 {
++      finish(task, identifier: identifier)
++      return
++    }
++    do {
++      let handle = try FileHandle(forReadingFrom: fileURL)
++      defer { try? handle.close() }
++      try handle.seek(toOffset: UInt64(range.lowerBound))
++      var remaining = contentLength
++      while remaining > 0 && isTaskActive(identifier) {
++        let data = try handle.read(upToCount: Int(min(64 * 1024, remaining))) ?? Data()
++        if data.isEmpty { break }
++        task.didReceive(data)
++        remaining -= Int64(data.count)
++      }
++      if remaining == 0 { finish(task, identifier: identifier) }
++      else if isTaskActive(identifier) { fail(task, identifier: identifier, code: NSURLErrorCannotDecodeContentData) }
++    } catch {
++      fail(task, identifier: identifier, error: error)
++    }
++  }
++
++  private func resolveMediaFile(_ url: URL) -> URL? {
++    guard url.scheme == Self.scheme,
++      let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
++      let value = components.queryItems?.first(where: { $0.name == "uri" })?.value,
++      let fileURL = URL(string: value),
++      fileURL.isFileURL else { return nil }
++    let candidate = fileURL.standardizedFileURL.resolvingSymlinksInPath()
++    let manager = FileManager.default
++    var roots = [manager.temporaryDirectory]
++    for directory in [FileManager.SearchPathDirectory.documentDirectory, .libraryDirectory, .cachesDirectory, .applicationSupportDirectory] {
++      roots.append(contentsOf: manager.urls(for: directory, in: .userDomainMask))
++    }
++    let allowed = roots.map { $0.standardizedFileURL.resolvingSymlinksInPath().path }.contains { root in
++      candidate.path == root || candidate.path.hasPrefix(root + "/")
++    }
++    var isDirectory: ObjCBool = false
++    return allowed && manager.fileExists(atPath: candidate.path, isDirectory: &isDirectory) && !isDirectory.boolValue ? candidate : nil
++  }
++
++  private func mediaRange(_ header: String?, size: Int64) -> ClosedRange<Int64>? {
++    guard size >= 0 else { return nil }
++    guard let header else { return size > 0 ? 0...(size - 1) : 0...0 }
++    guard size > 0, header.hasPrefix("bytes="), !header.contains(",") else { return nil }
++    let parts = header.dropFirst("bytes=".count).split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
++    guard parts.count == 2 else { return nil }
++    let start: Int64
++    if parts[0].isEmpty {
++      guard let suffixLength = Int64(parts[1]), suffixLength > 0 else { return nil }
++      start = max(0, size - suffixLength)
++    } else {
++      guard let value = Int64(parts[0]), value >= 0, value < size else { return nil }
++      start = value
++    }
++    let end: Int64
++    if parts[0].isEmpty || parts[1].isEmpty {
++      end = size - 1
++    } else {
++      guard let value = Int64(parts[1]) else { return nil }
++      end = min(value, size - 1)
++    }
++    return end >= start ? start...end : nil
++  }
++
++  private func mediaMimeType(_ url: URL, fileURL: URL) -> String {
++    if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "mime" })?.value,
++      value.range(of: #"^(image|audio|video)/[A-Za-z0-9.+-]+$"#, options: .regularExpression) != nil {
++      return value
++    }
++    switch fileURL.pathExtension.lowercased() {
++    case "jpg", "jpeg": return "image/jpeg"
++    case "png": return "image/png"
++    case "webp": return "image/webp"
++    case "heic", "heif": return "image/heic"
++    case "mov": return "video/quicktime"
++    case "m4v": return "video/x-m4v"
++    case "webm": return "video/webm"
++    case "mp4": return "video/mp4"
++    case "m4a": return "audio/mp4"
++    case "caf": return "audio/x-caf"
++    case "mp3": return "audio/mpeg"
++    case "wav": return "audio/wav"
++    default: return "application/octet-stream"
++    }
++  }
++
++  private func respond(_ task: WKURLSchemeTask, identifier: ObjectIdentifier, status: Int, reason: String, headers: [String: String]) {
++    guard let url = task.request.url,
++      sendResponse(task, identifier: identifier, url: url, status: status, reason: reason, headers: headers) else { return }
++    finish(task, identifier: identifier)
++  }
++
++  private func sendResponse(_ task: WKURLSchemeTask, identifier: ObjectIdentifier, url: URL, status: Int, reason: String, headers: [String: String]) -> Bool {
++    guard isTaskActive(identifier),
++      let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers) else { return false }
++    task.didReceive(response)
++    return true
++  }
++
++  private func finish(_ task: WKURLSchemeTask, identifier: ObjectIdentifier) {
++    guard takeTask(identifier) else { return }
++    task.didFinish()
++  }
++
++  private func fail(_ task: WKURLSchemeTask, identifier: ObjectIdentifier, code: Int) {
++    fail(task, identifier: identifier, error: NSError(domain: NSURLErrorDomain, code: code))
++  }
++
++  private func fail(_ task: WKURLSchemeTask, identifier: ObjectIdentifier, error: Error) {
++    guard takeTask(identifier) else { return }
++    task.didFailWithError(error)
++  }
++
++  private func setTask(_ identifier: ObjectIdentifier, active: Bool) {
++    lock.lock()
++    if active { activeTasks.insert(identifier) } else { activeTasks.remove(identifier) }
++    lock.unlock()
++  }
++
++  private func isTaskActive(_ identifier: ObjectIdentifier) -> Bool {
++    lock.lock()
++    defer { lock.unlock() }
++    return activeTasks.contains(identifier)
++  }
++
++  private func takeTask(_ identifier: ObjectIdentifier) -> Bool {
++    lock.lock()
++    defer { lock.unlock() }
++    return activeTasks.remove(identifier) != nil
++  }
++}
 diff --git a/src/DomWebView.tsx b/src/DomWebView.tsx
-index 3a07ac938325385dc7e314f0e6d557068bc6f622..8551dca5c0f3f62c70b571f5ca24bc072bf2df56 100644
+index 3a07ac9..cea2904 100644
 --- a/src/DomWebView.tsx
 +++ b/src/DomWebView.tsx
-@@ -10,3 +10,24 @@
+@@ -8,3 +8,22 @@ import { webviewStyles } from './styles';
+ const { resolveAssetSource } = Image;
+-
 +function handleViewCommand(result: unknown): void {
 +  if (!result || typeof (result as Promise<void>).catch !== 'function') {
 +    return;
@@ -23,13 +370,8 @@ index 3a07ac938325385dc7e314f0e6d557068bc6f622..8551dca5c0f3f62c70b571f5ca24bc07
 +    console.error(error);
 +  });
 +}
-+
  type NativeWebViewProps = Omit<DomWebViewProps, 'containerStyle' | 'injectedJavaScriptObject'> & {
-   injectedJavaScriptObject: string;
- };
-@@ -22,9 +43,10 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
-     React.useImperativeHandle(
-       ref,
+@@ -24,5 +43,6 @@ const WebView = React.forwardRef<DomWebViewRef, DomWebViewProps>(
        () => ({
 -        scrollTo: (params) => viewRef.current?.scrollTo(params),
 -        injectJavaScript: (script: string) => viewRef.current?.injectJavaScript(script),
@@ -39,5 +381,3 @@ index 3a07ac938325385dc7e314f0e6d557068bc6f622..8551dca5c0f3f62c70b571f5ca24bc07
 +          handleViewCommand(viewRef.current?.injectJavaScript(script)),
 +        reload: () => handleViewCommand(viewRef.current?.reload()),
        }),
-       []
-     );

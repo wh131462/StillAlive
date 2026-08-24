@@ -433,12 +433,22 @@ function buildTimelineSections(posts: Post[], checkIns: CheckIn[]): TimelineSect
     .sort(([left], [right]) => right.localeCompare(left))
     .map(([title, items]) => ({
       title,
-      data: items.sort((left, right) => timelineItemTime(right).localeCompare(timelineItemTime(left))),
+      data: items.sort(compareTimelineItems),
     }));
 }
 
-function timelineItemTime(item: TimelineItem): string {
-  return item.kind === 'post' ? item.post.createdAt : item.checkIn.createdAt;
+function compareTimelineItems(left: TimelineItem, right: TimelineItem): number {
+  const difference = timelineItemTime(right) - timelineItemTime(left);
+  if (Number.isFinite(difference) && difference !== 0) return difference;
+  return timelineItemId(right).localeCompare(timelineItemId(left));
+}
+
+function timelineItemTime(item: TimelineItem): number {
+  return new Date(item.kind === 'post' ? item.post.createdAt : item.checkIn.createdAt).getTime();
+}
+
+function timelineItemId(item: TimelineItem): string {
+  return item.kind === 'post' ? item.post.id : item.checkIn.id;
 }
 
 function findUpcomingBirthday(people: Person[], today: DayKey): BirthdayPrompt | null {
