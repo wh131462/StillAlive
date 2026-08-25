@@ -14,6 +14,7 @@ const APP_VERSION = '0.1.0';
 const MAX_BACKUP_ARCHIVE_BYTES = 128 * 1024 * 1024;
 const MAX_BACKUP_EXPANDED_BYTES = 256 * 1024 * 1024;
 const MAX_BACKUP_ENTRY_COUNT = 20_000;
+const MEDIA_PATH_SCHEMA_VERSION = 8;
 
 export interface BackupArchive {
   uri: string;
@@ -107,7 +108,7 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
 
   const snapshot = JSON.parse(strFromU8(dataBytes)) as BackupSnapshot;
   migrateSnapshot(snapshot);
-  validateSnapshot(snapshot);
+  validateSnapshot(snapshot, manifest.schemaVersion < MEDIA_PATH_SCHEMA_VERSION);
   const vaultEnvelope = entries['vault.enc'] ?? null;
   if (vaultEnvelope) {
     if (!manifestPaths.has('vault.enc')) throw new Error('备份中的密码本未列入清单');
@@ -222,7 +223,7 @@ export function removeMaterializedMedia(materialized: MaterializedBackup): void 
   cleanupMaterializedFiles(materialized.createdFiles, materialized.createdDirectories);
 }
 
-function validateSnapshot(value: BackupSnapshot): void {
+function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = false): void {
   if (!value || typeof value !== 'object') throw new Error('备份数据格式无效');
   const collections = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'albums', 'albumMedia', 'personBooks'] as const;
   for (const key of collections) if (!Array.isArray(value[key])) throw new Error(`备份数据缺少 ${key}`);
@@ -355,9 +356,12 @@ function validateSnapshot(value: BackupSnapshot): void {
     mediaPaths.add(item.localPath);
     const relation = albumRelationByMedia.get(item.id);
     const album = relation ? albumById.get(relation.albumId) : undefined;
-    const expectedPrefix = album ? `${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/` : `${item.kind === 'book' ? 'books' : item.kind === 'audio' ? 'music' : 'media'}/`;
-    const fileName = item.localPath.slice(expectedPrefix.length);
-    if (!item.localPath.startsWith(expectedPrefix) || !fileName.startsWith(`${item.id}.`) || fileName.length <= item.id.length + 1 || fileName.includes('/')) throw new Error('备份中的媒体路径与相册关联不一致');
+    const expectedPrefixes = album
+      ? [`${album.personId ? `people/${album.personId}` : 'self'}/albums/${album.id}/`]
+      : [`${item.kind === 'book' ? 'books' : item.kind === 'audio' ? 'music' : 'media'}/`, ...(allowLegacyGenericMediaPath ? ['media/'] : [])];
+    const expectedPrefix = expectedPrefixes.find((prefix) => item.localPath.startsWith(prefix));
+    const fileName = expectedPrefix ? item.localPath.slice(expectedPrefix.length) : '';
+    if (!expectedPrefix || !fileName.startsWith(`${item.id}.`) || fileName.length <= item.id.length + 1 || fileName.includes('/')) throw new Error('备份中的媒体路径与相册关联不一致');
   }
   for (const relation of personTags) if (!personIds.has(relation.personId) || (relation.kind !== 'mbti' && relation.kind !== 'custom') || (relation.kind === 'custom' && !tagIds.has(relation.value))) throw new Error('备份中的人物标签关联无效');
 }
