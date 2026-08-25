@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "1.1.1",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.1.apk",
-  "releaseNotes": "优化首次设置与 Android 更新面板的底部弹层交互及长文本展示，并支持多行更新说明。\n修复旧版本备份中的音乐、书籍沿用历史媒体路径时无法导入的问题。"
+  "versionCode": 11,
+  "versionName": "1.1.2",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.2.apk",
+  "releaseNotes": "新增备份合并导入与完整数据恢复能力，支持诊断扫描、错误日志和开发者诊断工具。\n优化记录编辑、阅读、音乐播放列表及批量导入体验。\n修复视频控制器显示、媒体兼容性和 Android 构建问题。"
 }
