@@ -34,6 +34,11 @@ export interface MaterializedBackup {
   createdDirectories: string[];
 }
 
+interface MaterializeBackupOptions {
+  snapshot?: BackupSnapshot;
+  retainedMedia?: BackupSnapshot['media'];
+}
+
 export async function createBackupArchive(snapshot: BackupSnapshot): Promise<BackupArchive> {
   const entries: Record<string, Uint8Array> = {};
   const portableMedia: BackupSnapshot['media'] = [];
@@ -168,18 +173,120 @@ export async function restorePasswordVaultFromBackup(parsed: ParsedBackup, backu
   }
 }
 
-export function materializeBackupMedia(parsed: ParsedBackup): MaterializedBackup {
+export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSnapshot): BackupSnapshot {
+  const media = mergeMedia(current.media, incoming.media);
+  const mediaIds = new Set(media.map((item) => item.id));
+  const tagGroups = mergeUpdatedEntities(current.tagGroups ?? [], incoming.tagGroups ?? [], (item) => item.name.toLocaleLowerCase());
+  const incomingTags = (incoming.tagDefinitions ?? []).map((tag) => {
+    const groupId = tag.groupId ? tagGroups.incomingIds.get(tag.groupId) ?? tag.groupId : null;
+    const normalizedName = tag.groupId && groupId !== tag.groupId && tag.normalizedName.startsWith(`${tag.groupId}:`)
+      ? `${groupId}:${tag.normalizedName.slice(tag.groupId.length + 1)}`
+      : tag.normalizedName;
+    return { ...tag, groupId, normalizedName };
+  });
+  const tagDefinitions = mergeUpdatedEntities(current.tagDefinitions ?? [], incomingTags, (item) => item.normalizedName);
+  const people = mergeUpdatedById(current.people, incoming.people);
+  const posts = mergeUpdatedById(current.posts, incoming.posts);
+  const albums = mergeUpdatedById(current.albums ?? [], incoming.albums ?? []);
+  const musicTracks = mergeUpdatedEntities(current.musicTracks ?? [], incoming.musicTracks ?? [], (item) => item.mediaId);
+  const musicPlaylists = mergeUpdatedById(current.musicPlaylists ?? [], incoming.musicPlaylists ?? []);
+  const books = mergeUpdatedEntities(current.books ?? [], incoming.books ?? [], (item) => item.fileMediaId);
+  const bookLists = mergeUpdatedById(current.bookLists ?? [], incoming.bookLists ?? []);
+  const incomingBookExcerpts = (incoming.bookExcerpts ?? []).map((item) => ({ ...item, bookId: books.incomingIds.get(item.bookId) ?? item.bookId }));
+  const bookExcerpts = mergePreferCurrentById(current.bookExcerpts ?? [], incomingBookExcerpts);
+  const personIds = new Set(people.map((item) => item.id));
+  const postIds = new Set(posts.map((item) => item.id));
+  const albumIds = new Set(albums.map((item) => item.id));
+  const trackIds = new Set(musicTracks.items.map((item) => item.id));
+  const playlistIds = new Set(musicPlaylists.map((item) => item.id));
+  const bookIds = new Set(books.items.map((item) => item.id));
+  const bookListIds = new Set(bookLists.map((item) => item.id));
+  const excerptIds = new Set(bookExcerpts.map((item) => item.id));
+  const customTagIds = new Set(tagDefinitions.items.map((item) => item.id));
+
+  const albumMedia = mergeAlbumMedia(
+    current.albumMedia ?? [],
+    (incoming.albumMedia ?? []).filter((item) => albumIds.has(item.albumId) && mediaIds.has(item.mediaId)),
+  );
+  const albumByMedia = new Map(albumMedia.map((item) => [item.mediaId, item.albumId]));
+
+  return {
+    checkIns: mergeCheckIns(current.checkIns, incoming.checkIns),
+    posts,
+    drafts: mergeUpdatedByKey(current.drafts, incoming.drafts, (item) => item.dayKey),
+    people,
+    media,
+    postPersons: mergeRelations(
+      current.postPersons,
+      incoming.postPersons.filter((item) => postIds.has(item.postId) && personIds.has(item.personId)),
+      (item) => `${item.postId}:${item.personId}`,
+    ),
+    settings: { ...incoming.settings, ...current.settings },
+    tagDefinitions: tagDefinitions.items,
+    tagGroups: tagGroups.items,
+    tagSystemSettings: mergePreferCurrentByKey(current.tagSystemSettings ?? [], incoming.tagSystemSettings ?? [], (item) => item.system),
+    personTags: mergeRelations(
+      current.personTags ?? [],
+      (incoming.personTags ?? []).map((item) => item.kind === 'custom' ? { ...item, value: tagDefinitions.incomingIds.get(item.value) ?? item.value } : item)
+        .filter((item) => personIds.has(item.personId) && (item.kind !== 'custom' || customTagIds.has(item.value))),
+      (item) => `${item.personId}:${item.kind}:${item.value}`,
+    ),
+    albums: albums.map((album) => album.coverMediaId && albumByMedia.get(album.coverMediaId) !== album.id ? { ...album, coverMediaId: null } : album),
+    albumMedia,
+    personBooks: mergeRelations(
+      current.personBooks ?? [],
+      (incoming.personBooks ?? []).map((item) => ({ ...item, bookId: books.incomingIds.get(item.bookId) ?? item.bookId }))
+        .filter((item) => personIds.has(item.personId) && bookIds.has(item.bookId)),
+      (item) => `${item.personId}:${item.bookId}`,
+    ),
+    musicTracks: musicTracks.items,
+    musicCollectionEntries: mergeRelations(
+      current.musicCollectionEntries ?? [],
+      (incoming.musicCollectionEntries ?? []).map((item) => ({ ...item, trackId: musicTracks.incomingIds.get(item.trackId) ?? item.trackId }))
+        .filter((item) => trackIds.has(item.trackId) && (item.targetType === 'self' || Boolean(item.targetId && personIds.has(item.targetId)))),
+      (item) => `${item.trackId}:${item.targetType}:${item.targetId ?? ''}`,
+    ),
+    musicPlaylists,
+    musicPlaylistEntries: mergeRelations(
+      current.musicPlaylistEntries ?? [],
+      (incoming.musicPlaylistEntries ?? []).map((item) => ({ ...item, trackId: musicTracks.incomingIds.get(item.trackId) ?? item.trackId }))
+        .filter((item) => playlistIds.has(item.playlistId) && trackIds.has(item.trackId)),
+      (item) => `${item.playlistId}:${item.trackId}`,
+    ),
+    bookLists,
+    bookListEntries: mergeRelations(
+      current.bookListEntries ?? [],
+      (incoming.bookListEntries ?? []).map((item) => ({ ...item, bookId: books.incomingIds.get(item.bookId) ?? item.bookId }))
+        .filter((item) => bookListIds.has(item.listId) && bookIds.has(item.bookId)),
+      (item) => `${item.listId}:${item.bookId}`,
+    ),
+    books: books.items,
+    bookExcerpts,
+    readingNoteSources: mergeReadingNoteSources(current.readingNoteSources ?? [], incoming.readingNoteSources ?? [], books.incomingIds, postIds, bookIds, excerptIds),
+  };
+}
+
+export function materializeBackupMedia(parsed: ParsedBackup, options: MaterializeBackupOptions = {}): MaterializedBackup {
+  const snapshot = options.snapshot ?? parsed.snapshot;
+  const retainedMedia = options.retainedMedia ?? [];
+  const retainedById = new Map(retainedMedia.map((item) => [item.id, item]));
   const directory = new Directory(Paths.document, `media-restored-${Date.now()}`);
   directory.create({ intermediates: true });
   const createdFiles: string[] = [];
   const createdDirectories = [directory.uri];
   try {
-    const restoredMedia = parsed.snapshot.media.map((item) => {
+    const restoredMedia = snapshot.media.map((item) => {
       const path = item.localPath;
       const bytes = parsed.entries[path];
-      if (!bytes) throw new Error(`备份图片缺失：${path}`);
+      const retained = retainedById.get(item.id);
+      if (!bytes && retained?.localPath === path && retained.checksum === item.checksum) {
+        const file = new File(path);
+        if (!file.exists) throw new Error(`当前媒体文件缺失：${item.id}`);
+        return item;
+      }
+      if (!bytes) throw new Error(`备份媒体缺失：${path}`);
       const fileName = path.split('/').pop();
-      if (!fileName) throw new Error(`备份图片路径无效：${path}`);
+      if (!fileName) throw new Error(`备份媒体路径无效：${path}`);
       const parts = path.split('/');
       let targetDirectory = directory;
       if (parts[0] === 'people' && parts.length === 5 && parts[2] === 'albums') {
@@ -212,7 +319,7 @@ export function materializeBackupMedia(parsed: ParsedBackup): MaterializedBackup
       }
       return { ...item, localPath: destination.uri };
     });
-    return { snapshot: { ...parsed.snapshot, media: restoredMedia }, createdFiles, createdDirectories };
+    return { snapshot: { ...snapshot, media: restoredMedia }, createdFiles, createdDirectories };
   } catch (cause) {
     cleanupMaterializedFiles(createdFiles, createdDirectories);
     throw cause;
@@ -485,6 +592,147 @@ function assertUniqueIds(items: { id: string }[], label: string): void {
     if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id)) throw new Error(`备份中的${label}标识无效`);
     ids.add(item.id);
   }
+}
+
+function mergeMedia(current: BackupSnapshot['media'], incoming: BackupSnapshot['media']): BackupSnapshot['media'] {
+  const items = [...current];
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of incoming) {
+    const existing = byId.get(item.id);
+    if (existing) {
+      if (existing.checksum !== item.checksum) throw new Error(`媒体 ${item.id} 在当前数据与备份中的内容不一致，无法安全合并`);
+      continue;
+    }
+    items.push(item);
+    byId.set(item.id, item);
+  }
+  return items;
+}
+
+function mergeCheckIns(current: BackupSnapshot['checkIns'], incoming: BackupSnapshot['checkIns']): BackupSnapshot['checkIns'] {
+  const items = [...current];
+  const ids = new Set(current.map((item) => item.id));
+  const days = new Set(current.map((item) => item.dayKey));
+  for (const item of incoming) {
+    if (ids.has(item.id) || days.has(item.dayKey)) continue;
+    items.push(item);
+    ids.add(item.id);
+    days.add(item.dayKey);
+  }
+  return items;
+}
+
+function mergeUpdatedById<T extends { id: string; updatedAt: string }>(current: T[], incoming: T[]): T[] {
+  return mergeUpdatedByKey(current, incoming, (item) => item.id);
+}
+
+function mergeUpdatedByKey<T extends { updatedAt: string }>(current: T[], incoming: T[], keyOf: (item: T) => string): T[] {
+  const items = [...current];
+  const indexes = new Map(items.map((item, index) => [keyOf(item), index]));
+  for (const item of incoming) {
+    const key = keyOf(item);
+    const index = indexes.get(key);
+    if (index === undefined) {
+      indexes.set(key, items.length);
+      items.push(item);
+    } else if (item.updatedAt > items[index].updatedAt) {
+      items[index] = item;
+    }
+  }
+  return items;
+}
+
+function mergeUpdatedEntities<T extends { id: string; updatedAt: string }>(current: T[], incoming: T[], naturalKeyOf: (item: T) => string): { items: T[]; incomingIds: Map<string, string> } {
+  const items = [...current];
+  const indexesById = new Map(items.map((item, index) => [item.id, index]));
+  const indexesByNaturalKey = new Map(items.map((item, index) => [naturalKeyOf(item), index]));
+  const incomingIds = new Map<string, string>();
+  for (const item of incoming) {
+    const idIndex = indexesById.get(item.id);
+    const naturalIndex = indexesByNaturalKey.get(naturalKeyOf(item));
+    const index = idIndex ?? naturalIndex;
+    if (index === undefined) {
+      indexesById.set(item.id, items.length);
+      indexesByNaturalKey.set(naturalKeyOf(item), items.length);
+      incomingIds.set(item.id, item.id);
+      items.push(item);
+      continue;
+    }
+    const existing = items[index];
+    incomingIds.set(item.id, existing.id);
+    if (item.updatedAt <= existing.updatedAt) continue;
+    const next = { ...item, id: existing.id };
+    const conflictingIndex = indexesByNaturalKey.get(naturalKeyOf(next));
+    if (conflictingIndex !== undefined && conflictingIndex !== index) continue;
+    indexesByNaturalKey.delete(naturalKeyOf(existing));
+    indexesByNaturalKey.set(naturalKeyOf(next), index);
+    items[index] = next;
+  }
+  return { items, incomingIds };
+}
+
+function mergePreferCurrentById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  return mergePreferCurrentByKey(current, incoming, (item) => item.id);
+}
+
+function mergePreferCurrentByKey<T>(current: T[], incoming: T[], keyOf: (item: T) => string): T[] {
+  const items = [...current];
+  const keys = new Set(current.map(keyOf));
+  for (const item of incoming) {
+    const key = keyOf(item);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    items.push(item);
+  }
+  return items;
+}
+
+function mergeRelations<T>(current: T[], incoming: T[], keyOf: (item: T) => string): T[] {
+  return mergePreferCurrentByKey(current, incoming, keyOf);
+}
+
+function mergeAlbumMedia(current: NonNullable<BackupSnapshot['albumMedia']>, incoming: NonNullable<BackupSnapshot['albumMedia']>): NonNullable<BackupSnapshot['albumMedia']> {
+  const items = [...current];
+  const mediaIds = new Set(current.map((item) => item.mediaId));
+  for (const item of incoming) {
+    if (mediaIds.has(item.mediaId)) continue;
+    mediaIds.add(item.mediaId);
+    items.push(item);
+  }
+  return items;
+}
+
+function mergeReadingNoteSources(
+  current: NonNullable<BackupSnapshot['readingNoteSources']>,
+  incoming: NonNullable<BackupSnapshot['readingNoteSources']>,
+  incomingBookIds: Map<string, string>,
+  postIds: Set<string>,
+  bookIds: Set<string>,
+  excerptIds: Set<string>,
+): NonNullable<BackupSnapshot['readingNoteSources']> {
+  const items = current.map((item) => ({ ...item, excerptIds: [...item.excerptIds], quoteSnapshots: [...item.quoteSnapshots] }));
+  const indexes = new Map(items.map((item, index) => [item.postId, index]));
+  for (const source of incoming) {
+    if (!postIds.has(source.postId)) continue;
+    const bookId = source.bookId ? incomingBookIds.get(source.bookId) ?? source.bookId : null;
+    if (bookId && !bookIds.has(bookId)) continue;
+    const next = { ...source, bookId, excerptIds: source.excerptIds.filter((id) => excerptIds.has(id)) };
+    const index = indexes.get(source.postId);
+    if (index === undefined) {
+      indexes.set(source.postId, items.length);
+      items.push(next);
+      continue;
+    }
+    const existing = items[index];
+    const quoteKeys = new Set(existing.quoteSnapshots.map((item) => JSON.stringify(item)));
+    items[index] = {
+      ...existing,
+      bookId: existing.bookId ?? next.bookId,
+      excerptIds: [...new Set([...existing.excerptIds, ...next.excerptIds])],
+      quoteSnapshots: [...existing.quoteSnapshots, ...next.quoteSnapshots.filter((item) => !quoteKeys.has(JSON.stringify(item)))],
+    };
+  }
+  return items;
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {

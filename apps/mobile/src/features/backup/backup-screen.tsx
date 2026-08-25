@@ -12,7 +12,7 @@ import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-av
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader } from '../../shared/components/tool-page-header';
-import { backupContainsPasswordVault, createBackupArchive, localPasswordVaultExists, materializeBackupMedia, parseBackupArchive, removeMaterializedMedia, restorePasswordVaultFromBackup } from './local-backup';
+import { backupContainsPasswordVault, createBackupArchive, localPasswordVaultExists, materializeBackupMedia, mergeBackupSnapshots, parseBackupArchive, removeMaterializedMedia, restorePasswordVaultFromBackup } from './local-backup';
 import type { MaterializedBackup, ParsedBackup } from './local-backup';
 
 export default function BackupScreen() {
@@ -53,22 +53,29 @@ export default function BackupScreen() {
 
   const confirmRestore = (parsed: ParsedBackup) => {
     const { snapshot } = parsed;
-    feedback.alert('检查到有效备份', `导出于 ${formatDateTime(parsed.exportedAt)}\n包含 ${snapshot.posts.length} 篇日记、${snapshot.people.length} 个人物和 ${snapshot.media.length} 个媒体文件。\n\n继续后，当前设备上的全部内容将被替换。`, [
+    feedback.alert('选择导入方式', `导出于 ${formatDateTime(parsed.exportedAt)}\n包含 ${snapshot.posts.length} 篇日记、${snapshot.people.length} 个人物和 ${snapshot.media.length} 个媒体文件。\n\n合并会保留当前设置并补充备份内容；覆盖会替换当前记录。`, [
       { text: '取消', style: 'cancel' },
-      { text: '继续', onPress: () => feedback.alert('最后确认', '恢复无法撤销。建议先导出当前数据，再覆盖恢复。', [
+      { text: '合并导入', onPress: () => void executeRestore(parsed, 'merge') },
+      { text: '覆盖恢复', style: 'destructive', onPress: () => feedback.alert('最后确认', '覆盖恢复无法撤销。建议先导出当前数据，再继续。', [
         { text: '暂不恢复', style: 'cancel' },
-        { text: '覆盖并恢复', style: 'destructive', onPress: () => void executeRestore(parsed) },
+        { text: '覆盖并恢复', style: 'destructive', onPress: () => void executeRestore(parsed, 'replace') },
       ]) },
     ]);
   };
 
-  const executeRestore = async (parsed: ParsedBackup) => {
+  const executeRestore = async (parsed: ParsedBackup, mode: 'merge' | 'replace') => {
     let materialized: MaterializedBackup | null = null;
     try {
       setBusy('restore');
-      materialized = materializeBackupMedia(parsed);
+      if (mode === 'merge') {
+        const current = await createBackupSnapshot();
+        const snapshot = mergeBackupSnapshots(current, parsed.snapshot);
+        materialized = materializeBackupMedia(parsed, { snapshot, retainedMedia: current.media });
+      } else {
+        materialized = materializeBackupMedia(parsed);
+      }
       await restoreBackupSnapshot(materialized.snapshot);
-      feedback.alert('恢复完成', '备份中的日记、人物和媒体已经恢复到本机。');
+      feedback.alert(mode === 'merge' ? '合并完成' : '恢复完成', mode === 'merge' ? '当前数据已保留，备份中的新内容和较新记录已经导入。' : '备份中的日记、人物和媒体已经恢复到本机。');
     } catch (cause: unknown) {
       if (materialized) removeMaterializedMedia(materialized);
       feedback.alert('恢复失败', errorMessage(cause));
@@ -120,7 +127,7 @@ export default function BackupScreen() {
       <Pressable accessibilityRole="button" disabled={disabled} onPress={() => void chooseBackup()} style={({ pressed }) => [styles.secondaryButton, disabled && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'restore', ios: 'arrow.counterclockwise', web: 'restore' }} size={19} tintColor={colors.life} type="hierarchical" /><Text style={styles.secondaryText}>{busy === 'restore' ? '正在读取备份…' : '选择备份文件'}</Text></Pressable>
       {selectedBackup ? <View style={styles.selectedBackup}>
         <Text style={styles.selectedEyebrow}>VALID BACKUP</Text><Text style={styles.selectedTitle}>已通过结构与摘要校验</Text><Text style={styles.selectedMeta}>导出于 {formatDateTime(selectedBackup.exportedAt)}</Text><Text style={styles.selectedMeta}>{selectedBackup.snapshot.posts.length} 篇日记 / {selectedBackup.snapshot.people.length} 个人物 / {selectedBackup.snapshot.media.length} 个媒体文件</Text>
-        <Pressable disabled={disabled} onPress={() => confirmRestore(selectedBackup)} style={[styles.restoreDataButton, disabled && styles.disabled]}><Text style={styles.restoreDataText}>恢复日记、人物和媒体</Text></Pressable>
+        <Pressable disabled={disabled} onPress={() => confirmRestore(selectedBackup)} style={[styles.restoreDataButton, disabled && styles.disabled]}><Text style={styles.restoreDataText}>导入日记、人物和媒体</Text></Pressable>
         {backupContainsPasswordVault(selectedBackup) ? <View style={styles.vaultRestore}>
           <View style={styles.vaultRestoreHeading}><View style={styles.vaultRestoreIcon}><SymbolView name={{ android: 'key', ios: 'key', web: 'key' }} size={20} tintColor={colors.sun} type="hierarchical" /></View><View style={styles.vaultRestoreCopy}><Text style={styles.vaultRestoreTitle}>备份包含加密密码本</Text><Text style={styles.vaultRestoreHint}>{hasLocalVault ? '验证两边主密码后，才会替换当前密码本。' : '输入备份主密码完成认证解密验证。'}</Text></View></View>
           <Text style={styles.inputLabel}>备份密码本主密码</Text><TextInput accessibilityLabel="备份密码本主密码" autoCapitalize="none" autoCorrect={false} importantForAutofill="no" onChangeText={setBackupMasterPassword} placeholder="输入备份对应的主密码" placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} textContentType="none" value={backupMasterPassword} />
