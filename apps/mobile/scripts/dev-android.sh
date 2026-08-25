@@ -69,4 +69,5 @@ export STILL_ALIVE_APP_VARIANT=development
 cd "$MOBILE_DIR"
 # 每次启动前重新生成自动链接清单，确保新增的 Expo 原生模块（包括 DOM WebView）进入开发 APK。
 pnpm exec expo prebuild --platform android --no-install --no-clean
+rm -f android/build/generated/autolinking/autolinking.json
 exec pnpm exec expo run:android "$@"

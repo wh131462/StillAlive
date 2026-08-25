@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+BUILD_FORMAT="${1:-aab}"
+if [[ "$BUILD_FORMAT" != "aab" && "$BUILD_FORMAT" != "apk" ]]; then
+  printf 'Error: 构建格式必须是 aab 或 apk：%s\n' "$BUILD_FORMAT" >&2
+  exit 1
+fi
+
 MOBILE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT_DIR="$(cd "$MOBILE_DIR/../.." && pwd)"
 SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
@@ -56,6 +62,7 @@ fi
 export ANDROID_HOME="$SDK_DIR"
 export ANDROID_SDK_ROOT="$SDK_DIR"
 export NODE_ENV="${NODE_ENV:-production}"
+export STILL_ALIVE_APP_VARIANT=production
 
 if [[ ! -f "$SDK_DIR/ndk/$NDK_VERSION/source.properties" ]]; then
   for NDK_SOURCE in "$SDK_DIR"/ndk/27.*/source.properties; do
@@ -120,12 +127,22 @@ fi
 
 (
   cd "$MOBILE_DIR/android"
-  ./gradlew --init-script "$SIGNING_CONFIG" -PndkVersion="$NDK_VERSION" assembleRelease
+  if [[ "$BUILD_FORMAT" == "aab" ]]; then
+    ./gradlew --init-script "$SIGNING_CONFIG" -PndkVersion="$NDK_VERSION" -PreactNativeArchitectures=arm64-v8a bundleRelease
+  else
+    ./gradlew --init-script "$SIGNING_CONFIG" -PndkVersion="$NDK_VERSION" -PreactNativeArchitectures=arm64-v8a assembleRelease
+  fi
 )
 
-APK_OUTPUT_DIR="$MOBILE_DIR/android/app/build/outputs/apk/release"
-APK_SOURCE="$APK_OUTPUT_DIR/app-release.apk"
-APK_TARGET="$APK_OUTPUT_DIR/still-alive-pro-v$APP_VERSION.apk"
+if [[ "$BUILD_FORMAT" == "aab" ]]; then
+  OUTPUT_DIR="$MOBILE_DIR/android/app/build/outputs/bundle/release"
+  OUTPUT_SOURCE="$OUTPUT_DIR/app-release.aab"
+  OUTPUT_TARGET="$OUTPUT_DIR/still-alive-pro-v$APP_VERSION.aab"
+else
+  OUTPUT_DIR="$MOBILE_DIR/android/app/build/outputs/apk/release"
+  OUTPUT_SOURCE="$OUTPUT_DIR/app-release.apk"
+  OUTPUT_TARGET="$OUTPUT_DIR/still-alive-pro-v$APP_VERSION.apk"
+fi
 
-mv -f "$APK_SOURCE" "$APK_TARGET"
-printf 'APK: %s\n' "$APK_TARGET"
+mv -f "$OUTPUT_SOURCE" "$OUTPUT_TARGET"
+printf '%s: %s\n' "${BUILD_FORMAT^^}" "$OUTPUT_TARGET"

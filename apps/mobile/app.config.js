@@ -13,7 +13,7 @@ module.exports = () => {
     },
     android: {
       ...expo.android,
-      package: expo.android.package,
+      package: development ? 'com.eternalheart.stillalive.dev' : expo.android.package,
     },
   };
 };

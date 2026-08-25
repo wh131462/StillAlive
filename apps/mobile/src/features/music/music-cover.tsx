@@ -3,7 +3,7 @@ import { Image, type ImageStyle, type StyleProp } from 'react-native';
 import { Asset } from 'expo-asset';
 import type { Media } from '@still-alive/types';
 
-export const DEFAULT_MUSIC_COVER = require('../../../assets/music-default-cover.png');
+export const DEFAULT_MUSIC_COVER = require('../../../assets/music-default-cover.webp');
 let defaultCoverUri: string | null = null;
 let defaultCoverPromise: Promise<string> | null = null;
 

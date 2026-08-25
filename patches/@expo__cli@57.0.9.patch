@@ -1,0 +1,12 @@
+diff --git a/build/src/export/embed/exportEmbedAsync.js b/build/src/export/embed/exportEmbedAsync.js
+index 0000000..0000000 100644
+--- a/build/src/export/embed/exportEmbedAsync.js
++++ b/build/src/export/embed/exportEmbedAsync.js
+@@ -339,6 +339,6 @@ async function exportEmbedAsync(projectRoot, options) {
+                     devServer,
+                     isHermes,
+-                    includeSourceMaps: !!sourceMapUrl,
++                    includeSourceMaps: options.dev && !!sourceMapUrl,
+                     exp,
+                     files
+                 });

@@ -13,12 +13,13 @@
     "dev:ios": "pnpm --filter @still-alive/mobile dev:ios",
     "dev:portal": "pnpm --filter @still-alive/portal dev",
     "build": "turbo run build",
-    "build:apk": "./apps/mobile/scripts/build-apk.sh",
+    "build:aab": "./apps/mobile/scripts/build-android.sh aab",
+    "build:apk": "./apps/mobile/scripts/build-android.sh apk",
     "release": "node ./scripts/release.mjs",
     "release:testflight": "cd apps/mobile && npx eas-cli@latest build --platform ios --profile production --auto-submit",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean && rm -rf .turbo .cache .pnpm-store coverage .nyc_output web-build node_modules/.cache node_modules/.vite node_modules/.parcel-cache apps/*/.turbo apps/*/.cache apps/*/coverage apps/*/.nyc_output apps/*/dist apps/*/web-build packages/*/.turbo packages/*/.cache packages/*/coverage packages/*/.nyc_output packages/*/dist apps/mobile/android/.gradle apps/mobile/android/build apps/mobile/android/app/build apps/mobile/android/app/.cxx apps/mobile/android/app/.externalNativeBuild apps/mobile/ios/build apps/mobile/ios/DerivedData apps/mobile/modules/*/android/.gradle apps/mobile/modules/*/android/build apps/mobile/modules/*/android/.cxx apps/mobile/modules/*/native/build apps/mobile/modules/*/native/target && find . \\( -path './.git' -o -path './node_modules' \\) -prune -o -type f \\( -name '*.tsbuildinfo' -o -name '.eslintcache' -o -name '.stylelintcache' \\) -delete"
   },
   "devDependencies": {
     "turbo": "2.10.5",
@@ -27,6 +28,7 @@
   "pnpm": {
     "patchedDependencies": {
       "@expo/dom-webview@57.0.1": "patches/@expo__dom-webview@57.0.1.patch",
+      "@expo/cli@57.0.9": "patches/@expo__cli@57.0.9.patch",
       "react-native-pdf@7.0.5": "patches/react-native-pdf@7.0.5.patch",
       "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch",
       "expo-modules-jsi@57.0.3": "patches/expo-modules-jsi@57.0.3.patch",
