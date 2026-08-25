@@ -47,6 +47,7 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+apps/mobile/resources/
 
 # Expo (React Native)
 .expo/
