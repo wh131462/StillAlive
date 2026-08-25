@@ -67,6 +67,7 @@ if [[ ! -f "$SDK_DIR/ndk/$NDK_VERSION/source.properties" ]]; then
   done
 fi
 
+pnpm --dir "$ROOT_DIR" install --frozen-lockfile
 pnpm --dir "$MOBILE_DIR" exec expo prebuild --platform android --no-install --no-clean
 
 GRADLE_PROPERTIES="$MOBILE_DIR/android/gradle.properties"
