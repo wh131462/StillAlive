@@ -43,7 +43,7 @@ async function prepareInteractiveRelease() {
     assertVersionGreater(version, currentVersion);
     ensureTagDoesNotExist(`v${version}`);
 
-    const releaseNotes = (await terminal.question('更新详情（可留空）：')).trim();
+    const releaseNotes = await readMultilineInput(terminal);
     const buildCode = currentBuildCode + 1;
     const summary = [
       `版本：${currentVersion} -> ${version}`,
@@ -94,8 +94,8 @@ async function prepareForCi() {
 
   const buildCode = validateBuildCode(appConfig.expo.android.versionCode);
   const existingManifest = await readExistingManifest();
-  const releaseNotes = process.env.RELEASE_NOTES?.trim()
-    || (existingManifest?.versionName === requestedVersion ? existingManifest.releaseNotes?.trim() : '')
+  const releaseNotes = normalizeReleaseNotes(process.env.RELEASE_NOTES || '')
+    || (existingManifest?.versionName === requestedVersion ? normalizeReleaseNotes(existingManifest.releaseNotes || '') : '')
     || '';
   const repository = process.env.GITHUB_REPOSITORY?.trim() || resolveGitHubRepository();
   await writeManifest({ buildCode, releaseNotes, repository, version: requestedVersion });
@@ -129,8 +129,28 @@ async function writeManifest({ buildCode, releaseNotes, repository, version }) {
     versionName: version,
     apkUrl: `https://github.com/${repository}/releases/latest/download/${apkName}`,
   };
-  if (releaseNotes) manifest.releaseNotes = releaseNotes;
+  const normalizedReleaseNotes = normalizeReleaseNotes(releaseNotes);
+  if (normalizedReleaseNotes) manifest.releaseNotes = normalizedReleaseNotes;
   await writeJson(MANIFEST_PATH, manifest);
+}
+
+async function readMultilineInput(terminal) {
+  console.log('更新详情（支持多行，单独输入 . 结束；直接输入 . 可留空）：');
+  const lines = [];
+  while (true) {
+    const line = await terminal.question(lines.length ? '  ' : '> ');
+    if (line.trim() === '.' || (!lines.length && !line.trim())) break;
+    lines.push(line);
+  }
+  return normalizeReleaseNotes(lines.join('\n'));
+}
+
+function normalizeReleaseNotes(value) {
+  return String(value ?? '')
+    .replaceAll('\\r\\n', '\n')
+    .replaceAll('\\n', '\n')
+    .replace(/\r\n?/g, '\n')
+    .trim();
 }
 
 async function readExistingManifest() {

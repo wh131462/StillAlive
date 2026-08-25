@@ -8,7 +8,7 @@ on:
         required: false
         type: string
       releaseNotes:
-        description: 更新详情，留空使用已提交的 latest.json
+        description: 更新详情，支持使用 \n 换行，留空使用已提交的 latest.json
         required: false
         type: string
   push:
