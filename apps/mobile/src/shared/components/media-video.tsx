@@ -97,7 +97,7 @@ export function MediaVideo({ active = true, style, uri }: { active?: boolean; st
     <View style={[styles.container, style]}>
       <VideoView contentFit="contain" nativeControls={false} player={player} style={styles.video} surfaceType="textureView" useExoShutter={false} />
       <Pressable accessibilityLabel={controlsVisible ? '隐藏视频控制器' : '显示视频控制器'} accessibilityRole="button" onPress={toggleControls} style={styles.surfaceTap} />
-      <View pointerEvents={controlsVisible ? 'box-none' : 'none'} style={styles.controls}>
+      {controlsVisible ? <View pointerEvents="box-none" style={styles.controls}>
         <Pressable accessibilityLabel={playing ? '暂停视频' : '播放视频'} accessibilityRole="button" onPress={togglePlayback} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}>
           <SymbolView name={{ android: playing ? 'pause' : 'play_arrow', ios: playing ? 'pause.fill' : 'play.fill', web: playing ? 'pause' : 'play_arrow' }} size={24} tintColor={colors.onLife} type="hierarchical" />
         </Pressable>
@@ -108,7 +108,7 @@ export function MediaVideo({ active = true, style, uri }: { active?: boolean; st
           </View>
           <Text style={styles.time}>{formatTime(duration)}</Text>
         </View>
-      </View>
+      </View> : null}
     </View>
   );
 }
