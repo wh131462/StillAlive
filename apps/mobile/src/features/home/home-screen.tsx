@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image, Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { toDayKey } from '../../shared/core/day-key';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { BirthdayCalendar, CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
 import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
-import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { DatePickerField } from '../people/date-time-picker';
 import type { DateParts } from '../people/date-time-picker';
 import MarkdownView from '../journal/markdown-view.dom';
@@ -278,10 +278,8 @@ export default function SpaceScreen() {
         stickySectionHeadersEnabled={false}
       />
 
-      <Modal animationType="fade" transparent visible={ready && !preferences.onboardingCompleted}>
-        <AppKeyboardAvoidingView style={styles.onboardingKeyboardAvoidingView}>
-          <SafeAreaView style={styles.onboardingBackdrop}>
-            <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingSheet}>
+      <DraggableBottomSheet accessibilityLabel="首次设置" backdropStyle={styles.onboardingBackdrop} dismissDisabled keyboardAvoiding onClose={() => undefined} open={ready && !preferences.onboardingCompleted} sheetStyle={styles.onboardingSheet}>
+            <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingScroll}>
               <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
               <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
               <Text style={styles.onboardingText}>无需注册。日记、人物和媒体默认只保存在这台设备，可以随时完整导出。</Text>
@@ -294,9 +292,7 @@ export default function SpaceScreen() {
               <Pressable accessibilityRole="button" onPress={() => void completeOnboarding()} style={styles.onboardingButton}><Text style={styles.onboardingButtonText}>进入空间</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => void updatePreferences({ onboardingCompleted: true })} style={styles.onboardingSkip}><Text style={styles.onboardingSkipText}>暂时跳过</Text></Pressable>
             </ScrollView>
-          </SafeAreaView>
-        </AppKeyboardAvoidingView>
-      </Modal>
+      </DraggableBottomSheet>
     </SafeAreaView>
   );
 }
@@ -650,9 +646,9 @@ const styles = createThemedStyles(() => ({
   postFooterAfterMore: { marginTop: 0 },
   postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
-  onboardingKeyboardAvoidingView: { flex: 1 },
-  onboardingBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdropStrong },
-  onboardingSheet: { flexGrow: 0, maxHeight: '100%', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  onboardingBackdrop: { backgroundColor: colors.backdropStrong },
+  onboardingSheet: { maxHeight: '100%', backgroundColor: colors.sheet },
+  onboardingScroll: { flexGrow: 0, maxHeight: '100%' },
   onboardingContent: { padding: spacing.lg, paddingBottom: spacing.xxl },
   onboardingLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.5 },
   onboardingTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 28, lineHeight: 39 },

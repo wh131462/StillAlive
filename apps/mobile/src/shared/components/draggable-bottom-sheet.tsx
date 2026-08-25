@@ -15,9 +15,11 @@ interface DraggableBottomSheetProps {
   children: ReactNode;
   open: boolean;
   onClose(): void;
+  onRequestClose?(): void;
   accessibilityLabel?: string;
   accessibilityRole?: ComponentProps<typeof Pressable>['accessibilityRole'];
   backdropStyle?: StyleProp<ViewStyle>;
+  dismissDisabled?: boolean;
   handleStyle?: StyleProp<ViewStyle>;
   keyboardAvoiding?: boolean;
   sheetStyle?: StyleProp<ViewStyle>;
@@ -25,7 +27,7 @@ interface DraggableBottomSheetProps {
 }
 
 /** Bottom-sheet shell with a consistent grabber and pull-down-to-dismiss gesture. */
-export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, backdropStyle, children, handleStyle, keyboardAvoiding = false, onClose, open, sheetStyle, statusBarTranslucent = false }: DraggableBottomSheetProps) {
+export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, backdropStyle, children, dismissDisabled = false, handleStyle, keyboardAvoiding = false, onClose, onRequestClose, open, sheetStyle, statusBarTranslucent = false }: DraggableBottomSheetProps) {
   const entryOffset = useRef(Math.max(Dimensions.get('screen').height, 640)).current;
   const translateY = useRef(new Animated.Value(entryOffset)).current;
   const dismissing = useRef(false);
@@ -43,6 +45,7 @@ export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, ba
   }, [entryOffset, open, translateY]);
 
   const dismiss = useCallback(() => {
+    if (dismissDisabled) return;
     if (dismissing.current) return;
     dismissing.current = true;
     Animated.timing(translateY, {
@@ -53,7 +56,7 @@ export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, ba
     }).start(({ finished }) => {
       if (finished) onClose();
     });
-  }, [entryOffset, onClose, translateY]);
+  }, [dismissDisabled, entryOffset, onClose, translateY]);
 
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -62,6 +65,10 @@ export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, ba
     onPanResponderGrant: () => translateY.stopAnimation(),
     onPanResponderMove: (_, gesture) => translateY.setValue(Math.max(0, gesture.dy)),
     onPanResponderRelease: (_, gesture) => {
+      if (dismissDisabled) {
+        Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 260, mass: 0.8, useNativeDriver: true }).start();
+        return;
+      }
       if (gesture.dy > DISMISS_THRESHOLD || gesture.vy > DISMISS_VELOCITY) {
         dismiss();
         return;
@@ -69,7 +76,7 @@ export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, ba
       Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 260, mass: 0.8, useNativeDriver: true }).start();
     },
     onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, damping: 22, stiffness: 260, mass: 0.8, useNativeDriver: true }).start(),
-  }), [dismiss, translateY]);
+  }), [dismiss, dismissDisabled, translateY]);
 
   const body = (
     <Pressable onPress={dismiss} style={[styles.backdrop, backdropStyle]}>
@@ -80,7 +87,7 @@ export function DraggableBottomSheet({ accessibilityLabel, accessibilityRole, ba
     </Pressable>
   );
 
-  return <Modal animationType="none" onRequestClose={dismiss} statusBarTranslucent={statusBarTranslucent} transparent visible={open}>{keyboardAvoiding ? <AppKeyboardAvoidingView style={styles.flex}>{body}</AppKeyboardAvoidingView> : body}</Modal>;
+  return <Modal animationType="none" onRequestClose={onRequestClose ?? dismiss} statusBarTranslucent={statusBarTranslucent} transparent visible={open}>{keyboardAvoiding ? <AppKeyboardAvoidingView style={styles.flex}>{body}</AppKeyboardAvoidingView> : body}</Modal>;
 }
 
 const styles = createThemedStyles(() => ({

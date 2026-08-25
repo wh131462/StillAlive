@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View, useWindowDimensio
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { FeedbackDialog } from '../../shared/components/feedback-dialog';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import {
   downloadAndInstallAndroidUpdate,
   getCurrentAndroidVersion,
@@ -118,10 +118,14 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
   const remainingSeconds = progress.totalBytes && progress.bytesPerSecond
     ? Math.max(0, (progress.totalBytes - progress.bytesWritten) / progress.bytesPerSecond)
     : null;
-  const longTextMaxHeight = Math.max(180, height - insets.top - insets.bottom - 390);
+  const surfaceMaxHeight = Math.max(280, height - insets.top - spacing.lg);
+  const sheetPaddingBottom = Math.max(spacing.xl, insets.bottom + spacing.md);
+  const surfaceContentMaxHeight = Math.max(0, surfaceMaxHeight - spacing.md * 2 - sheetPaddingBottom);
+  const longTextReservedHeight = notice ? 170 : phase === 'ready' ? 200 : phase === 'error' ? 170 : 0;
+  const longTextMaxHeight = Math.max(96, surfaceContentMaxHeight - longTextReservedHeight);
 
   return (
-    <FeedbackDialog onBackdropPress={phase === 'downloading' ? undefined : dismiss} onRequestClose={dismiss}>
+    <DraggableBottomSheet accessibilityLabel="更新面板，向下拖动关闭" dismissDisabled={checking || phase === 'downloading'} onClose={dismiss} onRequestClose={dismiss} open={Boolean(manifest || checking || notice)} sheetStyle={[styles.updateSheet, { maxHeight: surfaceMaxHeight, paddingBottom: sheetPaddingBottom }]}>
           {checking ? (
             <>
               <View style={styles.downloadHeader}><Text style={styles.title}>正在检查更新</Text><Text style={styles.progressPercent}>检查中</Text></View>
@@ -176,7 +180,7 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
               <SecondaryButton label="关闭" onPress={onDismiss} />
             </>
           ) : null}
-    </FeedbackDialog>
+    </DraggableBottomSheet>
   );
 }
 
@@ -229,11 +233,12 @@ function runSimulatedDownload(signal: AbortSignal, onProgress: (progress: Androi
 }
 
 const styles = createThemedStyles(() => ({
+  updateSheet: { paddingHorizontal: spacing.xl, backgroundColor: colors.sheet },
   title: { color: colors.ink, fontFamily: typography.display, fontSize: 21 },
   subtitle: { marginTop: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   notes: { minHeight: 0, marginTop: spacing.lg, flexGrow: 0, flexShrink: 1 },
   longTextScroll: { minHeight: 0, marginTop: spacing.md, flexGrow: 0, flexShrink: 1 },
-  longTextContent: { paddingRight: spacing.xs },
+  longTextContent: { paddingRight: spacing.xs, paddingBottom: spacing.xs },
   notesText: { color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 19 },
   primaryButton: { minHeight: 50, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   primaryButtonText: { color: colors.onLife, fontSize: typography.size.label, fontWeight: '700' },
