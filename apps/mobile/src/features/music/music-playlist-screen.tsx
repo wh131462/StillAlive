@@ -9,7 +9,7 @@ import { SymbolView } from 'expo-symbols';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { Media, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
-import { pickLocalAudioAssets } from '../../infrastructure/files/local-assets';
+import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
@@ -17,7 +17,7 @@ import { orderMusicTracksByCollectionEntries } from './music-library';
 import { useMusicPlayer } from './music-player-state';
 import { MusicCover } from './music-cover';
 import { MusicPlayCount } from './music-play-count';
-import { reportMusicImportFailure } from './music-import-coordinator';
+import { reportMusicImportFailure, reportMusicImportFailures, type MusicImportFailure } from './music-import-coordinator';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 export default function MusicPlaylistScreen() {
@@ -95,22 +95,24 @@ export default function MusicPlaylistScreen() {
     setImporting(true);
     const importedTrackIds: string[] = [];
     try {
-      const assets = await pickLocalAudioAssets();
-      for (let index = 0; index < assets.length; index += 1) {
+      const picked = await pickLocalAudioAssetsWithFailures();
+      const failures: MusicImportFailure[] = picked.failures.map(({ cause, name }) => ({ cause, sourceName: name }));
+      for (const asset of picked.assets) {
         try {
-          const track = await importMusicTrack(assets[index]);
+          const track = await importMusicTrack(asset);
           importedTrackIds.push(track.id);
         } catch (cause) {
-          for (const item of assets.slice(index)) await discardMedia(item).catch(() => undefined);
-          if (importedTrackIds.length) await addMusicTracksToPlaylist(playlist.id, importedTrackIds);
-          const failure = reportMusicImportFailure(cause, { importedCount: importedTrackIds.length, joinedPlaylist: true, sourceName: assets[index].originalName });
-          feedback.alert(failure.title, failure.message);
-          return;
+          failures.push({ cause, sourceName: asset.originalName });
+          await discardMedia(asset).catch(() => undefined);
         }
       }
       if (importedTrackIds.length) {
         await addMusicTracksToPlaylist(playlist.id, importedTrackIds);
         setPickerVisible(false);
+      }
+      if (failures.length) {
+        const failure = reportMusicImportFailures(failures, { importedCount: importedTrackIds.length, joinedPlaylist: true });
+        feedback.alert(failure.title, failure.message);
       }
     } catch (cause) {
       const failure = reportMusicImportFailure(cause);

@@ -23,20 +23,45 @@ interface MusicImportFailureContext {
   sourceName?: string | null;
 }
 
+export interface MusicImportFailure {
+  cause: unknown;
+  sourceName?: string | null;
+}
+
+function logMusicImportFailure(cause: unknown, context: MusicImportFailureContext = {}): void {
+  const sourceName = context.sourceName ?? null;
+  writePersistentError('music.import.failed', cause, {
+    encrypted: sourceName ? isEncryptedMusicName(sourceName) : undefined,
+    importedCount: context.importedCount ?? 0,
+    sourceName,
+  });
+}
+
 export function reportMusicImportFailure(cause: unknown, context: MusicImportFailureContext = {}): { title: string; message: string } {
   const sourceName = context.sourceName ?? null;
   const importedCount = context.importedCount ?? 0;
-  writePersistentError('music.import.failed', cause, {
-    encrypted: sourceName ? isEncryptedMusicName(sourceName) : undefined,
-    importedCount,
-    sourceName,
-  });
+  logMusicImportFailure(cause, context);
 
   const prefix = importedCount > 0
     ? `已成功导入${context.joinedPlaylist ? '并加入歌单' : ''} ${importedCount} 首。\n\n`
     : '';
   const failure = musicImportFailureMessage(cause, sourceName);
   return { title: failure.title, message: `${prefix}${failure.message}` };
+}
+
+export function reportMusicImportFailures(failures: MusicImportFailure[], context: Omit<MusicImportFailureContext, 'sourceName'> = {}): { title: string; message: string } {
+  const importedCount = context.importedCount ?? 0;
+  for (const failure of failures) logMusicImportFailure(failure.cause, { ...context, sourceName: failure.sourceName });
+
+  const prefix = importedCount > 0
+    ? `已成功导入${context.joinedPlaylist ? '并加入歌单' : ''} ${importedCount} 首。\n\n`
+    : '';
+  const names = failures.map((failure) => failure.sourceName?.trim() || '未命名音乐');
+  const singleFailure = failures.length === 1 ? musicImportFailureMessage(failures[0].cause, failures[0].sourceName ?? null) : null;
+  return {
+    title: singleFailure?.title ?? (importedCount > 0 ? '音乐导入完成，部分失败' : '音乐导入失败'),
+    message: `${prefix}以下 ${failures.length} 个文件导入失败：\n${names.map((name) => `· ${name}`).join('\n')}${singleFailure ? `\n\n${singleFailure.message}` : ''}`,
+  };
 }
 
 function musicImportFailureMessage(cause: unknown, sourceName: string | null): { title: string; message: string } {

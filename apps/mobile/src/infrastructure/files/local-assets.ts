@@ -25,6 +25,11 @@ interface LocalAssetSource {
   mimeType: string | null;
 }
 
+export interface LocalAudioImportFailure {
+  name: string;
+  cause: unknown;
+}
+
 export function extensionOf(name: string): string {
   const match = name.toLowerCase().match(/\.[a-z0-9]+$/);
   return match?.[0] ?? '';
@@ -205,7 +210,52 @@ export async function pickLocalAsset(kind: ImportedAssetKind): Promise<Media | n
 }
 
 export async function pickLocalAudioAssets(): Promise<Media[]> {
-  return pickLocalAssets('audio', true);
+  return (await pickLocalAudioAssetsWithFailures()).assets;
+}
+
+export async function pickLocalAudioAssetsWithFailures(): Promise<{ assets: Media[]; failures: LocalAudioImportFailure[] }> {
+  if (assetPickerInProgress) return { assets: [], failures: [] };
+  assetPickerInProgress = true;
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: true,
+      type: ['audio/*', 'application/octet-stream'],
+    });
+    if (result.canceled) return { assets: [], failures: [] };
+
+    const sources = result.assets.map((asset) => ({ file: new File(asset.uri), name: asset.name, mimeType: asset.mimeType ?? null }));
+    const assets: Media[] = [];
+    const failures: LocalAudioImportFailure[] = [];
+    try {
+      for (const source of sources) {
+        if (isRejectedAudioName(source.name)) {
+          failures.push({ name: source.name, cause: new Error('酷狗 KGG 需要外部密钥数据库，当前版本不支持') });
+          continue;
+        }
+        if (!isSupportedAudioName(source.name)) {
+          failures.push({ name: source.name, cause: new Error('只支持 mp3、m4a、aac、wav、flac 或 ogg 音频') });
+          continue;
+        }
+        try {
+          assets.push(...await copyLocalAssets('audio', [source]));
+        } catch (cause) {
+          failures.push({ name: source.name, cause });
+        }
+      }
+      return { assets, failures };
+    } finally {
+      for (const source of sources) {
+        try {
+          if (source.file.uri.startsWith(Paths.cache.uri) && source.file.exists) source.file.delete();
+        } catch {
+          // 系统可在应用退出后回收无法立即删除的 picker 缓存。
+        }
+      }
+    }
+  } finally {
+    assetPickerInProgress = false;
+  }
 }
 
 export async function pickLocalBookAssets(): Promise<Media[]> {

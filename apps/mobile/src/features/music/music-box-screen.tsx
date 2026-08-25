@@ -11,7 +11,7 @@ import type { Media, MusicPlaylist, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import type { AudioFileFormat, AudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
-import { pickLocalAudioAssets } from '../../infrastructure/files/local-assets';
+import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
 import { useMusicPlayer } from './music-player-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
@@ -21,7 +21,7 @@ import { orderMusicTracksByCollectionEntries } from './music-library';
 import { MusicCover } from './music-cover';
 import { MusicPlayCount } from './music-play-count';
 import { saveMusicCopy } from './music-downloads';
-import { reportMusicImportFailure } from './music-import-coordinator';
+import { reportMusicImportFailure, reportMusicImportFailures, type MusicImportFailure } from './music-import-coordinator';
 
 type MusicBoxListItem = { kind: 'search' } | { kind: 'track'; track: MusicTrack };
 
@@ -61,16 +61,21 @@ export default function MusicBoxScreen() {
     importingRef.current = true;
     setImporting(true);
     try {
-      const assets = await pickLocalAudioAssets();
-      for (let index = 0; index < assets.length; index += 1) {
+      const picked = await pickLocalAudioAssetsWithFailures();
+      const failures: MusicImportFailure[] = picked.failures.map(({ cause, name }) => ({ cause, sourceName: name }));
+      let importedCount = 0;
+      for (const asset of picked.assets) {
         try {
-          await importMusicTrack(assets[index]);
+          await importMusicTrack(asset);
+          importedCount += 1;
         } catch (cause) {
-          for (const item of assets.slice(index)) await discardMedia(item).catch(() => undefined);
-          const failure = reportMusicImportFailure(cause, { importedCount: index, sourceName: assets[index].originalName });
-          feedback.alert(failure.title, failure.message);
-          return;
+          failures.push({ cause, sourceName: asset.originalName });
+          await discardMedia(asset).catch(() => undefined);
         }
+      }
+      if (failures.length) {
+        const failure = reportMusicImportFailures(failures, { importedCount });
+        feedback.alert(failure.title, failure.message);
       }
     } catch (cause) {
       const failure = reportMusicImportFailure(cause);
