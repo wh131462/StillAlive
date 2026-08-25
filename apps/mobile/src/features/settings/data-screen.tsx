@@ -53,7 +53,7 @@ export default function DataScreen() {
 
       <Text style={styles.sectionLabel}>我的记录</Text>
       <View style={styles.stats}>
-        <Stat label="日记" value={posts.length} />
+        <Stat label="记录" value={posts.length} />
         <View style={styles.statDivider} />
         <Stat label="打卡" value={checkIns.length} />
         <View style={styles.statDivider} />

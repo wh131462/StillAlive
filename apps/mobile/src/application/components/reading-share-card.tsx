@@ -9,7 +9,7 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 
 type ReadingShareVariant = 'composer' | 'detail' | 'feed';
 
-export function ReadingShareCard({ compact = false, source, variant = 'feed' }: { compact?: boolean; source: ReadingNoteSource; variant?: ReadingShareVariant }) {
+export function ReadingShareCard({ compact = false, onRemove, source, variant = 'feed' }: { compact?: boolean; onRemove?: () => void; source: ReadingNoteSource; variant?: ReadingShareVariant }) {
   const router = useRouter();
   const { books, media } = useAppState();
   const book = source.bookId ? books.find((item) => item.id === source.bookId) ?? null : null;
@@ -44,9 +44,15 @@ export function ReadingShareCard({ compact = false, source, variant = 'feed' }: 
           <Text numberOfLines={1} style={styles.title}>{title}</Text>
           <Text numberOfLines={1} style={styles.meta}>{bookMeta(book)}</Text>
         </View>
-        <View style={styles.action}>
-          <SymbolView name={{ android: readable ? 'chevron_right' : 'book_2', ios: readable ? 'chevron.right' : 'book.closed', web: readable ? 'chevron_right' : 'book_2' }} size={18} tintColor={readable ? colors.life : colors.inkFaint} type="hierarchical" />
-        </View>
+        {variant === 'composer' && onRemove ? (
+          <Pressable accessibilityLabel="移除阅读来源" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onRemove(); }} style={({ pressed }) => [styles.removeAction, pressed && styles.actionPressed]}>
+            <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={18} tintColor={colors.inkSoft} type="hierarchical" />
+          </Pressable>
+        ) : (
+          <View style={styles.action}>
+            <SymbolView name={{ android: readable ? 'chevron_right' : 'book_2', ios: readable ? 'chevron.right' : 'book.closed', web: readable ? 'chevron_right' : 'book_2' }} size={18} tintColor={readable ? colors.life : colors.inkFaint} type="hierarchical" />
+          </View>
+        )}
       </View>
     </Pressable>
   );
@@ -93,4 +99,6 @@ const styles = createThemedStyles(() => ({
   title: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 14 },
   meta: { marginTop: 3, color: colors.inkFaint, fontSize: 9 },
   action: { width: 32, height: 32, marginLeft: spacing.xs, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
+  removeAction: { width: 32, height: 32, marginLeft: spacing.xs, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.lineSoft },
+  actionPressed: { opacity: 0.58 },
 }));

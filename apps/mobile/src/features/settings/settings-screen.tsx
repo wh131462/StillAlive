@@ -86,7 +86,7 @@ export default function SettingsScreen() {
 
       <Text style={styles.eyebrow}>DATA</Text>
       <View style={styles.group}>
-        <Entry icon="archivebox" androidIcon="inventory_2" label="数据管理" onPress={() => router.push('/backup')} />
+        <Entry icon="archivebox" androidIcon="inventory_2" label="数据管理" hint="导入备份、导出与清理数据" onPress={() => router.push('/backup')} />
       </View>
 
       <Text style={styles.eyebrow}>ABOUT</Text>

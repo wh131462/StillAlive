@@ -7,7 +7,7 @@ import { MusicCover } from '../../features/music/music-cover';
 import { useSharedMusicPlayback } from '../use-shared-music-playback';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 
-export function MusicShareCard({ share, variant = 'feed' }: { share: MusicShare; variant?: 'composer' | 'detail' | 'feed' }) {
+export function MusicShareCard({ onRemove, share, variant = 'feed' }: { onRemove?: () => void; share: MusicShare; variant?: 'composer' | 'detail' | 'feed' }) {
   const { media, musicTracks } = useAppState();
   const playSharedMusic = useSharedMusicPlayback();
   const track = musicTracks.find((item) => item.id === share.trackId) ?? null;
@@ -37,9 +37,15 @@ export function MusicShareCard({ share, variant = 'feed' }: { share: MusicShare;
         <Text numberOfLines={1} style={styles.title}>{title}</Text>
         <Text numberOfLines={1} style={styles.meta}>{artist}{album ? `，${album}` : ''}</Text>
       </View>
-      <View style={[styles.action, !playable && styles.actionUnavailable]}>
-        <SymbolView name={{ android: playable ? 'play_arrow' : 'music_note', ios: playable ? 'play.fill' : 'music.note', web: playable ? 'play_arrow' : 'music_note' }} size={18} tintColor={playable ? colors.onLife : colors.inkFaint} type="hierarchical" />
-      </View>
+      {variant === 'composer' && onRemove ? (
+        <Pressable accessibilityLabel="移除音乐分享" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onRemove(); }} style={({ pressed }) => [styles.removeAction, pressed && styles.actionPressed]}>
+          <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={18} tintColor={colors.inkSoft} type="hierarchical" />
+        </Pressable>
+      ) : (
+        <View style={[styles.action, !playable && styles.actionUnavailable]}>
+          <SymbolView name={{ android: playable ? 'play_arrow' : 'music_note', ios: playable ? 'play.fill' : 'music.note', web: playable ? 'play_arrow' : 'music_note' }} size={18} tintColor={playable ? colors.onLife : colors.inkFaint} type="hierarchical" />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -55,4 +61,6 @@ const styles = createThemedStyles(() => ({
   meta: { marginTop: 3, color: colors.inkFaint, fontSize: 9 },
   action: { width: 34, height: 34, marginLeft: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.life },
   actionUnavailable: { backgroundColor: colors.lineSoft },
+  removeAction: { width: 34, height: 34, marginLeft: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.lineSoft },
+  actionPressed: { opacity: 0.58 },
 }));

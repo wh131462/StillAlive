@@ -87,7 +87,7 @@ export default function PasswordVaultEntryScreen() {
           <Field label="网址"><TextInput autoCapitalize="none" autoCorrect={false} importantForAutofill="no" keyboardType="url" maxLength={4096} onChangeText={setUrl} placeholder="https://" placeholderTextColor={colors.inkFaint} style={styles.input} textContentType="none" value={url} /></Field>
           <Field label="备注"><TextInput autoCorrect={false} maxLength={65_536} multiline onChangeText={setNote} placeholder="只在解锁后显示" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.noteInput]} textAlignVertical="top" value={note} /></Field>
         </View>
-        <Text style={styles.securityNote}>保存后，账号、密码及其他内容会加密存储在本机，不会进入日记数据库。</Text>
+        <Text style={styles.securityNote}>保存后，账号、密码及其他内容会加密存储在本机，不会进入记录数据库。</Text>
         {entry ? <Pressable accessibilityRole="button" disabled={busy} onPress={confirmDelete} style={[styles.deleteButton, busy && styles.disabled]}><Text style={styles.deleteText}>删除这条记录</Text></Pressable> : null}
       </ScrollView>
     </AppKeyboardAvoidingView>

@@ -282,7 +282,7 @@ export default function SpaceScreen() {
             <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingScroll}>
               <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
               <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
-              <Text style={styles.onboardingText}>无需注册。日记、人物和媒体默认只保存在这台设备，可以随时完整导出。</Text>
+              <Text style={styles.onboardingText}>无需注册。记录、人物和媒体默认只保存在这台设备，可以随时完整导出。</Text>
               <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
               <View style={styles.onboardingCalendar}>
                 <Text style={styles.onboardingCalendarLabel}>生日历法</Text>

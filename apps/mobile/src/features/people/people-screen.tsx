@@ -79,7 +79,7 @@ export default function PeopleScreen() {
         {people.length === 0 ? (
           <Pressable accessibilityRole="button" onPress={() => setCreating(true)} style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>还没有人物</Text>
-            <Text style={styles.emptyText}>写日记时使用 @人物，或在这里先记下一个名字。</Text>
+            <Text style={styles.emptyText}>写记录时使用 @人物，或在这里先记下一个名字。</Text>
             <Text style={styles.emptyAction}>添加第一个人物 →</Text>
           </Pressable>
         ) : (

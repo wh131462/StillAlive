@@ -435,7 +435,7 @@ function BookRow({ book, media, onMore, onPress }: { book: Book; media: Media[];
   return <View style={styles.row}>
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
       <BookCover book={book} media={media} size="medium" />
-      <View style={styles.rowCopy}><Text numberOfLines={2} style={styles.rowTitle}>{book.title}</Text><Text numberOfLines={1} style={styles.rowAuthor}>{book.author || '作者未知'}</Text><View style={styles.rowMeta}><Text style={[styles.formatTag, !readable && styles.formatTagWarm, failed && styles.formatTagDanger]}>{formatLabel(book.format)}</Text><Text style={[styles.rowPosition, !readable && styles.rowPositionWarm, failed && styles.rowPositionDanger]}>{readable ? progressLabel(book) : statusLabel(book)}</Text></View>{readable ? <ProgressBar book={book} /> : null}</View>
+      <View style={styles.rowCopy}><Text numberOfLines={2} style={styles.rowTitle}>{book.title}</Text><Text numberOfLines={1} style={styles.rowAuthor}>{book.author || '作者未知'}</Text><View style={styles.rowMeta}><Text style={[styles.formatTag, !readable && styles.formatTagWarm, failed && styles.formatTagDanger]}>{formatLabel(book.format)}</Text><Text style={[styles.rowPosition, !readable && styles.rowPositionWarm, failed && styles.rowPositionDanger]}>{readable ? readingStatusLabel(book) : statusLabel(book)}</Text>{readable ? <Text style={styles.rowProgress}>{progressPercentage(book)}</Text> : null}</View></View>
     </Pressable>
     <Pressable accessibilityLabel={`管理 ${book.title}`} accessibilityRole="button" onPress={onMore} style={({ pressed }) => [styles.moreButton, pressed && styles.pressed]}><SymbolView name={{ android: 'more_vert', ios: 'ellipsis', web: 'more_vert' }} size={20} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
   </View>;
@@ -478,6 +478,13 @@ function progressLabel(book: Book): string {
   if (book.progress <= 0) return '尚未阅读';
   return `阅读至 ${Math.round(book.progress * 100)}%`;
 }
+function readingStatusLabel(book: Book): string {
+  if (book.progress <= 0 && !book.location) return '尚未阅读';
+  if (book.format === 'pdf') return book.pageCount ? `第 ${pageFromBookLocation(book.location)} / ${book.pageCount} 页` : `第 ${pageFromBookLocation(book.location)} 页`;
+  if (book.progress >= 1) return '已读完';
+  return '阅读中';
+}
+function progressPercentage(book: Book): string { return `${Math.round(Math.max(0, Math.min(1, book.progress)) * 100)}%`; }
 function compareDates(a: string, b: string): number { return new Date(a).getTime() - new Date(b).getTime(); }
 function readingDate(book: Book): string | null { return book.lastReadAt ?? (book.progress > 0 ? book.updatedAt : null); }
 function isBookFailure(book: Book): boolean { return book.parseStatus === 'failed' || book.parseStatus === 'protected'; }
@@ -545,6 +552,7 @@ const styles = createThemedStyles(() => ({
   rowPosition: { marginLeft: spacing.sm, color: colors.inkSoft, fontSize: 10 },
   rowPositionWarm: { color: colors.sun },
   rowPositionDanger: { color: colors.danger },
+  rowProgress: { marginLeft: 'auto', color: colors.life, fontFamily: typography.mono, fontSize: 10 },
   moreButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   cover: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   coverSmall: { width: 50, height: 68 },

@@ -16,7 +16,7 @@ export default function PrivacyPolicyScreen() {
       <Text style={styles.intro}>本协议说明“仍在”如何在当前设备上保存和处理你的内容。</Text>
 
       <View style={styles.policyCard}>
-        <PolicySection title="数据保存">日记、打卡、地点文字、人物、照片、语音、密码本和设置保存在当前设备的应用私有目录。“仍在”不提供账号或云端同步。</PolicySection>
+        <PolicySection title="数据保存">记录、打卡、地点文字、人物、照片、语音、密码本和设置保存在当前设备的应用私有目录。“仍在”不提供账号或云端同步。</PolicySection>
         <View style={styles.separator} />
         <PolicySection title="系统权限">只有在你使用相关功能时，应用才会请求照片、麦克风、位置或通知权限。位置仅用于生成你选择保存的地点文字或打卡城市，不保存经纬度。你可以随时在设备系统设置中关闭权限。</PolicySection>
         <View style={styles.separator} />

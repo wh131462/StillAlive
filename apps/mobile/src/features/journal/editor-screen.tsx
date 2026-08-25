@@ -43,13 +43,14 @@ export default function EditorScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { dayKey: requestedDayKey, musicTrackId, personId, postId, sourceBookId, sourceExcerptId } = useLocalSearchParams<{ dayKey?: string; musicTrackId?: string; personId?: string; postId?: string; sourceBookId?: string; sourceExcerptId?: string }>();
-  const { bookExcerpts, books, createPerson, discardMedia, getPersonIdsByPost, loadDraft, media, musicTracks, people, posts, readingNoteSources, ready, saveDraft, saveMedia, savePost, saveReadingNoteSource, today, todayCheckIn, updatePost } = useAppState();
+  const { bookExcerpts, books, createPerson, deleteReadingNoteSource, discardMedia, getPersonIdsByPost, loadDraft, media, musicTracks, people, posts, readingNoteSources, ready, saveDraft, saveMedia, savePost, saveReadingNoteSource, today, todayCheckIn, updatePost } = useAppState();
   const initializedRef = useRef(false);
   const allowExitRef = useRef(false);
   const initialBodyRef = useRef('');
   const initialPersonIdsRef = useRef<string[]>([]);
   const initialLocationRef = useRef<string | null>(null);
   const initialMusicShareRef = useRef<MusicShare | null>(null);
+  const initialReadingSourceRef = useRef<ReadingNoteSource | null>(null);
   const createdMediaRef = useRef<Media[]>([]);
   const bodyTouchedRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +59,7 @@ export default function EditorScreen() {
   const commandIdRef = useRef(0);
   const [body, setBody] = useState('');
   const [musicShare, setMusicShare] = useState<MusicShare | null>(null);
+  const [readingSourceRemoved, setReadingSourceRemoved] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [command, setCommand] = useState<EditorCommand | null>(null);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
@@ -89,6 +91,7 @@ export default function EditorScreen() {
   const sourceBook = sourceBookId ? books.find((book) => book.id === sourceBookId) ?? null : null;
   const sourceExcerpt = sourceExcerptId && sourceBook ? bookExcerpts.find((excerpt) => excerpt.id === sourceExcerptId && excerpt.bookId === sourceBook.id) ?? null : null;
   const readingSource = useMemo<ReadingNoteSource | null>(() => {
+    if (readingSourceRemoved) return null;
     if (postId) return readingNoteSources.find((source) => source.postId === postId) ?? null;
     if (!sourceBook || (sourceExcerptId && !sourceExcerpt)) return null;
     return {
@@ -97,7 +100,7 @@ export default function EditorScreen() {
       excerptIds: sourceExcerpt ? [sourceExcerpt.id] : [],
       quoteSnapshots: [{ bookTitle: sourceBook.title, text: sourceExcerpt?.text ?? '', location: sourceExcerpt?.location ?? null }],
     };
-  }, [postId, readingNoteSources, sourceBook, sourceExcerpt, sourceExcerptId]);
+  }, [postId, readingNoteSources, readingSourceRemoved, sourceBook, sourceExcerpt, sourceExcerptId]);
   const readingSourceBook = sourceBook ?? (readingSource?.bookId ? books.find((book) => book.id === readingSource.bookId) ?? null : null);
   const headerSubtitle = draftStatus || (readingSource ? '写下这段阅读留给你的感受' : musicShare ? '写下这首歌留给你的感受' : postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
   const editorBusy = saving || audioSaving || mediaSaving || Boolean(locating) || relationsLoading;
@@ -107,7 +110,7 @@ export default function EditorScreen() {
     if (postId) {
       const post = posts.find((item) => item.id === postId);
       if (!post) {
-        feedback.alert('日记不存在', '它可能已经被删除。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
+        feedback.alert('记录不存在', '它可能已经被删除。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
         return;
       }
       initializedRef.current = true;
@@ -117,6 +120,7 @@ export default function EditorScreen() {
       const visibleBody = withoutReadingSourceQuote(withoutMusicShares(post.bodyMarkdown), currentReadingSource, currentBook);
       initialBodyRef.current = visibleBody;
       initialMusicShareRef.current = sharedMusic;
+      initialReadingSourceRef.current = currentReadingSource;
       initialLocationRef.current = post.locationName;
       setBody(visibleBody);
       setMusicShare(sharedMusic);
@@ -149,7 +153,10 @@ export default function EditorScreen() {
       return;
     }
     initializedRef.current = true;
-    void loadDraft(targetDay).then((draft) => {
+    initialReadingSourceRef.current = readingSource;
+    const shareEntry = Boolean(hasReadingSource || sharedTrack);
+    const draftTask = shareEntry ? saveDraft('', targetDay).then(() => null) : loadDraft(targetDay);
+    void draftTask.then((draft) => {
       const draftBody = draft?.bodyMarkdown ?? '';
       const sharedMusic = sharedTrack ? createMusicShare(sharedTrack) : extractMusicShares(draftBody)[0] ?? null;
       const visibleBody = withoutReadingSourceQuote(withoutMusicShares(draftBody), readingSource, sourceBook);
@@ -162,7 +169,7 @@ export default function EditorScreen() {
     }).catch((cause: unknown) => {
       feedback.alert('草稿加载失败', cause instanceof Error ? cause.message : '请返回后重试。', [{ text: '返回', onPress: () => { allowExitRef.current = true; router.back(); } }]);
     });
-  }, [bookExcerpts, books, getPersonIdsByPost, loadDraft, musicTrackId, musicTracks, postId, posts, readingNoteSources, readingSource, ready, router, sourceBook, sourceBookId, sourceExcerpt, sourceExcerptId, targetDay, today, todayCheckIn]);
+  }, [bookExcerpts, books, getPersonIdsByPost, loadDraft, musicTrackId, musicTracks, postId, posts, readingNoteSources, readingSource, ready, router, saveDraft, sourceBook, sourceBookId, sourceExcerpt, sourceExcerptId, targetDay, today, todayCheckIn]);
 
   useEffect(() => {
     if (personId && people.some((person) => person.id === personId)) {
@@ -213,7 +220,7 @@ export default function EditorScreen() {
       feedback.alert(recorderState.isRecording ? '正在录音' : '正在处理内容', recorderState.isRecording ? '停止录音后才能离开这条记录。' : '请等待当前操作完成后再离开。');
       return;
     }
-    if (!createdMediaRef.current.length && !hasUnsavedContent(body, musicShare, postId, initialBodyRef.current, initialMusicShareRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current)) return;
+    if (!createdMediaRef.current.length && !hasUnsavedContent(body, musicShare, readingSource, postId, initialBodyRef.current, initialMusicShareRef.current, initialReadingSourceRef.current, selectedPersonIds, initialPersonIdsRef.current, locationName, initialLocationRef.current)) return;
     event.preventDefault();
     feedback.alert(
       postId ? '放弃这次修改？' : '先退出编写？',
@@ -284,7 +291,10 @@ export default function EditorScreen() {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       draftTimerRef.current = null;
       await draftQueueRef.current.catch(() => undefined);
-      if (postId) await updatePost(postId, savedBody, selectedPersonIds, locationName);
+      if (postId) {
+        await updatePost(postId, savedBody, selectedPersonIds, locationName);
+        if (!readingSource) await deleteReadingNoteSource(postId);
+      }
       else {
         const createdPost = await savePost(savedBody, selectedPersonIds, targetDay, locationName);
         if (readingSource) await saveReadingNoteSource({ ...readingSource, postId: createdPost.id });
@@ -301,6 +311,25 @@ export default function EditorScreen() {
       setSaving(false);
       feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
     }
+  };
+
+  const saveDraftAfterShareChange = (nextMusicShare: MusicShare | null, nextReadingSource: ReadingNoteSource | null) => {
+    if (postId) return;
+    bodyTouchedRef.current = true;
+    const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(withReadingSourceQuote(withMusicShare(body, nextMusicShare), nextReadingSource, readingSourceBook), targetDay));
+    draftQueueRef.current = task;
+    setDraftStatus('保存中…');
+    void task.then(() => setDraftStatus('刚刚已保存')).catch(() => setDraftStatus('草稿保存失败'));
+  };
+
+  const removeMusicShare = () => {
+    setMusicShare(null);
+    saveDraftAfterShareChange(null, readingSource);
+  };
+
+  const removeReadingSource = () => {
+    setReadingSourceRemoved(true);
+    saveDraftAfterShareChange(musicShare, null);
   };
 
   const beginRecording = async () => {
@@ -563,11 +592,11 @@ export default function EditorScreen() {
           onBack={() => router.back()}
           right={<ToolPageHeaderTextAction disabled={editorBusy || recorderState.isRecording} emphasized label={saving ? '保存中' : mediaSaving ? '处理媒体' : audioSaving ? '保存语音' : relationsLoading ? '加载中' : '完成'} onPress={() => void handleSave()} />}
           subtitle={headerSubtitle}
-          title={readingSource && !postId ? '阅读随感' : musicShare && !postId ? '分享音乐' : postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}
+          title={postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}
         />
 
-        {initialized && readingSource ? <View style={styles.readingShare}><ReadingShareCard compact={keyboardVisible} source={readingSource} variant="composer" /></View> : null}
-        {initialized && musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} variant="composer" /></View> : null}
+        {initialized && readingSource ? <View style={styles.readingShare}><ReadingShareCard compact={keyboardVisible} onRemove={removeReadingSource} source={readingSource} variant="composer" /></View> : null}
+        {initialized && musicShare ? <View style={styles.musicShare}><MusicShareCard onRemove={removeMusicShare} share={musicShare} variant="composer" /></View> : null}
 
         {initialized ? (
           <RichTextEditor
@@ -789,10 +818,11 @@ function validPastDay(value: string | undefined, today: DayKey): DayKey {
   return toDayKey(parsed) === value ? value as DayKey : today;
 }
 
-function hasUnsavedContent(body: string, musicShare: MusicShare | null, postId: string | undefined, initialBody: string, initialMusicShare: MusicShare | null, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
-  if (!postId) return body !== initialBody || Boolean(body.trim()) || Boolean(musicShare);
+function hasUnsavedContent(body: string, musicShare: MusicShare | null, readingSource: ReadingNoteSource | null, postId: string | undefined, initialBody: string, initialMusicShare: MusicShare | null, initialReadingSource: ReadingNoteSource | null, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
+  if (!postId) return body !== initialBody || Boolean(body.trim()) || JSON.stringify(musicShare) !== JSON.stringify(initialMusicShare) || JSON.stringify(readingSource) !== JSON.stringify(initialReadingSource);
   if (body !== initialBody) return true;
   if (JSON.stringify(musicShare) !== JSON.stringify(initialMusicShare)) return true;
+  if (JSON.stringify(readingSource) !== JSON.stringify(initialReadingSource)) return true;
   if (locationName !== initialLocation) return true;
   return [...personIds].sort().join(',') !== [...initialPersonIds].sort().join(',');
 }

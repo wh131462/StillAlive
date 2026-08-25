@@ -106,4 +106,5 @@ export interface AppStateValue {
   deleteBookExcerpt(excerptId: string): Promise<void>;
   getReadingNoteSource(postId: string): Promise<ReadingNoteSource | null>;
   saveReadingNoteSource(source: ReadingNoteSource): Promise<void>;
+  deleteReadingNoteSource(postId: string): Promise<void>;
 }

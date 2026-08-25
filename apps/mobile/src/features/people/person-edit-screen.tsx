@@ -135,7 +135,7 @@ export default function EditPersonScreen() {
   const confirmDelete = () => {
     if (!person) return;
     const albumCount = albums.filter((album) => album.personId === person.id).length;
-    feedback.alert(`删除 ${person.name}？`, `人物会被删除，历史日记会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中媒体。` : ''}此操作无法恢复。`, [
+    feedback.alert(`删除 ${person.name}？`, `人物会被删除，历史记录会保留，只解除人物关联。${albumCount ? `同时永久删除 ${albumCount} 个相册及其中媒体。` : ''}此操作无法恢复。`, [
       { text: '取消', style: 'cancel' },
       { text: '删除人物', style: 'destructive', onPress: () => void deletePerson(person.id).then(
         () => router.replace('/people'),
@@ -199,7 +199,7 @@ export default function EditPersonScreen() {
           <View style={styles.note}><Text style={styles.noteText}>资料只用于整理你的本地记忆，不会上传。</Text></View>
           <View style={styles.dangerZone}>
             <Text style={styles.dangerTitle}>危险操作</Text>
-            <Text style={styles.dangerHint}>删除人物不会删除历史日记，但会永久删除其相册及其中媒体。</Text>
+            <Text style={styles.dangerHint}>删除人物不会删除历史记录，但会永久删除其相册及其中媒体。</Text>
             <Pressable accessibilityRole="button" onPress={confirmDelete} style={({ pressed }) => [styles.deleteButton, pressed && styles.deletePressed]}>
               <Text style={styles.deleteText}>删除这个人物</Text>
             </Pressable>

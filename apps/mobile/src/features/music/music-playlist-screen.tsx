@@ -164,6 +164,16 @@ export default function MusicPlaylistScreen() {
     }
   };
 
+  const showPlaylistCoverActions = () => {
+    if (!playlist) return;
+    setManageVisible(false);
+    feedback.alert('歌单封面', undefined, [
+      { text: '更换封面', onPress: () => void choosePlaylistCover() },
+      ...(playlist.coverMediaId ? [{ text: '恢复默认封面', style: 'destructive' as const, onPress: () => void resetPlaylistCover() }] : []),
+      { text: '取消', style: 'cancel' },
+    ]);
+  };
+
   const confirmDeletePlaylist = () => {
     if (!playlist) return;
     setManageVisible(false);
@@ -210,7 +220,7 @@ export default function MusicPlaylistScreen() {
       </DraggableBottomSheet>
 
       <DraggableBottomSheet accessibilityRole="menu" onClose={() => setManageVisible(false)} open={manageVisible} sheetStyle={styles.actionSheet}>
-        <View style={styles.actionPlaylistHeader}><MusicCover media={media.find((item) => item.id === playlist.coverMediaId)} size={64} style={styles.actionPlaylistCover} /><View style={styles.actionPlaylistCopy}><Text style={styles.actionPlaylistLabel}>歌单</Text><Text numberOfLines={2} style={styles.actionPlaylistTitle}>{playlist.name}</Text><Text style={styles.actionPlaylistMeta}>{tracks.length} 首歌曲</Text></View></View><ActionOption icon={{ android: 'image', ios: 'photo', web: 'image' }} label="更换歌单封面" onPress={() => void choosePlaylistCover()} />{playlist.coverMediaId ? <ActionOption icon={{ android: 'image_not_supported', ios: 'photo', web: 'image_not_supported' }} label="恢复通用封面" onPress={() => void resetPlaylistCover()} /> : null}<ActionOption icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="重命名歌单" onPress={openRename} /><ActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除歌单" onPress={confirmDeletePlaylist} /><Pressable onPress={() => setManageVisible(false)} style={styles.cancelAction}><Text style={styles.cancelText}>取消</Text></Pressable>
+        <View style={styles.actionPlaylistHeader}><Pressable accessibilityHint="打开封面选项" accessibilityLabel="管理歌单封面" accessibilityRole="button" onPress={showPlaylistCoverActions} style={({ pressed }) => [styles.actionPlaylistCoverButton, pressed && styles.actionPlaylistCoverPressed]}><MusicCover media={media.find((item) => item.id === playlist.coverMediaId)} size={64} style={styles.actionPlaylistCover} /><View pointerEvents="none" style={styles.actionPlaylistCoverEdit}><SymbolView name={{ android: 'image', ios: 'photo', web: 'image' }} size={12} tintColor={colors.life} type="hierarchical" /></View></Pressable><View style={styles.actionPlaylistCopy}><Text style={styles.actionPlaylistLabel}>歌单</Text><Text numberOfLines={2} style={styles.actionPlaylistTitle}>{playlist.name}</Text><Text style={styles.actionPlaylistMeta}>{tracks.length} 首歌曲</Text></View></View><ActionOption icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="重命名歌单" onPress={openRename} /><ActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除歌单" onPress={confirmDeletePlaylist} /><Pressable onPress={() => setManageVisible(false)} style={styles.cancelAction}><Text style={styles.cancelText}>取消</Text></Pressable>
       </DraggableBottomSheet>
 
       <DraggableBottomSheet keyboardAvoiding onClose={() => setRenameVisible(false)} open={renameVisible} sheetStyle={styles.editSheet}>
@@ -289,7 +299,10 @@ const styles = createThemedStyles(() => ({
   confirmButtonText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
   actionSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
   actionPlaylistHeader: { minHeight: 88, marginBottom: spacing.sm, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper },
+  actionPlaylistCoverButton: { width: 66, height: 66 },
+  actionPlaylistCoverPressed: { opacity: 0.68 },
   actionPlaylistCover: { borderRadius: 6 },
+  actionPlaylistCoverEdit: { position: 'absolute', right: 0, bottom: 0, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.paper, borderRadius: 11, backgroundColor: colors.sheet },
   actionPlaylistCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   actionPlaylistLabel: { color: colors.inkFaint, fontSize: 10, letterSpacing: 1 },
   actionPlaylistTitle: { marginTop: 2, color: colors.ink, fontFamily: typography.display, fontSize: 18, lineHeight: 23 },

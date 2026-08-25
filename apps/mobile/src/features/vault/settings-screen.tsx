@@ -75,7 +75,7 @@ export default function PasswordVaultSettingsScreen() {
       </View>
 
       <Text style={styles.eyebrow}>DANGER ZONE</Text>
-      <View style={styles.dangerCard}><Text style={styles.dangerTitle}>永久删除密码本</Text><Text style={styles.dangerHint}>所有账号、密码、网址和备注都将不可恢复。日记、人物与媒体不会被删除。</Text>
+      <View style={styles.dangerCard}><Text style={styles.dangerTitle}>永久删除密码本</Text><Text style={styles.dangerHint}>所有账号、密码、网址和备注都将不可恢复。记录、人物与媒体不会被删除。</Text>
         <PasswordInput editable={busy === null} label="再次输入主密码" onChangeText={setDeletePassword} placeholder="验证当前主密码" value={deletePassword} />
         <Text style={styles.fieldLabel}>输入“永久删除”确认</Text><TextInput autoCapitalize="none" autoCorrect={false} editable={busy === null} onChangeText={setDeleteConfirmation} placeholder="永久删除" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.dangerInput]} value={deleteConfirmation} />
         <Pressable disabled={busy !== null || deleteConfirmation !== '永久删除'} onPress={() => feedback.alert('最后确认', '密码本删除后无法恢复。确定继续吗？', [{ text: '取消', style: 'cancel' }, { text: '永久删除', style: 'destructive', onPress: () => void deleteVault() }])} style={[styles.deleteButton, (busy !== null || deleteConfirmation !== '永久删除') && styles.disabled]}><Text style={styles.deleteButtonText}>{busy === 'delete' ? '正在删除…' : '永久删除密码本'}</Text></Pressable>

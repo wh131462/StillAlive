@@ -86,4 +86,5 @@ export interface StillAliveRepository {
   listReadingNoteSources(): Promise<ReadingNoteSource[]>;
   getReadingNoteSource(postId: string): Promise<ReadingNoteSource | null>;
   saveReadingNoteSource(source: ReadingNoteSource): Promise<void>;
+  deleteReadingNoteSource(postId: string): Promise<void>;
 }

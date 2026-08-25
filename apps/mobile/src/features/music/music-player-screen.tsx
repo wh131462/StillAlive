@@ -27,6 +27,7 @@ const TONEARM_ANIMATION_DURATION = 380;
 const TITLE_MARQUEE_GAP = 48;
 const TITLE_MARQUEE_SPEED = 32;
 const TITLE_MARQUEE_PAUSE = 1200;
+const CONTROL_ICON_SIZE = 24;
 
 export default function MusicPlayerScreen() {
   const router = useRouter();
@@ -98,7 +99,7 @@ export default function MusicPlayerScreen() {
             <View style={styles.controls}>
               <PlayerIcon accessibilityLabel={mode.label} icon={mode.icon} onPress={() => void player.setMode(nextPlaybackMode(player.mode))} />
               <PlayerIcon accessibilityLabel="上一首" icon={{ android: 'skip_previous', ios: 'backward.end.fill', web: 'skip_previous' }} large onPress={() => void player.previous()} />
-              <Pressable accessibilityLabel={player.playing ? '暂停' : '播放'} onPress={player.toggle} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><SymbolView name={{ android: player.playing ? 'pause' : 'play_arrow', ios: player.playing ? 'pause.fill' : 'play.fill', web: player.playing ? 'pause' : 'play_arrow' }} size={32} tintColor={colors.onLife} type="hierarchical" /></Pressable>
+              <Pressable accessibilityLabel={player.playing ? '暂停' : '播放'} onPress={player.toggle} style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}><SymbolView name={{ android: player.playing ? 'pause' : 'play_arrow', ios: player.playing ? 'pause.fill' : 'play.fill', web: player.playing ? 'pause' : 'play_arrow' }} size={CONTROL_ICON_SIZE} tintColor={colors.onLife} type="hierarchical" /></Pressable>
               <PlayerIcon accessibilityLabel="下一首" icon={{ android: 'skip_next', ios: 'forward.end.fill', web: 'skip_next' }} large onPress={() => void player.next()} />
               <PlayerIcon accessibilityLabel="播放队列" icon={{ android: 'queue_music', ios: 'list.bullet', web: 'queue_music' }} onPress={() => setQueueOpen(true)} />
             </View>
@@ -294,7 +295,7 @@ function RecordPlayer({ cover, playing, scale }: { cover?: Media | null; playing
 }
 
 function PlayerIcon({ accessibilityLabel, icon, large = false, onPress }: { accessibilityLabel: string; icon: ComponentProps<typeof SymbolView>['name']; large?: boolean; onPress(): void }) {
-  return <Pressable accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [large ? styles.transportButton : styles.utilityButton, pressed && styles.pressed]}><SymbolView name={icon} size={large ? 28 : 21} tintColor={large ? colors.ink : colors.inkSoft} type="hierarchical" /></Pressable>;
+  return <Pressable accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [large ? styles.transportButton : styles.utilityButton, pressed && styles.pressed]}><SymbolView name={icon} size={CONTROL_ICON_SIZE} tintColor={large ? colors.ink : colors.inkSoft} type="hierarchical" /></Pressable>;
 }
 
 function nextPlaybackMode(mode: MusicPlaybackMode): MusicPlaybackMode {

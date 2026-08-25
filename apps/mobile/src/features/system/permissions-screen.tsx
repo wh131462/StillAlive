@@ -34,7 +34,7 @@ const permissionGuides: PermissionGuide[] = [
     icon: 'photo.on.rectangle',
     title: '照片',
   },
-  { androidIcon: 'mic', description: '用于在日记中录制语音。开始录音时，系统会询问。', icon: 'mic', title: '麦克风' },
+  { androidIcon: 'mic', description: '用于在记录中录制语音。开始录音时，系统会询问。', icon: 'mic', title: '麦克风' },
 ];
 
 export default function PermissionsScreen() {

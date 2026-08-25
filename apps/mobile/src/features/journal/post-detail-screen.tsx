@@ -33,7 +33,7 @@ export default function PostDetailScreen() {
 
   const confirmDelete = () => {
     if (!post) return;
-    feedback.alert('删除这篇日记？', '正文、语音、人物关联和不再使用的本地媒体也会一并清理。', [
+    feedback.alert('删除这条记录？', '正文、语音、人物关联和不再使用的本地媒体也会一并清理。', [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
@@ -50,8 +50,8 @@ export default function PostDetailScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ToolPageHeader
         onBack={() => router.back()}
-        right={post ? <><ToolPageHeaderAction accessibilityLabel="编辑日记" onPress={() => router.push({ pathname: '/editor', params: { postId: post.id } })}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="删除日记" onPress={confirmDelete}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></ToolPageHeaderAction></> : undefined}
-        title="日记详情"
+        right={post ? <><ToolPageHeaderAction accessibilityLabel="编辑记录" onPress={() => router.push({ pathname: '/editor', params: { postId: post.id } })}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="删除记录" onPress={confirmDelete}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></ToolPageHeaderAction></> : undefined}
+        title="记录详情"
       />
 
       {!ready ? (
@@ -71,7 +71,7 @@ export default function PostDetailScreen() {
           {!contentReady ? <View pointerEvents="none" style={styles.loadingOverlay}><DetailLoading /></View> : null}
         </View>
       ) : (
-        <Text style={styles.missing}>这篇日记不存在或已被删除。</Text>
+        <Text style={styles.missing}>这条记录不存在或已被删除。</Text>
       )}
     </SafeAreaView>
   );
@@ -90,7 +90,7 @@ function DetailLoading() {
   }, [opacity]);
 
   return (
-    <ScrollView accessibilityLabel="正在加载日记详情" accessibilityLiveRegion="polite" contentContainerStyle={styles.loadingContent} scrollEnabled={false} style={styles.loadingScroll}>
+    <ScrollView accessibilityLabel="正在加载记录详情" accessibilityLiveRegion="polite" contentContainerStyle={styles.loadingContent} scrollEnabled={false} style={styles.loadingScroll}>
       <Animated.View style={{ opacity }}>
         <View style={[styles.skeleton, styles.skeletonLineLong]} />
         <View style={[styles.skeleton, styles.skeletonLineFull]} />
@@ -157,10 +157,10 @@ function PostMedia({ alt, item, onPress }: { alt: string; item: Media; onPress()
     return <ImageFallback aspectRatio={aspectRatio} onRetry={() => { setAttempt((value) => value + 1); setFailed(false); }} />;
   }
 
-  return <Pressable accessibilityLabel={alt || '预览日记媒体'} accessibilityRole="button" onPress={onPress} style={styles.postImagePressable}>
+  return <Pressable accessibilityLabel={alt || '预览记录媒体'} accessibilityRole="button" onPress={onPress} style={styles.postImagePressable}>
     <Image
       key={attempt}
-      accessibilityLabel={alt || '日记图片'}
+      accessibilityLabel={alt || '记录图片'}
       onError={() => setFailed(true)}
       resizeMode="contain"
       source={{ uri: item.localPath }}

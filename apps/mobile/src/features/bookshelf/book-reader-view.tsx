@@ -321,7 +321,7 @@ function cleanPdfMetadata(value: string): string | null {
 }
 
 function epubLocationEvent(location: Location, progression: number, section: Section | null, reflow: boolean): ReaderLocationEvent {
-  const safeProgression = Number.isFinite(progression) ? progression : location.start.percentage;
+  const safeProgression = normalizeEpubProgression(progression, location.start.percentage);
   return {
     locator: reflow ? createReflowLocator(location.start.cfi, location.start.href, section?.label ?? null, safeProgression) : createEpubLocator(location.start.cfi, location.start.href, section?.label ?? null, safeProgression),
     progression: safeProgression,
@@ -329,6 +329,11 @@ function epubLocationEvent(location: Location, progression: number, section: Sec
     chapterTitle: section?.label ?? null,
     pageCount: null,
   };
+}
+
+function normalizeEpubProgression(progression: number, fallback: number): number {
+  const value = Number.isFinite(progression) ? progression : fallback;
+  return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
 }
 
 function flattenToc(items: Toc, depth = 0): ReaderTocItem[] {
