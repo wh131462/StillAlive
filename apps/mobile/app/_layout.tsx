@@ -14,7 +14,7 @@ import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationRes
 import { applyColorTheme } from '../src/shared/theme/app-theme';
 import { AutomaticUpdateChecker } from '../src/features/system/automatic-update-checker';
 import { LaunchScreen } from '../src/features/onboarding/launch-screen';
-import { writePersistentLog } from '../src/infrastructure/platform/persistent-log';
+import { installGlobalErrorLogging, writePersistentError, writePersistentLog } from '../src/infrastructure/platform/persistent-log';
 import { MusicPlayerProvider } from '../src/features/music/music-player-state';
 import { FeedbackProvider } from '../src/application/feedback-provider';
 
@@ -23,6 +23,7 @@ export default function RootLayout() {
   const segments = useSegments();
   const route = segments.join('/') || 'index';
   useEffect(() => {
+    installGlobalErrorLogging();
     writePersistentLog('INFO', 'app.session.started', { platform: Platform.OS, development: __DEV__ });
     const subscription = AppState.addEventListener('change', (state) => writePersistentLog('INFO', 'app.state.changed', { state }));
     return () => {
@@ -33,14 +34,19 @@ export default function RootLayout() {
   useEffect(() => writePersistentLog('INFO', 'navigation.changed', { route }), [route]);
   useEffect(() => {
     const openNotification = (response: NotificationResponse | null) => {
-      const data = response?.notification.request.content.data;
-      const postId = data?.postId;
-      if (typeof postId === 'string' && postId) {
-        router.push({ pathname: '/post/[id]', params: { id: postId } });
-        return;
+      try {
+        const data = response?.notification.request.content.data;
+        writePersistentLog('INFO', 'notification.response.received', { data });
+        const postId = data?.postId;
+        if (typeof postId === 'string' && postId) {
+          router.push({ pathname: '/post/[id]', params: { id: postId } });
+          return;
+        }
+        const personId = data?.personId;
+        if (typeof personId === 'string' && personId) router.push({ pathname: '/person/[id]', params: { id: personId } });
+      } catch (cause) {
+        writePersistentError('notification.response.open.failed', cause);
       }
-      const personId = data?.personId;
-      if (typeof personId === 'string' && personId) router.push({ pathname: '/person/[id]', params: { id: personId } });
     };
     openNotification(getLastBirthdayNotificationResponse());
     const subscription = addBirthdayNotificationResponseListener(openNotification);
@@ -49,7 +55,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <FeedbackProvider>
-        <SQLiteProvider databaseName="still-alive.db" onInit={migrateDatabase}>
+        <SQLiteProvider databaseName="still-alive.db" onInit={initializeDatabase}>
           <AppStateProvider>
             <ReaderProvider>
               <MusicPlayerProvider>
@@ -61,6 +67,17 @@ export default function RootLayout() {
       </FeedbackProvider>
     </GestureHandlerRootView>
   );
+}
+
+async function initializeDatabase(database: Parameters<typeof migrateDatabase>[0]): Promise<void> {
+  writePersistentLog('INFO', 'database.migration.started');
+  try {
+    await migrateDatabase(database);
+    writePersistentLog('INFO', 'database.migration.finished');
+  } catch (cause) {
+    writePersistentError('database.migration.failed', cause);
+    throw cause;
+  }
 }
 
 function ThemedNavigator() {

@@ -87,7 +87,7 @@ export async function checkForAndroidUpdate(): Promise<AndroidUpdateCheckResult>
       try {
         return { manifest: await fetchAndroidUpdateManifest(source), source };
       } catch (cause) {
-        writePersistentLog('WARN', 'update.check.source-failed', { error: errorMessage(cause), source: source.name });
+        writePersistentError('update.check.source-failed', cause, { source: source.name, manifestUrl: source.manifestUrl });
         return { cause, source };
       }
     }));
@@ -143,7 +143,7 @@ export async function downloadAndInstallAndroidUpdate(
       } catch (cause) {
         if (options.signal?.aborted || (cause instanceof Error && cause.name === 'AbortError')) throw cause;
         lastCause = cause;
-        writePersistentLog('WARN', 'update.download.source-failed', { apkUrl, error: errorMessage(cause), versionCode: manifest.versionCode });
+        writePersistentError('update.download.source-failed', cause, { apkUrl, versionCode: manifest.versionCode });
         await deleteUpdateFiles(destination, marker, partialMarker);
       }
     }
@@ -313,10 +313,6 @@ function assertHttpsUrl(value: string, label: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function errorMessage(cause: unknown) {
-  return cause instanceof Error ? cause.message : String(cause);
 }
 
 async function getCachedUpdateContentUri(destination: string, marker: string, manifest: AndroidUpdateManifest) {

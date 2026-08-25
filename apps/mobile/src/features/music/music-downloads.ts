@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import type { Media } from '@still-alive/types';
+import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 
 const LAST_DOWNLOAD_DIRECTORY_KEY = 'music.last-download-directory';
 
@@ -9,12 +10,17 @@ export interface MusicDownloadResult {
 }
 
 export async function saveMusicCopy(media: Media, title: string): Promise<MusicDownloadResult | null> {
+  writePersistentLog('INFO', 'music.download.started', { mediaId: media.id, title, localPath: media.localPath });
   const lastDirectoryUri = await SecureStore.getItemAsync(LAST_DOWNLOAD_DIRECTORY_KEY);
   let directory: Directory;
   try {
     directory = await Directory.pickDirectoryAsync(lastDirectoryUri ?? undefined);
   } catch (cause) {
-    if (isPickerCancellation(cause)) return null;
+    if (isPickerCancellation(cause)) {
+      writePersistentLog('INFO', 'music.download.pick.cancelled', { mediaId: media.id, title });
+      return null;
+    }
+    writePersistentError('music.download.pick.failed', cause, { mediaId: media.id, title });
     throw cause;
   }
 
@@ -32,8 +38,11 @@ export async function saveMusicCopy(media: Media, title: string): Promise<MusicD
     destination = findFile(directory, fileName);
     if (!destination?.exists || destination.size <= 0) throw new Error('文件复制后无法读取');
     await SecureStore.setItemAsync(LAST_DOWNLOAD_DIRECTORY_KEY, directory.uri);
-    return { fileName: destination.name || fileName };
+    const result = { fileName: destination.name || fileName };
+    writePersistentLog('INFO', 'music.download.finished', { mediaId: media.id, title, fileName: result.fileName, directory: directory.uri });
+    return result;
   } catch (cause) {
+    writePersistentError('music.download.failed', cause, { mediaId: media.id, title, fileName, directory: directory.uri });
     try {
       const incompleteFile = destination ?? findFile(directory, fileName);
       if (incompleteFile?.exists) incompleteFile.delete();

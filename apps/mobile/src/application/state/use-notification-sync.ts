@@ -6,6 +6,7 @@ import { reconcileMemoryNotifications } from '../../features/home/memory-notific
 import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter } from '../../infrastructure/notifications/expo-notifications';
 import type { AppPreferences } from '../../infrastructure/database/database-models';
 import type { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
+import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 
 type NotificationPermission = 'granted' | 'denied' | 'undetermined';
 
@@ -17,12 +18,15 @@ export function useNotificationSync(
   const queueRef = useRef(Promise.resolve());
 
   const enqueue = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
-    const task = queueRef.current.catch(() => undefined).then(operation);
+    const task = queueRef.current.catch((cause) => {
+      writePersistentError('notifications.sync.queue.previous-failed', cause);
+    }).then(operation);
     queueRef.current = task.then(() => undefined, () => undefined);
     return task;
   }, []);
 
   const syncBirthdayNotifications = useCallback((people: Person[], preferences: AppPreferences, requestPermission = false) => enqueue(async () => {
+    writePersistentLog('INFO', 'notifications.birthday.sync.started', { people: people.length, enabled: preferences.birthdayNotificationsEnabled, requestPermission });
     try {
       await reconcileBirthdayNotifications(repository, expoBirthdayNotificationAdapter, people, preferences.birthdayNotificationsEnabled, preferences.birthdayReminderHour, preferences.birthdayReminderMinute, requestPermission);
       const permission = await expoBirthdayNotificationAdapter.getPermission();
@@ -32,6 +36,7 @@ export function useNotificationSync(
         setPreferences((current) => ({ ...current, birthdayNotificationError: null }));
       }
     } catch (cause) {
+      writePersistentError('notifications.birthday.sync.failed', cause, { people: people.length, enabled: preferences.birthdayNotificationsEnabled, requestPermission });
       const message = cause instanceof Error ? cause.message : '生日通知调度失败';
       setNotificationPermission(await expoBirthdayNotificationAdapter.getPermission());
       await repository.updatePreferences({ birthdayNotificationError: message });
@@ -41,6 +46,7 @@ export function useNotificationSync(
   }), [enqueue, repository, setNotificationPermission, setPreferences]);
 
   const syncMemoryNotifications = useCallback((posts: Post[], preferences: AppPreferences, requestPermission = false) => enqueue(async () => {
+    writePersistentLog('INFO', 'notifications.memory.sync.started', { posts: posts.length, enabled: preferences.memoryNotificationsEnabled, requestPermission });
     try {
       await reconcileMemoryNotifications(repository, expoMemoryNotificationAdapter, posts, preferences.memoryNotificationsEnabled, requestPermission);
       setNotificationPermission(await expoMemoryNotificationAdapter.getPermission());
@@ -49,6 +55,7 @@ export function useNotificationSync(
         setPreferences((current) => ({ ...current, memoryNotificationError: null }));
       }
     } catch (cause) {
+      writePersistentError('notifications.memory.sync.failed', cause, { posts: posts.length, enabled: preferences.memoryNotificationsEnabled, requestPermission });
       const message = cause instanceof Error ? cause.message : '回忆通知调度失败';
       setNotificationPermission(await expoMemoryNotificationAdapter.getPermission());
       await repository.updatePreferences({ memoryNotificationError: message });

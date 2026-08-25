@@ -1,42 +1,40 @@
 import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import * as Sharing from 'expo-sharing';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { AndroidUpdateDialog, type AndroidUpdateNotice } from './android-update-dialog';
 import { checkForAndroidUpdate, getCurrentAndroidVersion, type AndroidUpdateManifest } from './android-update';
-import { getPersistentLogFile, writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 
 export default function AboutScreen() {
   const router = useRouter();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateManifest, setUpdateManifest] = useState<AndroidUpdateManifest | null>(null);
   const [updateNotice, setUpdateNotice] = useState<AndroidUpdateNotice | null>(null);
-  const [sharingLog, setSharingLog] = useState(false);
+  const logoTapCountRef = useRef(0);
+  const logoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentVersion = getCurrentAndroidVersion();
 
-  const shareLog = async () => {
-    setSharingLog(true);
-    try {
-      writePersistentLog('INFO', 'diagnostic.share.requested', { platform: Platform.OS, versionCode: currentVersion.versionCode, versionName: currentVersion.versionName });
-      if (!await Sharing.isAvailableAsync()) {
-        feedback.alert('当前设备不支持分享', '诊断日志已保存在应用目录中，但无法打开系统分享面板。');
-        return;
-      }
-      await Sharing.shareAsync(getPersistentLogFile().uri, { dialogTitle: '分享“仍在”诊断日志', mimeType: 'text/plain', UTI: 'public.plain-text' });
-      writePersistentLog('INFO', 'diagnostic.share.finished');
-    } catch (cause) {
-      writePersistentError('diagnostic.share.failed', cause);
-      feedback.alert('分享日志失败', errorMessage(cause));
-    } finally {
-      setSharingLog(false);
+  useEffect(() => () => {
+    if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
+  }, []);
+
+  const handleLogoPress = () => {
+    logoTapCountRef.current += 1;
+    if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
+    if (logoTapCountRef.current >= 3) {
+      logoTapCountRef.current = 0;
+      router.push('/debug' as RelativePathString);
+      return;
     }
+    logoTapTimerRef.current = setTimeout(() => {
+      logoTapCountRef.current = 0;
+    }, 900);
   };
 
   const checkUpdate = async () => {
@@ -65,7 +63,7 @@ export default function AboutScreen() {
     <ToolPageHeader onBack={() => router.back()} title="关于" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.hero}>
-        <Pressable accessibilityLabel="仍在 Logo" accessibilityRole="button" onPress={() => router.push('/debug' as RelativePathString)} style={({ pressed }) => [styles.logoButton, pressed && styles.pressed]}>
+        <Pressable accessibilityLabel="仍在 Logo，连续点击三次进入开发者模式" accessibilityRole="button" onPress={handleLogoPress} style={({ pressed }) => [styles.logoButton, pressed && styles.pressed]}>
           <Image accessibilityLabel="仍在 Logo" source={require('../../../assets/icon.png')} style={styles.logo} />
         </Pressable>
         <Text style={styles.name}>仍在 Still Alive</Text>
@@ -76,7 +74,7 @@ export default function AboutScreen() {
       <View style={styles.aboutCard}>
         <Text style={styles.aboutEyebrow}>ABOUT STILL ALIVE</Text>
         <Text style={styles.aboutTitle}>记录当下，也能回望过去</Text>
-        <Text style={styles.aboutText}>“仍在”是一款面向个人的生活记录应用。你可以用打卡、日记、人物和相册，留下值得记住的日子。</Text>
+        <Text style={styles.aboutText}>“仍在”是一款面向个人的生活记录应用。你可以用打卡、记录、人物和相册，留下值得记住的日子。</Text>
       </View>
       <View style={styles.links}>
         <Pressable accessibilityRole="button" disabled={checkingUpdate} onPress={() => void checkUpdate()} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
@@ -87,16 +85,6 @@ export default function AboutScreen() {
           </View>
           {checkingUpdate ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />}
         </Pressable>
-        <View style={styles.separator} />
-        <Pressable accessibilityRole="button" disabled={sharingLog} onPress={() => void shareLog()} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
-          <View style={styles.linkIcon}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
-          <View style={styles.linkCopy}>
-            <Text style={styles.linkText}>{sharingLog ? '正在准备日志…' : '分享诊断日志'}</Text>
-            <Text style={styles.linkHint}>仅包含运行状态，不包含你的记录内容</Text>
-          </View>
-          <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
-        </Pressable>
-        <View style={styles.separator} />
         <Pressable accessibilityRole="button" onPress={() => router.push('/privacy-policy' as RelativePathString)} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
           <View style={styles.linkIcon}><SymbolView name={{ android: 'shield', ios: 'checkmark.shield', web: 'shield' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
           <View style={styles.linkCopy}><Text style={styles.linkText}>隐私协议</Text></View>
@@ -106,6 +94,10 @@ export default function AboutScreen() {
     </ScrollView>
     <AndroidUpdateDialog checking={checkingUpdate} manifest={updateManifest} notice={updateNotice} onDismiss={() => { setUpdateManifest(null); setUpdateNotice(null); }} />
   </SafeAreaView>;
+}
+
+function errorMessage(cause: unknown) {
+  return cause instanceof Error ? cause.message : '请稍后重试。';
 }
 
 const styles = createThemedStyles(() => ({
@@ -130,7 +122,3 @@ const styles = createThemedStyles(() => ({
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 64, backgroundColor: colors.line },
   pressed: { opacity: 0.76, transform: [{ scale: 0.97 }] },
 }));
-
-function errorMessage(cause: unknown) {
-  return cause instanceof Error ? cause.message : '请稍后重试。';
-}

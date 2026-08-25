@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as LegacyFileSystem from 'expo-file-system/legacy';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import type { Media } from '@still-alive/types';
+import { writePersistentError, writePersistentLog } from '../platform/persistent-log';
 
 export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media> {
   return persistPickedMedia(asset);
@@ -9,6 +10,7 @@ export async function persistPickedImage(asset: ImagePickerAsset): Promise<Media
 
 export async function persistPickedMedia(asset: ImagePickerAsset): Promise<Media> {
   const id = createLocalId('media');
+  writePersistentLog('INFO', 'media.persist.picked.started', { id, uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType, type: asset.type });
   const extension = fileExtension(asset);
   const documentDirectory = LegacyFileSystem.documentDirectory;
   if (!documentDirectory) throw new Error('应用数据目录不可用');
@@ -20,7 +22,7 @@ export async function persistPickedMedia(asset: ImagePickerAsset): Promise<Media
     await LegacyFileSystem.copyAsync({ from: asset.uri, to: destinationUri });
     const info = await LegacyFileSystem.getInfoAsync(destinationUri, { md5: true });
     if (!info.exists || info.isDirectory || info.size <= 0) throw new Error('媒体文件为空');
-    return {
+    const media: Media = {
       id,
       localPath: destinationUri,
       mimeType: asset.mimeType ?? mimeTypeForExtension(extension, asset.type),
@@ -32,14 +34,18 @@ export async function persistPickedMedia(asset: ImagePickerAsset): Promise<Media
       originalName: asset.fileName ?? null,
       sizeBytes: info.size,
     };
+    writePersistentLog('INFO', 'media.persist.picked.finished', { id: media.id, sizeBytes: media.sizeBytes, kind: media.kind });
+    return media;
   } catch (cause) {
-    await LegacyFileSystem.deleteAsync(destinationUri, { idempotent: true }).catch(() => undefined);
+    writePersistentError('media.persist.picked.failed', cause, { id, uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
+    await LegacyFileSystem.deleteAsync(destinationUri, { idempotent: true }).catch((cleanupCause) => writePersistentError('media.persist.picked.rollback.failed', cleanupCause, { id, destinationUri }));
     throw cause;
   }
 }
 
 export async function persistVoiceRecording(uri: string): Promise<Media> {
   const id = createLocalId('media');
+  writePersistentLog('INFO', 'media.persist.voice.started', { id, uri });
   const directory = new Directory(Paths.document, 'media');
   directory.create({ idempotent: true, intermediates: true });
   const source = new File(uri);
@@ -48,7 +54,7 @@ export async function persistVoiceRecording(uri: string): Promise<Media> {
   try {
     await source.move(destination);
     if (!destination.exists || destination.size <= 0) throw new Error('录音文件为空');
-    return {
+    const media: Media = {
       id,
       localPath: destination.uri,
       mimeType: mimeTypeForAudioExtension(extension),
@@ -56,8 +62,12 @@ export async function persistVoiceRecording(uri: string): Promise<Media> {
       height: null,
       checksum: destination.md5 ?? '',
       createdAt: new Date().toISOString(),
+      sizeBytes: destination.size,
     };
+    writePersistentLog('INFO', 'media.persist.voice.finished', { id: media.id, sizeBytes: media.sizeBytes, localPath: media.localPath });
+    return media;
   } catch (cause) {
+    writePersistentError('media.persist.voice.failed', cause, { id, uri });
     if (destination.exists) destination.delete();
     throw cause;
   }
@@ -65,6 +75,7 @@ export async function persistVoiceRecording(uri: string): Promise<Media> {
 
 export async function persistAlbumMedia(personId: string | null, albumId: string, asset: ImagePickerAsset): Promise<Media> {
   const id = createLocalId('media');
+  writePersistentLog('INFO', 'media.persist.album.started', { id, personId, albumId, uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
   const targetDirectory = personId
     ? new Directory(Paths.document, 'people', personId, 'albums', albumId)
     : new Directory(Paths.document, 'self', 'albums', albumId);
@@ -78,7 +89,7 @@ export async function persistAlbumMedia(personId: string | null, albumId: string
     await new File(asset.uri).copy(temporary);
     if (!temporary.exists || temporary.size <= 0) throw new Error('媒体文件为空');
     await temporary.move(destination);
-    return {
+    const media: Media = {
       id,
       localPath: destination.uri,
       mimeType: asset.mimeType ?? mimeTypeForExtension(extension, asset.type),
@@ -90,7 +101,10 @@ export async function persistAlbumMedia(personId: string | null, albumId: string
       originalName: asset.fileName ?? null,
       sizeBytes: destination.size,
     };
+    writePersistentLog('INFO', 'media.persist.album.finished', { id: media.id, sizeBytes: media.sizeBytes, localPath: media.localPath });
+    return media;
   } catch (cause) {
+    writePersistentError('media.persist.album.failed', cause, { id, personId, albumId, uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
     if (temporary.exists) temporary.delete();
     if (destination.exists) destination.delete();
     throw cause;

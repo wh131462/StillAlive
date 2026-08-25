@@ -4,6 +4,7 @@ import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSche
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
 import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
 import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapMedia, mapMusicTrack, mapPerson, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
+import { writePersistentError } from '../platform/persistent-log';
 
 function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
   if (mimeType.startsWith('audio/')) return 'audio';
@@ -17,9 +18,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
   private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
-    const task = this.writeQueue.catch(() => undefined).then(operation);
-    this.writeQueue = task.then(() => undefined, () => undefined);
-    return task;
+    const task = this.writeQueue.catch((cause) => {
+      writePersistentError('database.write-queue.previous-failed', cause);
+    }).then(operation);
+    const observedTask = task.catch((cause) => {
+      writePersistentError('database.write.failed', cause);
+      throw cause;
+    });
+    this.writeQueue = observedTask.then(() => undefined, () => undefined);
+    return observedTask;
   }
 
   private withTransaction<T>(operation: (transaction: SQLiteDatabase) => Promise<T>): Promise<T> {
@@ -767,6 +774,10 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
        ON CONFLICT(post_id) DO UPDATE SET book_id = excluded.book_id, excerpt_ids_json = excluded.excerpt_ids_json, quote_snapshots_json = excluded.quote_snapshots_json`,
       source.postId, source.bookId, JSON.stringify(source.excerptIds), JSON.stringify(source.quoteSnapshots),
     ));
+  }
+
+  async deleteReadingNoteSource(postId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM reading_note_sources WHERE post_id = ?', postId));
   }
 
   async listMemoryNotificationSchedules(): Promise<MemoryNotificationSchedule[]> {

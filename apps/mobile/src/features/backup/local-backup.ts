@@ -11,6 +11,7 @@ import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../jo
 import { unlockPasswordVault } from '../vault/password-vault-crypto';
 import { parsePasswordVaultBytes, passwordVaultExists, readPasswordVaultBytes, readPasswordVaultEnvelope, replacePasswordVaultEnvelope } from '../vault/password-vault-storage';
 import { logPasswordVaultDiagnostic, passwordVaultErrorKind } from '../vault/password-vault-logging';
+import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 
 const APP_VERSION = '0.1.0';
 const MAX_BACKUP_ARCHIVE_BYTES = 4 * 1024 * 1024 * 1024;
@@ -46,6 +47,7 @@ interface MaterializeBackupOptions {
 }
 
 export async function createBackupArchive(snapshot: BackupSnapshot): Promise<BackupArchive> {
+  writePersistentLog('INFO', 'backup.export.started', { posts: snapshot.posts.length, people: snapshot.people.length, media: snapshot.media.length, books: snapshot.books?.length ?? 0, musicTracks: snapshot.musicTracks?.length ?? 0 });
   const portableMedia: BackupSnapshot['media'] = [];
   const mediaSources: Array<{ path: string; source: File }> = [];
 
@@ -95,8 +97,10 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
     const manifest: BackupManifest = { schemaVersion: BACKUP_SCHEMA_VERSION, exportedAt, appVersion: APP_VERSION, files };
     addBufferedZipEntry(archive, 'manifest.json', strToU8(JSON.stringify(manifest, null, 2)), true);
     archive.end();
+    writePersistentLog('INFO', 'backup.export.finished', { uri: output.uri, size: archiveSize, files: files.length });
     return { uri: output.uri, size: archiveSize };
   } catch (cause) {
+    writePersistentError('backup.export.failed', cause, { posts: snapshot.posts.length, people: snapshot.people.length, media: snapshot.media.length });
     try { outputHandle?.close(); } catch { /* preserve the export failure */ }
     outputHandle = null;
     try { if (output.exists) output.delete(); } catch { /* preserve the export failure */ }
@@ -137,6 +141,7 @@ function streamMediaZipEntry(archive: Zip, path: string, source: File): string {
 }
 
 export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
+  writePersistentLog('INFO', 'backup.parse.started', { uri });
   logPasswordVaultDiagnostic('backup.parse.start');
   const archive = new File(uri);
   if (!archive.exists || !Number.isSafeInteger(archive.size) || archive.size <= 0 || archive.size > MAX_BACKUP_ARCHIVE_BYTES) throw new Error('备份文件过大或无效，无法安全读取');
@@ -249,8 +254,10 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
       if (!storedFiles[path]) throw new Error(`备份媒体缺失：${path}`);
       mediaFiles[path] = storedFiles[path];
     }
+    writePersistentLog('INFO', 'backup.parse.finished', { uri, archiveBytes: archive.size, entries: entryCount, media: snapshot.media.length, posts: snapshot.posts.length, people: snapshot.people.length, hasVault: Boolean(vaultEnvelope) });
     return { exportedAt: manifest.exportedAt, snapshot, entries, mediaFiles, vaultEnvelope, temporaryDirectory: temporaryDirectory.uri };
   } catch (cause) {
+    writePersistentError('backup.parse.failed', cause, { uri, archiveBytes: archive.size, entries: entryCount, expandedBytes });
     for (const handle of openHandles) {
       try { handle.close(); } catch { /* preserve the parse failure */ }
     }
@@ -293,6 +300,7 @@ export async function restorePasswordVaultFromBackup(parsed: ParsedBackup, backu
     });
     logPasswordVaultDiagnostic('backup.restore-vault.success');
   } catch (cause) {
+    writePersistentError('backup.restore-vault.failed', cause, { hasCurrentVault: passwordVaultExists() });
     logPasswordVaultDiagnostic('backup.restore-vault.failed', { error: passwordVaultErrorKind(cause) });
     throw cause;
   } finally {
@@ -452,6 +460,7 @@ export function materializeBackupMedia(parsed: ParsedBackup, options: Materializ
     });
     return { snapshot: { ...snapshot, media: restoredMedia }, createdFiles, createdDirectories };
   } catch (cause) {
+    writePersistentError('backup.materialize-media.failed', cause, { media: snapshot.media.length, createdFiles: createdFiles.length });
     cleanupMaterializedFiles(createdFiles, createdDirectories);
     throw cause;
   }

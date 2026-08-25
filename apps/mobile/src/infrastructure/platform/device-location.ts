@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
+import { writePersistentError, writePersistentLog } from './persistent-log';
 
 export interface ResolvedDeviceLocation {
   address: string;
@@ -13,6 +14,7 @@ let resolvedLocationCache: { resolvedAt: number; value: ResolvedDeviceLocation }
 const RESOLVED_LOCATION_MAX_AGE_MS = 5 * 60 * 1000;
 
 export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
+  writePersistentLog('INFO', 'location.resolve.started', { platform: Platform.OS, cached: Boolean(resolvedLocationCache) });
   if (Platform.OS === 'web') throw new Error('网页端暂不支持记录实际地址');
 
   if (!resolveLocationTask) {
@@ -22,7 +24,13 @@ export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
       if (resolveLocationTask === task) resolveLocationTask = null;
     }).catch(() => undefined);
   }
-  return resolveLocationTask;
+  return resolveLocationTask.then((value) => {
+    writePersistentLog('INFO', 'location.resolve.finished', { address: value.address, city: value.city });
+    return value;
+  }, (cause) => {
+    writePersistentError('location.resolve.failed', cause);
+    throw cause;
+  });
 }
 
 async function resolveDeviceLocationOnce(): Promise<ResolvedDeviceLocation> {

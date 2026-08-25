@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import type { BookFormat, Media } from '@still-alive/types';
+import { writePersistentError, writePersistentLog } from '../platform/persistent-log';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg', '.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
 const ENCRYPTED_AUDIO_EXTENSIONS = new Set(['.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
@@ -114,6 +115,7 @@ export function bookFormatFromName(name: string): BookFormat | null {
 
 async function copyLocalAssets(kind: ImportedAssetKind, sources: LocalAssetSource[]): Promise<Media[]> {
   const destinations: File[] = [];
+  writePersistentLog('INFO', 'asset.import.started', { kind, count: sources.length, names: sources.map((source) => source.name) });
   try {
     const directory = new Directory(Paths.document, kind === 'audio' ? 'media' : 'books');
     directory.create({ idempotent: true, intermediates: true });
@@ -153,8 +155,10 @@ async function copyLocalAssets(kind: ImportedAssetKind, sources: LocalAssetSourc
         sizeBytes: storedDestination.size,
       });
     }
+    writePersistentLog('INFO', 'asset.import.finished', { kind, count: imported.length, bytes: imported.reduce((total, item) => total + (item.sizeBytes ?? 0), 0) });
     return imported;
   } catch (cause) {
+    writePersistentError('asset.import.failed', cause, { kind, count: sources.length, names: sources.map((source) => source.name) });
     for (const destination of destinations) if (destination.exists) destination.delete();
     throw cause;
   }
@@ -271,7 +275,11 @@ export async function pickLocalBooksFromDirectory(): Promise<Media[]> {
     if (!files.length) throw new Error('所选目录中没有可导入的书籍');
     return copyLocalAssets('book', files.map((file) => ({ file, name: file.name, mimeType: file.type || null })));
   } catch (cause) {
-    if (isPickerCancellation(cause)) return [];
+    if (isPickerCancellation(cause)) {
+      writePersistentLog('INFO', 'asset.directory.pick.cancelled', { kind: 'book' });
+      return [];
+    }
+    writePersistentError('asset.directory.pick.failed', cause, { kind: 'book' });
     throw cause;
   } finally {
     assetPickerInProgress = false;

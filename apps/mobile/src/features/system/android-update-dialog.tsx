@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 import {
   downloadAndInstallAndroidUpdate,
   getCurrentAndroidVersion,
@@ -68,6 +69,7 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
 
   const startDownload = async () => {
     if (!manifest) return;
+    writePersistentLog('INFO', 'update.dialog.download.requested', { versionCode: manifest.versionCode, versionName: manifest.versionName, simulateDownload });
     const controller = new AbortController();
     abortController.current = controller;
     speedSample.current = { bytes: 0, time: 0 };
@@ -86,6 +88,7 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
       else onDismiss();
     } catch (cause) {
       if (controller.signal.aborted) return;
+      writePersistentError('update.dialog.download.failed', cause, { versionCode: manifest.versionCode, versionName: manifest.versionName });
       setError(errorMessage(cause));
       setPhase('error');
     } finally {
@@ -99,6 +102,7 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
       const result = await installDownloadedAndroidUpdate(contentUri);
       if (result === 'started') onDismiss();
     } catch (cause) {
+      writePersistentError('update.dialog.install.failed', cause, { versionCode: manifest?.versionCode, versionName: manifest?.versionName });
       setError(errorMessage(cause));
       setPhase('error');
     }

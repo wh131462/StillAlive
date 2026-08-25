@@ -1,9 +1,11 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { writePersistentLog } from '../platform/persistent-log';
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const currentVersion = result?.user_version ?? 0;
+  writePersistentLog('INFO', 'database.migration.version.detected', { currentVersion });
   if (currentVersion < 1) await db.execAsync(`
     CREATE TABLE IF NOT EXISTS checkins (
       id TEXT PRIMARY KEY NOT NULL,
@@ -446,6 +448,8 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     ALTER TABLE music_tracks ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0;
     PRAGMA user_version = 27;
   `);
+  const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }
 
 async function migrateLegacyAudioColumns(db: SQLiteDatabase): Promise<void> {

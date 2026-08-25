@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import { Linking, Platform } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import type { FeedbackButton } from '../../shared/feedback';
+import { writePersistentError, writePersistentLog } from './persistent-log';
 
 type AppPermission = 'camera' | 'location' | 'microphone' | 'photos';
 
@@ -21,6 +22,7 @@ const permissionCopy: Record<AppPermission, { message: string; title: string }> 
 };
 
 export async function ensureAppPermission(permission: AppPermission, extraActions: FeedbackButton[] = []): Promise<boolean> {
+  writePersistentLog('INFO', 'permission.check.started', { permission });
   // Android 和 Web 使用系统照片选择器，不需要申请整个照片库访问权限。
   if (permission === 'photos' && Platform.OS !== 'ios') return true;
 
@@ -32,10 +34,16 @@ export async function ensureAppPermission(permission: AppPermission, extraAction
       response = await handler.request();
     }
   } catch (cause) {
+    writePersistentError('permission.check.failed', cause, { permission });
     feedback.alert('权限检查失败', cause instanceof Error ? cause.message : '请稍后重试。');
     return false;
   }
-  if (response.granted) return true;
+  if (response.granted) {
+    writePersistentLog('INFO', 'permission.check.granted', { permission });
+    return true;
+  }
+
+  writePersistentLog('WARN', 'permission.check.denied', { permission, status: response.status, canAskAgain: response.canAskAgain });
 
   const copy = permissionCopy[permission];
   feedback.alert(copy.title, copy.message, [

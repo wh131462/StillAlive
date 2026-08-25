@@ -22,6 +22,7 @@ import type { AppStateValue } from './app-state.types';
 import { DEFAULT_PREFERENCES } from './default-preferences';
 import { normalizeTagName, validatePost } from './app-state-validation';
 import { useNotificationSync } from './use-notification-sync';
+import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 
 const AppStateContext = createContext<AppStateValue | null>(null);
 
@@ -66,13 +67,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [repository]);
 
   useEffect(() => {
-    void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch(() => undefined);
+    void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch((cause) => writePersistentError('notifications.channels.initialize.failed', cause));
     const subscription = NativeAppState.addEventListener('change', (state) => {
+      writePersistentLog('INFO', 'app.state.changed', { state, databaseReady: databaseReadyRef.current });
       if (state === 'active' && databaseReadyRef.current) {
         const activeToday = toDayKey(new Date());
         setToday(activeToday);
         void (async () => {
-          await cleanupExpiredProfileCollectionRequests().catch(() => undefined);
+          await cleanupExpiredProfileCollectionRequests().catch((cause) => writePersistentError('profile-collection.expired.cleanup.failed', cause));
           const [checkIn, storedCheckIns, storedPeople, storedPosts, storedPreferences] = await Promise.all([
             repository.getCheckIn(activeToday),
             repository.listCheckIns(),
@@ -83,11 +85,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           setTodayCheckIn(checkIn);
           setCheckIns(storedCheckIns);
           setPosts(storedPosts);
-          await syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
-          await syncMemoryNotifications(storedPosts, storedPreferences).catch(() => undefined);
-          if (storedPreferences.persistentNotificationEnabled) await refreshPersistentNotification().catch(() => undefined);
+          await syncBirthdayNotifications(storedPeople, storedPreferences).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
+          await syncMemoryNotifications(storedPosts, storedPreferences).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
+          if (storedPreferences.persistentNotificationEnabled) await refreshPersistentNotification().catch((cause) => writePersistentError('notifications.persistent.refresh.background-failed', cause));
           setPersistentNotificationRunning((await getPersistentNotificationStatus()).running);
-        })().catch(() => undefined);
+        })().catch((cause) => writePersistentError('app.resume.refresh.failed', cause));
       }
     });
     return () => subscription.remove();
@@ -98,7 +100,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     databaseReadyRef.current = false;
     setReady(false);
     void (async () => {
-      await cleanupExpiredProfileCollectionRequests().catch(() => undefined);
+      await cleanupExpiredProfileCollectionRequests().catch((cause) => writePersistentError('profile-collection.expired.cleanup.failed', cause));
       const checkIn = await repository.getCheckIn(today);
       const storedCheckIns = await repository.listCheckIns();
       const storedPosts = await repository.listPosts();
@@ -145,7 +147,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setBooks(storedBooks);
         setBookExcerpts(storedBookExcerpts);
         setReadingNoteSources(storedReadingNoteSources);
-        try { cleanupOrphanedAlbumFiles(storedMedia); } catch { /* 不阻塞主数据加载 */ }
+        try { cleanupOrphanedAlbumFiles(storedMedia); } catch (cause) { writePersistentError('media.orphan.cleanup.failed', cause); }
         setHomeMemory(memory);
         const hasExistingContent = storedCheckIns.length > 0 || storedPosts.length > 0;
         const effectivePreferences = hasExistingContent && !storedPreferences.onboardingCompleted
@@ -153,13 +155,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           : storedPreferences;
         setPreferences(effectivePreferences);
         void (async () => {
-          await syncBirthdayNotifications(storedPeople, effectivePreferences).catch(() => undefined);
-          await syncMemoryNotifications(storedPosts, effectivePreferences).catch(() => undefined);
-          if (memory) await repository.markMemoryShown(memory).catch(() => undefined);
-          if (effectivePreferences.onboardingCompleted !== storedPreferences.onboardingCompleted) await repository.updatePreferences({ onboardingCompleted: true }).catch(() => undefined);
+          await syncBirthdayNotifications(storedPeople, effectivePreferences).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
+          await syncMemoryNotifications(storedPosts, effectivePreferences).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
+          if (memory) await repository.markMemoryShown(memory).catch((cause) => writePersistentError('memory.mark-shown.failed', cause, { postId: memory.post.id }));
+          if (effectivePreferences.onboardingCompleted !== storedPreferences.onboardingCompleted) await repository.updatePreferences({ onboardingCompleted: true }).catch((cause) => writePersistentError('preferences.onboarding.migrate.failed', cause));
           setReady(true);
           databaseReadyRef.current = true;
-        })().catch(() => {
+        })().catch((cause) => {
+          writePersistentError('app.data.post-load.failed', cause);
           setReady(true);
           databaseReadyRef.current = true;
         });
@@ -178,12 +181,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     void setPersistentNotificationEnabled(preferences.persistentNotificationEnabled)
       .then(() => getPersistentNotificationStatus())
       .then((status) => setPersistentNotificationRunning(status.running))
-      .catch(() => setPersistentNotificationRunning(false));
+      .catch((cause) => {
+        writePersistentError('notifications.persistent.enable.failed', cause, { enabled: preferences.persistentNotificationEnabled });
+        setPersistentNotificationRunning(false);
+      });
   }, [preferences.persistentNotificationEnabled, ready]);
 
   useEffect(() => {
     if (!ready || !preferences.persistentNotificationEnabled) return;
-    void refreshPersistentNotification().catch(() => undefined);
+    void refreshPersistentNotification().catch((cause) => writePersistentError('notifications.persistent.refresh.background-failed', cause));
   }, [checkIns, posts, preferences.persistentNotificationEnabled, ready, today]);
 
   const checkInToday = useCallback(async () => {
@@ -216,8 +222,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPosts(storedPosts);
     const memory = await repository.getHomeMemory(today);
     setHomeMemory(memory);
-    if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
-    void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch(() => undefined);
+    if (memory) void repository.markMemoryShown(memory).catch((cause) => writePersistentError('memory.mark-shown.failed', cause, { postId: memory.post.id }));
+    void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
     return post;
   }, [repository, syncMemoryNotifications, today]);
 
@@ -243,7 +249,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const updatePost = useCallback(async (postId: string, bodyMarkdown: string, personIds: string[] = [], locationName: string | null = null) => {
     validatePost(bodyMarkdown, personIds, locationName);
     const existing = posts.find((post) => post.id === postId);
-    if (!existing) throw new Error('要编辑的日记不存在');
+    if (!existing) throw new Error('要编辑的记录不存在');
     const nextPost = { ...existing, bodyMarkdown, locationName, updatedAt: new Date().toISOString() };
     await repository.updatePost(nextPost, personIds);
     const storedPosts = await repository.listPosts();
@@ -263,7 +269,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setReadingNoteSources((current) => current.filter((source) => source.postId !== postId));
     setHomeMemory((current) => current?.post.id === postId ? null : current);
     await cleanupUnreferencedMedia(extractEmbeddedMediaIds(existing.bodyMarkdown));
-    void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch(() => undefined);
+    void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
   }, [cleanupUnreferencedMedia, posts, repository, syncMemoryNotifications]);
 
   const getPersonIdsByPost = useCallback((postId: string) => repository.listPersonIdsByPost(postId), [repository]);
@@ -315,7 +321,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);
     setPersonTagsState(await repository.listPersonTagAssignments());
-    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
     if (previousAvatarId && previousAvatarId !== changes.avatarMediaId) await cleanupUnreferencedMedia([previousAvatarId]);
   }, [cleanupUnreferencedMedia, people, repository, syncBirthdayNotifications]);
 
@@ -324,7 +330,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     try {
       await repository.createProfileCollectionRequest(request);
     } catch (cause) {
-      await deleteProfileCollectionPrivateKey(request.id).catch(() => undefined);
+    await deleteProfileCollectionPrivateKey(request.id).catch((cleanupCause) => writePersistentError('profile-collection.private-key.cleanup.failed', cleanupCause, { requestId: request.id }));
       throw cause;
     }
   }, [repository]);
@@ -333,7 +339,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const deleteProfileCollectionRequest = useCallback(async (requestId: string) => {
     await repository.deleteProfileCollectionRequest(requestId);
-    await deleteProfileCollectionPrivateKey(requestId).catch(() => undefined);
+    await deleteProfileCollectionPrivateKey(requestId).catch((cause) => writePersistentError('profile-collection.private-key.delete.failed', cause, { requestId }));
   }, [repository]);
 
   const applyProfileCollectionImport = useCallback(async (requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTagNames: string[]) => {
@@ -360,8 +366,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPeople(storedPeople);
     setPersonTagsState(await repository.listPersonTagAssignments());
     setTagDefinitions(await repository.listTagDefinitions());
-    await deleteProfileCollectionPrivateKey(requestId).catch(() => undefined);
-    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
+    await deleteProfileCollectionPrivateKey(requestId).catch((cause) => writePersistentError('profile-collection.private-key.delete.failed', cause, { requestId }));
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
   }, [repository, syncBirthdayNotifications, tagDefinitions]);
 
   const deletePerson = useCallback(async (personId: string) => {
@@ -382,16 +388,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (existing.avatarMediaId) await cleanupUnreferencedMedia([existing.avatarMediaId]);
     for (const item of albumPhotos) {
       await repository.deleteMedia(item.id);
-      try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 数据记录已删除 */ }
+      try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('person.delete.media-file.cleanup.failed', cause, { personId, mediaId: item.id, localPath: item.localPath }); }
     }
-    try { deletePersonAlbumDirectory(personId); } catch { /* 数据记录已删除 */ }
+    try { deletePersonAlbumDirectory(personId); } catch (cause) { writePersistentError('person.delete.album-directory.cleanup.failed', cause, { personId }); }
     setAlbums(await repository.listAlbums());
     setAlbumMedia(await repository.listAlbumMedia());
     setPersonBooksState(await repository.listPersonBooks());
     setPersonTagsState(await repository.listPersonTagAssignments());
     setMedia(await repository.listMedia());
     setHomeMemory((current) => current?.kind === 'person' && current.person.id === personId ? null : current);
-    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch(() => undefined);
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
     setMusicCollectionEntries(await repository.listMusicCollectionEntries());
     setMusicTracks(await repository.listMusicTracks());
   }, [albumMedia, albums, cleanupUnreferencedMedia, media, musicTracks, people, repository, syncBirthdayNotifications]);
@@ -493,8 +499,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const ids = albumMedia.filter((item) => item.albumId === albumId).map((item) => item.mediaId);
     const files = media.filter((item) => ids.includes(item.id));
     await repository.deleteAlbum(albumId);
-    for (const item of files) try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 数据记录已删除 */ }
-    try { deletePersonAlbumDirectory(album.personId, album.id); } catch { /* 数据记录已删除 */ }
+    for (const item of files) try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('album.delete.media-file.cleanup.failed', cause, { albumId: album.id, mediaId: item.id, localPath: item.localPath }); }
+    try { deletePersonAlbumDirectory(album.personId, album.id); } catch (cause) { writePersistentError('album.delete.directory.cleanup.failed', cause, { albumId: album.id, personId: album.personId }); }
     setAlbums(await repository.listAlbums());
     setAlbumMedia(await repository.listAlbumMedia());
     setMedia(await repository.listMedia());
@@ -517,7 +523,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const removePhotoFromAlbum = useCallback(async (albumId: string, mediaId: string) => {
     const item = media.find((candidate) => candidate.id === mediaId);
     await repository.removeAlbumMedia(albumId, mediaId);
-    if (item) try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 数据记录已删除 */ }
+    if (item) try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('media.delete.file.cleanup.failed', cause, { mediaId, localPath: item.localPath }); }
     const storedAlbumMedia = await repository.listAlbumMedia();
     const album = albums.find((candidate) => candidate.id === albumId);
     if (album?.coverMediaId === mediaId) await repository.updateAlbum({ ...album, coverMediaId: storedAlbumMedia.find((relation) => relation.albumId === albumId)?.mediaId ?? null, updatedAt: new Date().toISOString() });
@@ -536,19 +542,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const replaceMedia = useCallback(async (mediaId: string, replacement: Media) => {
     const existing = media.find((item) => item.id === mediaId);
     if (!existing) {
-      try { const file = new File(replacement.localPath); if (file.exists) file.delete(); } catch { /* 新文件尚未进入数据层 */ }
+      try { const file = new File(replacement.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('media.replace.new-file.cleanup.failed', cause, { mediaId: replacement.id, localPath: replacement.localPath }); }
       throw new Error('要替换的图片不存在');
     }
     const next = { ...replacement, id: mediaId };
     try {
       await repository.updateMedia(next);
     } catch (cause) {
-      try { const file = new File(replacement.localPath); if (file.exists) file.delete(); } catch { /* 不覆盖原始错误 */ }
+      try { const file = new File(replacement.localPath); if (file.exists) file.delete(); } catch (cleanupCause) { writePersistentError('media.replace.replacement.cleanup.failed', cleanupCause, { mediaId: replacement.id, localPath: replacement.localPath }); }
       throw cause;
     }
     setMedia((current) => current.map((item) => item.id === mediaId ? next : item));
     if (existing.localPath !== next.localPath) {
-      try { const file = new File(existing.localPath); if (file.exists) file.delete(); } catch { /* 数据已指向新文件 */ }
+      try { const file = new File(existing.localPath); if (file.exists) file.delete(); } catch (cleanupCause) { writePersistentError('media.replace.previous-file.cleanup.failed', cleanupCause, { mediaId: existing.id, localPath: existing.localPath }); }
     }
   }, [media, repository]);
 
@@ -608,9 +614,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       track.coverMediaId = coverMedia?.id ?? null;
       await repository.importMusicTrack(item, track, collections, coverMedia);
     } catch (cause) {
-      try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch { /* 不覆盖原始错误 */ }
+      try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('person.delete.music-file.cleanup.failed', cause, { mediaId: item.id, localPath: item.localPath }); }
       if (coverMedia) {
-        try { const file = new File(coverMedia.localPath); if (file.exists) file.delete(); } catch { /* 不覆盖原始错误 */ }
+        try { const file = new File(coverMedia.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('person.delete.cover-file.cleanup.failed', cause, { mediaId: coverMedia.id, localPath: coverMedia.localPath }); }
       }
       throw cause;
     }
@@ -645,7 +651,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     try {
       await repository.updateMusicTrack({ ...track, coverMediaId: cover?.id ?? null, updatedAt: new Date().toISOString() });
     } catch (cause) {
-      if (cover) await repository.deleteMedia(cover.id).catch(() => undefined);
+      if (cover) await repository.deleteMedia(cover.id).catch((cleanupCause) => writePersistentError('music.track.cover.cleanup.failed', cleanupCause, { trackId, mediaId: cover.id }));
       throw cause;
     }
     setMusicTracks(await repository.listMusicTracks());
@@ -713,7 +719,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     try {
       await repository.updateMusicPlaylist({ ...playlist, coverMediaId: cover?.id ?? null, updatedAt: new Date().toISOString() });
     } catch (cause) {
-      if (cover) await repository.deleteMedia(cover.id).catch(() => undefined);
+      if (cover) await repository.deleteMedia(cover.id).catch((cleanupCause) => writePersistentError('music.playlist.cover.cleanup.failed', cleanupCause, { playlistId, mediaId: cover.id }));
       throw cause;
     }
     setMusicPlaylists(await repository.listMusicPlaylists());
@@ -863,6 +869,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setReadingNoteSources((current) => [...current.filter((item) => item.postId !== source.postId), source]);
   }, [repository]);
 
+  const deleteReadingNoteSource = useCallback(async (postId: string) => {
+    await repository.deleteReadingNoteSource(postId);
+    setReadingNoteSources((current) => current.filter((item) => item.postId !== postId));
+  }, [repository]);
+
   const createBackupSnapshot = useCallback(() => repository.exportBackupSnapshot(), [repository]);
 
   const updatePreferences = useCallback(async (changes: Partial<AppPreferences>) => {
@@ -874,7 +885,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if ('globalMemoryEnabled' in changes) {
       const memory = await repository.getHomeMemory(today);
       setHomeMemory(memory);
-      if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
+      if (memory) void repository.markMemoryShown(memory).catch((cause) => writePersistentError('memory.mark-shown.failed', cause, { postId: memory.post.id }));
     }
   }, [people, posts, repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
@@ -913,7 +924,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       await setPersistentNotificationEnabled(enabled);
       await repository.updatePreferences({ persistentNotificationEnabled: enabled });
     } catch (cause) {
-      await setPersistentNotificationEnabled(!enabled).catch(() => undefined);
+      await setPersistentNotificationEnabled(!enabled).catch((rollbackCause) => writePersistentError('notifications.persistent.rollback.failed', rollbackCause, { enabled: !enabled }));
       throw cause;
     }
     setPreferences(await repository.getPreferences());
@@ -940,8 +951,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     try {
       await repository.replaceFromBackup(snapshot);
     } catch (cause) {
-      void syncBirthdayNotifications(oldPeople, oldPreferences).catch(() => undefined);
-      void syncMemoryNotifications(oldPosts, oldPreferences).catch(() => undefined);
+      writePersistentError('backup.restore.database.failed', cause, { posts: snapshot.posts.length, people: snapshot.people.length, media: snapshot.media.length });
+      void syncBirthdayNotifications(oldPeople, oldPreferences).catch((syncCause) => writePersistentError('notifications.birthday.restore-rollback.failed', syncCause));
+      void syncMemoryNotifications(oldPosts, oldPreferences).catch((syncCause) => writePersistentError('notifications.memory.restore-rollback.failed', syncCause));
       throw cause;
     }
     const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
@@ -992,9 +1004,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setBooks(storedBooks);
     setBookExcerpts(storedBookExcerpts);
     setReadingNoteSources(storedReadingNoteSources);
-    if (memory) void repository.markMemoryShown(memory).catch(() => undefined);
-    void syncBirthdayNotifications(storedPeople, storedPreferences).catch(() => undefined);
-    void syncMemoryNotifications(storedPosts, storedPreferences).catch(() => undefined);
+    if (memory) void repository.markMemoryShown(memory).catch((cause) => writePersistentError('memory.mark-shown.failed', cause, { postId: memory.post.id }));
+    void syncBirthdayNotifications(storedPeople, storedPreferences).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
+    void syncMemoryNotifications(storedPosts, storedPreferences).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
 
     const restoredPaths = new Set(storedMedia.map((item) => item.localPath));
     for (const item of oldMedia) {
@@ -1002,7 +1014,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       try {
         const file = new File(item.localPath);
         if (file.exists) file.delete();
-      } catch {
+      } catch (cause) {
+        writePersistentError('backup.restore.old-media.cleanup.failed', cause, { localPath: item.localPath });
         // 数据已经成功恢复；旧的孤立文件可在后续维护时再次清理。
       }
     }
@@ -1013,7 +1026,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const profileCollectionRequestIds = await repository.listProfileCollectionRequestIds();
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
-    await setPersistentNotificationEnabled(false).catch(() => undefined);
+    await setPersistentNotificationEnabled(false).catch((cause) => writePersistentError('notifications.persistent.disable.failed', cause));
     setPersistentNotificationRunning(false);
     const failures: unknown[] = [];
     let vaultDeleted = false;
@@ -1031,7 +1044,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch (cause) {
       failures.push(cause);
     }
-    if (!dataDeleted) throw new Error(vaultDeleted ? '密码本已删除，但日记数据删除失败，请重试' : '密码本和日记数据删除失败，请重试');
+    if (!dataDeleted) throw new Error(vaultDeleted ? '密码本已删除，但记录数据删除失败，请重试' : '密码本和记录数据删除失败，请重试');
     setTodayCheckIn(null);
     setCheckIns([]);
     setPosts([]);
@@ -1073,7 +1086,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch {
       // 已删除数据库引用；系统暂时占用的缓存目录可由系统后续回收。
     }
-    if (failures.length) throw new Error('日记数据已删除，但密码本清理失败，请重试删除全部本地数据');
+    if (failures.length) throw new Error('记录数据已删除，但密码本清理失败，请重试删除全部本地数据');
   }, [media, repository]);
 
   const shouldShowBackupReminder = useMemo(() => {
@@ -1189,7 +1202,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     deleteBookExcerpt,
     getReadingNoteSource,
     saveReadingNoteSource,
-  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
+    deleteReadingNoteSource,
+  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

@@ -1,3 +1,5 @@
+import { writePersistentLog } from '../infrastructure/platform/persistent-log';
+
 export type FeedbackButtonStyle = 'default' | 'cancel' | 'destructive';
 
 export interface FeedbackButton {
@@ -44,10 +46,37 @@ function present(request: FeedbackRequest): void {
 
 export const feedback = {
   alert(title: string, message?: string, buttons: FeedbackButton[] = []): void {
-    present({ kind: 'alert', title, message, buttons });
+    const level = /失败|错误|无法|不可|异常|不存在|不足|未开启|不支持/u.test(title) ? 'ERROR' : 'INFO';
+    writePersistentLog(level, 'feedback.alert.presented', {
+      title,
+      message,
+      buttons: buttons.map(({ text, style }) => ({ text, style })),
+    });
+    present({
+      kind: 'alert',
+      title,
+      message,
+      buttons: buttons.map((button) => ({
+        ...button,
+        onPress: button.onPress ? () => {
+          writePersistentLog('INFO', 'feedback.alert.action', { title, action: button.text, style: button.style });
+          button.onPress?.();
+        } : undefined,
+      })),
+    });
   },
 
   prompt(title: string, message: string | undefined, onSubmit: (value: string) => void, defaultValue = ''): void {
-    present({ kind: 'prompt', title, message, defaultValue, onSubmit });
+    writePersistentLog('INFO', 'feedback.prompt.presented', { title, message, defaultValue });
+    present({
+      kind: 'prompt',
+      title,
+      message,
+      defaultValue,
+      onSubmit: (value) => {
+        writePersistentLog('INFO', 'feedback.prompt.submitted', { title, value });
+        onSubmit(value);
+      },
+    });
   },
 };
