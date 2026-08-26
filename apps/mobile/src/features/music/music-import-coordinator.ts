@@ -3,7 +3,8 @@ import type { Media, MusicCollectionEntry, MusicTrack } from '@still-alive/types
 import type { StillAliveRepository } from '../../infrastructure/database/repository-contract';
 import { unlockMusicFile } from '../../infrastructure/files/music-unlocker';
 import { probeAudioFile } from '../../infrastructure/files/local-assets';
-import { extractEmbeddedMusicCover } from '../../infrastructure/files/music-cover-metadata';
+import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
+import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import { writePersistentError } from '../../infrastructure/platform/persistent-log';
 
 const ENCRYPTED_EXTENSIONS = new Set([
@@ -175,14 +176,16 @@ export async function importEncryptedMusicTrack(
       sizeBytes: destination.size,
     };
     if (!media.checksum) throw new Error('无法校验解码后的音频');
+    const embeddedMetadata = await readEmbeddedMusicMetadata(media).catch(() => ({ album: null, artist: null, cover: null, title: null }));
+    const technicalMetadata = await readAudioFileMetadata(media.localPath).catch(() => null);
     const track: MusicTrack = {
       id: `track_${operationId}`,
       mediaId: media.id,
-      coverMediaId: null,
-      title: unlocked.title?.trim() || source.originalName?.replace(/\.[^.]+$/, '') || '未命名音乐',
-      artist: unlocked.artist?.trim() || null,
-      album: unlocked.album?.trim() || null,
-      durationMs: null,
+      coverMediaId: embeddedMetadata.cover?.id ?? null,
+      title: embeddedMetadata.title || unlocked.title?.trim() || source.originalName?.replace(/\.[^.]+$/, '') || '未命名音乐',
+      artist: embeddedMetadata.artist || unlocked.artist?.trim() || null,
+      album: embeddedMetadata.album || unlocked.album?.trim() || null,
+      durationMs: technicalMetadata?.durationMs ?? null,
       playCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -191,10 +194,8 @@ export async function importEncryptedMusicTrack(
       { trackId: track.id, targetType: 'self', targetId: null, createdAt: now },
       ...(personId ? [{ trackId: track.id, targetType: 'person' as const, targetId: personId, createdAt: now }] : []),
     ];
-    let coverMedia: Media | null = null;
+    const coverMedia = embeddedMetadata.cover;
     try {
-      coverMedia = await extractEmbeddedMusicCover(media);
-      track.coverMediaId = coverMedia?.id ?? null;
       await repository.importMusicTrack(media, track, collections, coverMedia);
       return { media, track };
     } catch (cause) {

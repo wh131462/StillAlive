@@ -8,7 +8,8 @@ import { toDayKey } from '../../shared/core/day-key';
 import { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 import { cleanupOrphanedAlbumFiles, deletePersonAlbumDirectory } from '../../infrastructure/files/local-media';
-import { extractEmbeddedMusicCover } from '../../infrastructure/files/music-cover-metadata';
+import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
+import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import { MBTI_TYPES, validateBirthday } from '../../features/people/person-profile';
 import { cancelBirthdayNotifications } from '../../features/people/birthday-notifications';
 import { cancelMemoryNotifications } from '../../features/home/memory-notifications';
@@ -592,14 +593,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
     if (personId && !people.some((person) => person.id === personId)) throw new Error('人物不存在或已删除');
     const now = new Date().toISOString();
+    const metadata = await readEmbeddedMusicMetadata(item).catch(() => ({ album: null, artist: null, cover: null, title: null }));
+    const technicalMetadata = await readAudioFileMetadata(item.localPath).catch(() => null);
     const track: MusicTrack = {
       id: `track_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       mediaId: item.id,
-      coverMediaId: null,
-      title: item.originalName?.replace(/\.[^.]+$/, '') || '未命名音乐',
-      artist: null,
-      album: null,
-      durationMs: null,
+      coverMediaId: metadata.cover?.id ?? null,
+      title: metadata.title || item.originalName?.replace(/\.[^.]+$/, '') || '未命名音乐',
+      artist: metadata.artist,
+      album: metadata.album,
+      durationMs: technicalMetadata?.durationMs ?? null,
       playCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -608,10 +611,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       { trackId: track.id, targetType: 'self', targetId: null, createdAt: now },
       ...(personId ? [{ trackId: track.id, targetType: 'person' as const, targetId: personId, createdAt: now }] : []),
     ];
-    let coverMedia: Media | null = null;
+    const coverMedia = metadata.cover;
     try {
-      coverMedia = await extractEmbeddedMusicCover(item);
-      track.coverMediaId = coverMedia?.id ?? null;
       await repository.importMusicTrack(item, track, collections, coverMedia);
     } catch (cause) {
       try { const file = new File(item.localPath); if (file.exists) file.delete(); } catch (cause) { writePersistentError('person.delete.music-file.cleanup.failed', cause, { mediaId: item.id, localPath: item.localPath }); }
