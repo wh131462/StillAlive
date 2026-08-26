@@ -137,8 +137,8 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           <Text style={styles.calendarTitle}>{Number(month)} 月</Text>
         </Pressable>
         <View style={styles.monthArrows}>
-          <Pressable accessibilityLabel="上一个月" accessibilityRole="button" onPress={() => onChangeMonth(-1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>‹</Text></Pressable>
-          <Pressable accessibilityLabel="下一个月" accessibilityRole="button" onPress={() => onChangeMonth(1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>›</Text></Pressable>
+          <Pressable accessibilityLabel="上一个月" accessibilityRole="button" onPress={() => onChangeMonth(-1)} style={styles.monthArrow}><SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} pointerEvents="none" size={20} tintColor={colors.life} type="hierarchical" /></Pressable>
+          <Pressable accessibilityLabel="下一个月" accessibilityRole="button" onPress={() => onChangeMonth(1)} style={styles.monthArrow}><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={20} tintColor={colors.life} type="hierarchical" /></Pressable>
         </View>
       </View>
       <View style={styles.weekRow}>{['日', '一', '二', '三', '四', '五', '六'].map((day, index) => <Text key={day} style={[styles.weekLabel, (index === 0 || index === 6) && styles.weekLabelWeekend]}>周{day}</Text>)}</View>
@@ -409,7 +409,6 @@ const styles = createThemedStyles(() => ({
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
   monthArrows: { flexDirection: 'row', gap: spacing.sm },
   monthArrow: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 19, backgroundColor: colors.sheet },
-  monthArrowText: { color: colors.life, fontFamily: typography.display, fontSize: 25, lineHeight: 29 },
   weekRow: { flexDirection: 'row', marginTop: spacing.md, paddingBottom: spacing.sm },
   weekLabel: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 0.3, textAlign: 'center' },
   weekLabelWeekend: { color: colors.sun },
