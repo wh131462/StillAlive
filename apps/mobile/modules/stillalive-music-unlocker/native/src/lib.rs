@@ -1,5 +1,6 @@
 pub mod algo;
 pub mod internal;
+mod transcode;
 pub mod unlocker;
 
 pub use internal::helpers::*;

@@ -81,7 +81,7 @@ export interface AppStateValue {
   applyProfileCollectionImport(requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTagNames: string[]): Promise<void>;
   importMusicTrack(item: Media, personId?: string | null): Promise<MusicTrack>;
   createMusicTrack(track: MusicTrack, collection?: MusicCollectionEntry): Promise<void>;
-  updateMusicTrack(track: MusicTrack): Promise<void>;
+  updateMusicTrack(track: MusicTrack, cover?: Media | null): Promise<void>;
   incrementMusicTrackPlayCount(trackId: string): Promise<void>;
   setMusicTrackCover(trackId: string, cover: Media | null): Promise<void>;
   deleteMusicTrack(trackId: string): Promise<void>;

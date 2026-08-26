@@ -634,10 +634,20 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setMusicCollectionEntries(await repository.listMusicCollectionEntries());
   }, [repository]);
 
-  const updateMusicTrack = useCallback(async (track: MusicTrack) => {
-    await repository.updateMusicTrack(track);
+  const updateMusicTrack = useCallback(async (track: MusicTrack, cover?: Media | null) => {
+    const previousCoverId = musicTracks.find((item) => item.id === track.id)?.coverMediaId ?? null;
+    const nextTrack = cover === undefined ? track : { ...track, coverMediaId: cover?.id ?? null };
+    if (cover) await repository.createMedia(cover);
+    try {
+      await repository.updateMusicTrack(nextTrack);
+    } catch (cause) {
+      if (cover) await repository.deleteMedia(cover.id).catch((cleanupCause) => writePersistentError('music.track.metadata-cover.cleanup.failed', cleanupCause, { trackId: track.id, mediaId: cover.id }));
+      throw cause;
+    }
     setMusicTracks(await repository.listMusicTracks());
-  }, [repository]);
+    if (cover) setMedia((current) => [cover, ...current]);
+    if (cover !== undefined && previousCoverId && previousCoverId !== nextTrack.coverMediaId) await cleanupUnreferencedMedia([previousCoverId]);
+  }, [cleanupUnreferencedMedia, musicTracks, repository]);
 
   const incrementMusicTrackPlayCount = useCallback(async (trackId: string) => {
     await repository.incrementMusicTrackPlayCount(trackId);

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
@@ -11,6 +11,7 @@ import type { Media, MusicPlaylist, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import type { AudioFileFormat, AudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
+import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
 import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
 import { useMusicPlayer } from './music-player-state';
@@ -39,11 +40,26 @@ export default function MusicBoxScreen() {
   const [editingTitle, setEditingTitle] = useState('');
   const [editingArtist, setEditingArtist] = useState('');
   const [editingAlbum, setEditingAlbum] = useState('');
+  const [editingDurationMs, setEditingDurationMs] = useState<number | null>(null);
+  const [pendingMetadataCover, setPendingMetadataCover] = useState<Media | null>(null);
+  const [readingEditMetadata, setReadingEditMetadata] = useState(false);
+  const [editMetadataStatus, setEditMetadataStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [createPlaylistVisible, setCreatePlaylistVisible] = useState(false);
   const [playlistName, setPlaylistName] = useState('');
   const importingRef = useRef(false);
   const metadataRequestRef = useRef(0);
+  const editMetadataRequestRef = useRef(0);
+  const pendingMetadataCoverRef = useRef<Media | null>(null);
+  const discardMediaRef = useRef(discardMedia);
+  discardMediaRef.current = discardMedia;
+
+  useEffect(() => () => {
+    editMetadataRequestRef.current += 1;
+    const cover = pendingMetadataCoverRef.current;
+    pendingMetadataCoverRef.current = null;
+    if (cover) void discardMediaRef.current(cover).catch(() => undefined);
+  }, []);
   const selfTracks = useMemo(() => orderMusicTracksByCollectionEntries(musicTracks, musicCollectionEntries.filter((entry) => entry.targetType === 'self')), [musicCollectionEntries, musicTracks]);
   const visibleTracks = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -87,18 +103,92 @@ export default function MusicBoxScreen() {
   };
 
   const edit = (track: MusicTrack) => {
+    editMetadataRequestRef.current += 1;
+    const previousCover = pendingMetadataCoverRef.current;
+    pendingMetadataCoverRef.current = null;
+    if (previousCover) void discardMedia(previousCover).catch(() => undefined);
     setActionTrack(null);
     setEditingTitle(track.title);
     setEditingArtist(track.artist ?? '');
     setEditingAlbum(track.album ?? '');
+    setEditingDurationMs(track.durationMs);
+    setPendingMetadataCover(null);
+    setReadingEditMetadata(false);
+    setEditMetadataStatus(null);
     setEditingTrack(track);
+  };
+
+  const closeEditor = () => {
+    editMetadataRequestRef.current += 1;
+    const cover = pendingMetadataCoverRef.current;
+    pendingMetadataCoverRef.current = null;
+    if (cover) void discardMedia(cover).catch(() => undefined);
+    setPendingMetadataCover(null);
+    setReadingEditMetadata(false);
+    setEditMetadataStatus(null);
+    setEditingTrack(null);
+  };
+
+  const readTrackMetadata = async () => {
+    if (!editingTrack || readingEditMetadata) return;
+    const source = media.find((item) => item.id === editingTrack.mediaId);
+    if (!source) {
+      feedback.alert('无法读取元数据', '找不到歌曲原始文件，请重新导入后再试。');
+      return;
+    }
+    const requestId = ++editMetadataRequestRef.current;
+    const previousCover = pendingMetadataCoverRef.current;
+    pendingMetadataCoverRef.current = null;
+    setPendingMetadataCover(null);
+    setReadingEditMetadata(true);
+    setEditMetadataStatus(null);
+    if (previousCover) await discardMedia(previousCover).catch(() => undefined);
+    if (editMetadataRequestRef.current !== requestId) return;
+    let extractedCover: Media | null = null;
+    try {
+      const embedded = await readEmbeddedMusicMetadata(source);
+      extractedCover = embedded.cover;
+      const fileMetadata = await readAudioFileMetadata(source.localPath).catch(() => null);
+      if (editMetadataRequestRef.current !== requestId) {
+        if (extractedCover) await discardMedia(extractedCover).catch(() => undefined);
+        return;
+      }
+      if (embedded.title) setEditingTitle(embedded.title);
+      if (embedded.artist) setEditingArtist(embedded.artist);
+      if (embedded.album) setEditingAlbum(embedded.album);
+      if (fileMetadata?.durationMs !== null && fileMetadata?.durationMs !== undefined) setEditingDurationMs(fileMetadata.durationMs);
+      if (extractedCover) {
+        pendingMetadataCoverRef.current = extractedCover;
+        setPendingMetadataCover(extractedCover);
+        extractedCover = null;
+      }
+      const fields = [
+        embedded.title ? '标题' : null,
+        embedded.artist ? '艺术家' : null,
+        embedded.album ? '专辑' : null,
+        fileMetadata?.durationMs ? '时长' : null,
+        pendingMetadataCoverRef.current ? '封面' : null,
+      ].filter((item): item is string => Boolean(item));
+      if (!fields.length) {
+        feedback.alert('未读取到元数据', '文件中没有可用于校正的歌曲信息，当前内容已保留。');
+      } else {
+        setEditMetadataStatus(`已读取${fields.join('、')}，保存后生效。`);
+      }
+    } catch (cause) {
+      if (extractedCover) await discardMedia(extractedCover).catch(() => undefined);
+      if (editMetadataRequestRef.current === requestId) feedback.alert('元数据读取失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    } finally {
+      if (editMetadataRequestRef.current === requestId) setReadingEditMetadata(false);
+    }
   };
 
   const saveEdit = async () => {
     const title = editingTitle.trim();
-    if (!editingTrack || !title) return;
+    if (!editingTrack || !title || readingEditMetadata) return;
     try {
-      await updateMusicTrack({ ...editingTrack, title, artist: editingArtist.trim() || null, album: editingAlbum.trim() || null, updatedAt: new Date().toISOString() });
+      await updateMusicTrack({ ...editingTrack, title, artist: editingArtist.trim() || null, album: editingAlbum.trim() || null, durationMs: editingDurationMs, updatedAt: new Date().toISOString() }, pendingMetadataCover ?? undefined);
+      pendingMetadataCoverRef.current = null;
+      setPendingMetadataCover(null);
       setEditingTrack(null);
     } catch (cause) {
       feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
@@ -312,15 +402,17 @@ export default function MusicBoxScreen() {
         track={infoTrack}
       />
 
-      <DraggableBottomSheet backdropStyle={styles.backdrop} keyboardAvoiding onClose={() => setEditingTrack(null)} open={Boolean(editingTrack)} sheetStyle={styles.editSheet}>
+      <DraggableBottomSheet backdropStyle={styles.backdrop} keyboardAvoiding onClose={closeEditor} open={Boolean(editingTrack)} sheetStyle={styles.editSheet}>
               <Text style={styles.editTitle}>编辑歌曲信息</Text>
+              <Pressable accessibilityRole="button" disabled={readingEditMetadata} onPress={() => void readTrackMetadata()} style={({ pressed }) => [styles.metadataButton, readingEditMetadata && styles.disabled, pressed && styles.pressed]}>{readingEditMetadata ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'refresh', ios: 'arrow.clockwise', web: 'refresh' }} size={17} tintColor={colors.life} type="hierarchical" />}<Text style={styles.metadataButtonText}>{readingEditMetadata ? '正在读取文件元数据' : '从文件读取元数据'}</Text></Pressable>
+              {editMetadataStatus ? <Text style={styles.metadataStatus}>{editMetadataStatus}</Text> : null}
               <Text style={styles.inputLabel}>歌曲名称</Text>
               <TextInput autoFocus maxLength={80} onChangeText={setEditingTitle} placeholder="输入歌曲名称" placeholderTextColor={colors.inkFaint} returnKeyType="next" selectTextOnFocus style={styles.editInput} value={editingTitle} />
               <Text style={styles.inputLabel}>艺术家</Text>
               <TextInput maxLength={80} onChangeText={setEditingArtist} placeholder="未知艺术家" placeholderTextColor={colors.inkFaint} returnKeyType="next" style={styles.editInput} value={editingArtist} />
               <Text style={styles.inputLabel}>专辑</Text>
               <TextInput maxLength={80} onChangeText={setEditingAlbum} onSubmitEditing={() => void saveEdit()} placeholder="未收录专辑" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.editInput} value={editingAlbum} />
-              <Pressable accessibilityRole="button" disabled={!editingTitle.trim()} onPress={() => void saveEdit()} style={({ pressed }) => [styles.saveEdit, !editingTitle.trim() && styles.disabled, pressed && styles.pressed]}><Text style={styles.saveEditText}>保存</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={!editingTitle.trim() || readingEditMetadata} onPress={() => void saveEdit()} style={({ pressed }) => [styles.saveEdit, (!editingTitle.trim() || readingEditMetadata) && styles.disabled, pressed && styles.pressed]}><Text style={styles.saveEditText}>保存</Text></Pressable>
       </DraggableBottomSheet>
 
       <DraggableBottomSheet backdropStyle={styles.backdrop} keyboardAvoiding onClose={() => setCreatePlaylistVisible(false)} open={createPlaylistVisible} sheetStyle={styles.editSheet}>
@@ -559,6 +651,9 @@ const styles = createThemedStyles(() => ({
   infoFileValue: { marginTop: 5, color: colors.ink, fontSize: 11, lineHeight: 17 },
   editSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
   editTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 20 },
+  metadataButton: { minHeight: 44, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  metadataButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
+  metadataStatus: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   inputLabel: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta },
   editInput: { minHeight: 52, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 14 },
   saveEdit: { minHeight: 52, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },

@@ -68,15 +68,59 @@ function parseId3File(handle: FileHandle, fileSize: number, includeId3v1: boolea
       parsed = parseId3Tag((header[5] & 0x80) !== 0 ? removeUnsynchronisation(tag) : tag, header[3], header[5]);
     }
   }
-  if (!includeId3v1 || fileSize < 128) return parsed;
-  const id3v1 = readAt(handle, fileSize, fileSize - 128, 128);
-  if (!isAscii(id3v1, 0, 'TAG')) return parsed;
-  return mergeMetadata(parsed, {
-    album: decodeLatin1(id3v1.slice(63, 93)),
-    artist: decodeLatin1(id3v1.slice(33, 63)),
-    image: null,
-    title: decodeLatin1(id3v1.slice(3, 33)),
-  });
+  if (includeId3v1 && fileSize >= 128) {
+    const id3v1 = readAt(handle, fileSize, fileSize - 128, 128);
+    if (isAscii(id3v1, 0, 'TAG')) {
+      parsed = mergeMetadata(parsed, {
+        album: decodeLatin1(id3v1.slice(63, 93)),
+        artist: decodeLatin1(id3v1.slice(33, 63)),
+        image: null,
+        title: decodeLatin1(id3v1.slice(3, 33)),
+      });
+    }
+  }
+  return mergeMetadata(parsed, parseApeFooter(handle, fileSize));
+}
+
+function parseApeFooter(handle: FileHandle, fileSize: number): ParsedMusicMetadata {
+  if (fileSize < 32) return EMPTY_METADATA;
+  const id3v1Offset = fileSize >= 128 && isAscii(readAt(handle, fileSize, fileSize - 128, 3), 0, 'TAG') ? fileSize - 128 : fileSize;
+  const footerOffset = id3v1Offset - 32;
+  if (footerOffset < 0) return EMPTY_METADATA;
+  const footer = readAt(handle, fileSize, footerOffset, 32);
+  if (!isAscii(footer, 0, 'APETAGEX')) return EMPTY_METADATA;
+  const size = readUInt32LE(footer, 12);
+  const itemCount = Math.min(readUInt32LE(footer, 16), 10_000);
+  if (size < 32 || size > MAX_TAG_BYTES || size > fileSize) return EMPTY_METADATA;
+  const tag = readAt(handle, fileSize, id3v1Offset - size, size);
+  if (tag.length !== size) return EMPTY_METADATA;
+  let offset = (readUInt32LE(footer, 20) & 0x8000_0000) !== 0 ? 32 : 0;
+  let parsed = EMPTY_METADATA;
+  for (let index = 0; index < itemCount && offset + 8 <= tag.length; index += 1) {
+    const valueSize = readUInt32LE(tag, offset);
+    offset += 8;
+    if (valueSize > MAX_TAG_BYTES || offset + valueSize > tag.length) break;
+    const keyEnd = findZero(tag, offset, 1);
+    if (keyEnd < 0 || keyEnd >= tag.length) break;
+    const key = decodeLatin1(tag.slice(offset, keyEnd))?.toUpperCase() ?? '';
+    offset = keyEnd + 1;
+    const valueBytes = tag.slice(offset, offset + valueSize);
+    offset += valueSize;
+    if (!key) continue;
+    if (key === 'COVER ART (FRONT)' || key === 'COVER ART') {
+      const binaryStart = findZero(valueBytes, 0, 1);
+      const imageBytes = binaryStart >= 0 ? valueBytes.slice(binaryStart + 1) : valueBytes;
+      const mimeType = sniffImageMime(imageBytes);
+      if (mimeType && !parsed.image) parsed = { ...parsed, image: { bytes: imageBytes, mimeType, pictureType: 3 } };
+      continue;
+    }
+    const value = cleanText(decodeUtf8(valueBytes)) || cleanText(decodeLatin1(valueBytes) ?? '');
+    if (!value) continue;
+    if (key === 'TITLE' && !parsed.title) parsed = { ...parsed, title: value };
+    if ((key === 'ARTIST' || key === 'ALBUM ARTIST' || key === 'ALBUMARTIST') && !parsed.artist) parsed = { ...parsed, artist: value };
+    if (key === 'ALBUM' && !parsed.album) parsed = { ...parsed, album: value };
+  }
+  return parsed;
 }
 
 function parseId3Bytes(bytes: Uint8Array): ParsedMusicMetadata {
@@ -143,14 +187,7 @@ function parseFlac(handle: FileHandle, fileSize: number): ParsedMusicMetadata {
     const type = header[0] & 0x7f;
     const size = readUInt24BE(header, 1);
     if (size > MAX_TAG_BYTES || offset + 4 + size > fileSize) break;
-    if (type === 4 || type === 6) {
-      const block = readAt(handle, fileSize, offset + 4, size);
-      if (type === 4) parsed = mergeMetadata(parsed, parseVorbisComments(block, 0));
-      if (type === 6) {
-        const image = parsePictureBlock(block);
-        if (image && (!parsed.image || image.pictureType === 3)) parsed = { ...parsed, image };
-      }
-    }
+    if (type === 4 || type === 6) parsed = mergeFlacMetadata(parsed, parseFlacMetadataBlock(type, readAt(handle, fileSize, offset + 4, size)));
     offset += 4 + size;
     if (last) break;
   }
@@ -161,6 +198,9 @@ function parseOgg(handle: FileHandle, fileSize: number): ParsedMusicMetadata {
   let offset = 0;
   let packetChunks: Uint8Array[] = [];
   let packetSize = 0;
+  let oggFlac = false;
+  let oggFlacMetadataComplete = false;
+  let parsed = EMPTY_METADATA;
   for (let pageIndex = 0; pageIndex < 4_096 && offset + 27 <= fileSize; pageIndex += 1) {
     const header = readAt(handle, fileSize, offset, 27);
     if (!isAscii(header, 0, 'OggS')) break;
@@ -180,15 +220,59 @@ function parseOgg(handle: FileHandle, fileSize: number): ParsedMusicMetadata {
       bodyOffset += length;
       if (length < 255) {
         const packet = concatBytes(packetChunks, packetSize);
-        if (isAscii(packet, 0, '\x03vorbis')) return parseVorbisComments(packet, 7);
-        if (isAscii(packet, 0, 'OpusTags')) return parseVorbisComments(packet, 8);
+        if (isAscii(packet, 0, '\x7fFLAC')) {
+          oggFlac = true;
+          const result = parseOggFlacMetadata(packet, 8);
+          parsed = mergeFlacMetadata(parsed, result.metadata);
+          oggFlacMetadataComplete = result.complete;
+        } else if (oggFlac && !oggFlacMetadataComplete) {
+          const result = parseOggFlacMetadata(packet, 0);
+          parsed = mergeFlacMetadata(parsed, result.metadata);
+          oggFlacMetadataComplete = result.complete;
+        } else if (!oggFlac && isAscii(packet, 0, '\x03vorbis')) {
+          return mergeMetadata(parsed, parseVorbisComments(packet, 7));
+        } else if (!oggFlac && isAscii(packet, 0, 'OpusTags')) {
+          return mergeMetadata(parsed, parseVorbisComments(packet, 8));
+        }
         packetChunks = [];
         packetSize = 0;
       }
     }
     offset += 27 + segmentCount + bodySize;
   }
+  return parsed;
+}
+
+function parseOggFlacMetadata(packet: Uint8Array, start: number): { complete: boolean; metadata: ParsedMusicMetadata } {
+  let offset = start;
+  let metadata = EMPTY_METADATA;
+  while (offset + 4 <= packet.length) {
+    const header = packet.slice(offset, offset + 4);
+    const last = (header[0] & 0x80) !== 0;
+    const type = header[0] & 0x7f;
+    const size = readUInt24BE(header, 1);
+    offset += 4;
+    if (size > MAX_TAG_BYTES || offset + size > packet.length) return { complete: false, metadata };
+    if (type === 4 || type === 6) metadata = mergeMetadata(metadata, parseFlacMetadataBlock(type, packet.slice(offset, offset + size)));
+    offset += size;
+    if (last) return { complete: true, metadata };
+  }
+  return { complete: false, metadata };
+}
+
+function parseFlacMetadataBlock(type: number, block: Uint8Array): ParsedMusicMetadata {
+  if (type === 4) return parseVorbisComments(block, 0);
+  if (type === 6) {
+    const image = parsePictureBlock(block);
+    return image ? { ...EMPTY_METADATA, image } : EMPTY_METADATA;
+  }
   return EMPTY_METADATA;
+}
+
+function mergeFlacMetadata(primary: ParsedMusicMetadata, fallback: ParsedMusicMetadata): ParsedMusicMetadata {
+  const merged = mergeMetadata(primary, fallback);
+  if (fallback.image && (!primary.image || fallback.image.pictureType === 3)) merged.image = fallback.image;
+  return merged;
 }
 
 function parseVorbisComments(bytes: Uint8Array, start: number): ParsedMusicMetadata {
@@ -462,7 +546,11 @@ function cleanText(value: string): string | null {
 
 function decodeBase64(value: string): Uint8Array {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const cleaned = value.replace(/\s+/g, '');
+  const cleaned = value
+    .replace(/^data:[^,]+,/i, '')
+    .replace(/\s+/g, '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
   if (!cleaned || cleaned.length > Math.ceil(MAX_TAG_BYTES * 4 / 3) + 4) return new Uint8Array();
   const output = new Uint8Array(Math.floor(cleaned.length * 3 / 4));
   let buffer = 0;

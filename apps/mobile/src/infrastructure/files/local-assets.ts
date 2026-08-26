@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import type { BookFormat, Media } from '@still-alive/types';
 import { writePersistentError, writePersistentLog } from '../platform/persistent-log';
+import { unlockMusicFile } from './music-unlocker';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg', '.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
 const ENCRYPTED_AUDIO_EXTENSIONS = new Set(['.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
@@ -55,8 +56,8 @@ function encryptedContainerExtension(name: string): string {
 }
 
 export type LocalAudioFormat = {
-  extension: '.mp3' | '.flac' | '.ogg' | '.m4a' | '.wav' | '.aac';
-  mimeType: 'audio/mpeg' | 'audio/flac' | 'audio/ogg' | 'audio/mp4' | 'audio/wav' | 'audio/aac';
+  extension: '.mp3' | '.flac' | '.ogg' | '.m4a' | '.wav' | '.aac' | '.mp4';
+  mimeType: 'audio/mpeg' | 'audio/flac' | 'audio/ogg' | 'audio/mp4' | 'audio/wav' | 'audio/aac' | 'video/mp4';
 };
 
 /**
@@ -89,6 +90,7 @@ export function probeAudioHeader(header: Uint8Array): LocalAudioFormat | null {
       compatibleBrands.push(String.fromCharCode(header[offset], header[offset + 1], header[offset + 2], header[offset + 3]));
     }
     if (majorBrand === 'M4A ' || compatibleBrands.includes('M4A ')) return { extension: '.m4a', mimeType: 'audio/mp4' };
+    return { extension: '.mp4', mimeType: 'video/mp4' };
   }
   return null;
 }
@@ -135,17 +137,30 @@ async function copyLocalAssets(kind: ImportedAssetKind, sources: LocalAssetSourc
       const audioFormat = kind === 'audio' && !encrypted ? await probeAudioFile(destination) : null;
       if (kind === 'audio' && !encrypted && !audioFormat) throw new Error('音频文件头无法识别或文件已损坏');
       let storedDestination = destination;
+      let convertedToMp3 = false;
       if (audioFormat && audioFormat.extension !== extension) {
-        storedDestination = new File(directory, `${id}${audioFormat.extension}`);
-        destinations.push(storedDestination);
-        await destination.move(storedDestination);
+        if ((audioFormat.extension === '.mp4' || audioFormat.extension === '.m4a') && extension === '.mp3') {
+          const temporaryOutput = new File(temporaryAudioDirectory, `${id}.converted.mp3`);
+          destinations.push(temporaryOutput);
+          const converted = await unlockMusicFile(destination.uri, temporaryOutput.uri);
+          if (converted.extension !== '.mp3' || converted.mimeType !== 'audio/mpeg') throw new Error('MP4 音频无法转换为 MP3');
+          storedDestination = new File(directory, `${id}.mp3`);
+          destinations.push(storedDestination);
+          await temporaryOutput.move(storedDestination);
+          convertedToMp3 = true;
+          if (destination.exists) destination.delete();
+        } else {
+          storedDestination = new File(directory, `${id}${audioFormat.extension}`);
+          destinations.push(storedDestination);
+          await destination.move(storedDestination);
+        }
       }
       const checksum = storedDestination.md5;
       if (!checksum) throw new Error('无法校验文件内容');
       imported.push({
         id,
         localPath: storedDestination.uri,
-        mimeType: encrypted ? 'application/octet-stream' : audioFormat?.mimeType ?? source.mimeType ?? 'application/octet-stream',
+        mimeType: encrypted ? 'application/octet-stream' : convertedToMp3 ? 'audio/mpeg' : audioFormat?.mimeType ?? source.mimeType ?? 'application/octet-stream',
         width: null,
         height: null,
         checksum,

@@ -7,6 +7,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 
 use crate::algo::AudioMeta;
+use crate::internal::sniff::Sniffer;
 
 const MAX_INPUT_BYTES: usize = 512 * 1024 * 1024;
 
@@ -44,6 +45,10 @@ pub fn unlock(
     }
 
     let result = catch_unwind(AssertUnwindSafe(|| {
+        if ext == "mp3" && crate::internal::sniff::Mpeg4Sniffer.sniff(input) {
+            let bytes = crate::transcode::mp4_to_mp3(input)?;
+            return Ok::<_, Box<dyn std::error::Error>>((bytes, None));
+        }
         let mut decoder =
             crate::internal::helpers::dec_init(Bytes::copy_from_slice(input), true, &ext)?;
         let metadata = decoder.get_audio_meta().transpose()?.map(|meta| {
@@ -199,4 +204,15 @@ mod tests {
         assert_eq!(output.metadata.mime_type, "audio/mpeg");
         assert!(output.bytes.starts_with(b"ID3"));
     }
+
+    #[test]
+    fn detects_mp4_container_disguised_as_mp3() {
+        let header = [
+            0, 0, 0, 24, b'f', b't', b'y', b'p', b'm', b'p', b'4', b'2',
+            0, 0, 0, 0, b'i', b's', b'o', b'm', b'm', b'p', b'4', b'2',
+        ];
+        assert!(crate::internal::sniff::Mpeg4Sniffer.sniff(&header));
+        assert!(!crate::internal::sniff::M4aSniffer.sniff(&header));
+    }
+
 }
