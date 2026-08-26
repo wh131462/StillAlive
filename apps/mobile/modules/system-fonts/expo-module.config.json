@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["StillAliveSystemFontsModule"],
+    "podspecPath": "StillAliveSystemFonts.podspec"
+  },
+  "android": {
+    "modules": ["com.eternalheart.stillalive.systemfonts.StillAliveSystemFontsModule"]
+  }
+}
