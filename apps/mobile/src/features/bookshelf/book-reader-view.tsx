@@ -32,7 +32,7 @@ interface BookReaderProps {
 }
 
 export const BookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function BookReader(props, ref) {
-  if (props.book.format === 'epub') return <EpubBookReader {...props} ref={ref} />;
+  if (props.book.format === 'epub') return <EpubBookReader {...props} key={props.book.id} ref={ref} />;
   if (props.book.format === 'pdf') return <PdfBookReader {...props} ref={ref} />;
   if (isReflowBookFormat(props.book.format)) return <ReflowBookReader {...props} ref={ref} />;
   return <NativeModuleUnavailable palette={props.palette} />;
@@ -61,9 +61,11 @@ const ReflowBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(functi
   return <EpubBookReader {...props} ref={ref} sourceFormat="reflow" uri={source} />;
 });
 
-const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function EpubBookReader({ uri, initialLocator, preferences, contentPadding, excerpts, palette, onLocationChange, onSelection, onTocChange, onReady, onMetadata, onError, onSingleTap, sourceFormat = 'epub' }, ref) {
+const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function EpubBookReader({ book, uri, initialLocator, preferences, contentPadding, excerpts, palette, onLocationChange, onSelection, onTocChange, onReady, onMetadata, onError, onSingleTap, sourceFormat = 'epub' }, ref) {
   const { addAnnotation, changeFontFamily, changeFontSize, changeTheme, getMeta, goNext, goPrevious, goToLocation, removeSelection, section } = useReader();
   const [dimensions, setDimensions] = useState({ width: 1, height: 1 });
+  const [readerReady, setReaderReady] = useState(false);
+  const initialMetadataRef = useRef(getMeta());
   const theme = useMemo(() => epubTheme(preferences, palette), [palette, preferences]);
   const initialThemeRef = useRef(theme);
   const scrolled = preferences.flow === 'scrolled';
@@ -85,16 +87,11 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
   }, [changeFontFamily, changeFontSize, changeTheme, preferences.fontFamily, preferences.fontSize, theme]);
 
   useEffect(() => {
-    if (!onMetadata) return;
+    if (!readerReady || !onMetadata) return;
     const metadata = getMeta();
+    if (metadata === initialMetadataRef.current) return;
     onMetadata({ title: metadata.title.trim() || null, author: metadata.author.trim() || null });
-  }, [getMeta, onMetadata]);
-
-  const syncMetadata = () => {
-    if (!onMetadata) return;
-    const metadata = getMeta();
-    onMetadata({ title: metadata.title.trim() || null, author: metadata.author.trim() || null });
-  };
+  }, [getMeta, onMetadata, readerReady]);
 
   const saveSelection = (cfiRange: string, text: string) => {
     const value = text.trim();
@@ -114,7 +111,7 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
     <View style={[styles.fill, { backgroundColor: palette.background, paddingTop: contentPadding.top, paddingBottom: contentPadding.bottom }]}>
       <View onLayout={(event) => setDimensions({ width: Math.max(1, event.nativeEvent.layout.width), height: Math.max(1, event.nativeEvent.layout.height) })} style={styles.readerFill}>
         <Reader
-          key={`${sourceFormat}:${preferences.flow}`}
+          key={`${book.id}:${sourceFormat}:${preferences.flow}`}
           src={uri}
           fileSystem={useEpubFileSystem}
           width={dimensions.width}
@@ -134,7 +131,7 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
             changeTheme(theme);
             changeFontSize(`${preferences.fontSize}px`);
             changeFontFamily(preferences.fontFamily === 'serif' ? 'Georgia, "Songti SC", serif' : '-apple-system, "PingFang SC", sans-serif');
-            syncMetadata();
+            setReaderReady(true);
             onReady();
           }}
           onSingleTap={onSingleTap}
@@ -142,7 +139,7 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
           onNavigationLoaded={({ toc }) => onTocChange(flattenToc(toc))}
           onLocationChange={(_total, location, progression, currentSection) => onLocationChange(epubLocationEvent(location, progression, currentSection, sourceFormat === 'reflow'))}
           renderOpeningBookComponent={() => <LoadingReader label="正在排版" color={palette.muted} />}
-          openingBookComponentContainerStyle={{ backgroundColor: palette.background }}
+          openingBookComponentContainerStyle={{ width: dimensions.width, height: dimensions.height, backgroundColor: palette.background }}
         />
       </View>
     </View>
@@ -397,7 +394,7 @@ const styles = StyleSheet.create({
   readerFill: { flex: 1 },
   pdfDocument: { backgroundColor: 'transparent' },
   pdfThemeOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loading: { width: '100%', height: '100%', flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { marginTop: 12, fontSize: 12 },
   loadingTrack: { width: 148, height: 4, marginTop: 10, overflow: 'hidden', borderRadius: 2, backgroundColor: 'rgba(116, 122, 116, 0.18)' },
   loadingFill: { height: '100%', borderRadius: 2 },
