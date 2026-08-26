@@ -2,7 +2,6 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import Constants, { AppOwnership } from 'expo-constants';
-import { File } from 'expo-file-system';
 import { Reader, useReader } from '@epubjs-react-native/core';
 import type { Annotation, Location, Section, Theme, Toc } from '@epubjs-react-native/core';
 import type Pdf from 'react-native-pdf';
@@ -12,6 +11,7 @@ import type { BookLocator, ReaderLocationEvent, ReaderSelection, ReaderSurfaceHa
 import { createEpubLocator, createPdfLocator, createReflowLocator } from './book-reader';
 import { isReflowBookFormat, prepareReflowBook } from './book-reflow-cache';
 import { useEpubFileSystem } from './epub-file-system';
+import { readPdfBookMetadata } from '../../infrastructure/files/book-cover-thumbnail';
 
 interface BookReaderProps {
   book: Book;
@@ -67,6 +67,7 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
   const [readerReady, setReaderReady] = useState(false);
   const initialMetadataRef = useRef(getMeta());
   const theme = useMemo(() => epubTheme(preferences, palette), [palette, preferences]);
+  const fontFamily = useMemo(() => readerFontFamily(preferences), [preferences.fontFamily, preferences.fontName]);
   const initialThemeRef = useRef(theme);
   const scrolled = preferences.flow === 'scrolled';
   const initialAnnotations = useMemo(() => excerpts.flatMap<Annotation>((excerpt) => (excerpt.locationType === 'epub-cfi' || excerpt.locationType === 'reflow-cfi') && excerpt.location?.match(/^(?:epubcfi\(|reflow:)/) ? [{ type: 'highlight', cfiRange: excerpt.location.replace(/^reflow:/, ''), cfiRangeText: excerpt.text, sectionIndex: 0, data: { excerptId: excerpt.id }, styles: { color: palette.accent, opacity: 0.28 } }] : []), [excerpts, palette.accent]);
@@ -83,8 +84,8 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
   useEffect(() => {
     changeTheme(theme);
     changeFontSize(`${preferences.fontSize}px`);
-    changeFontFamily(preferences.fontFamily === 'serif' ? 'Georgia, "Songti SC", serif' : '-apple-system, "PingFang SC", sans-serif');
-  }, [changeFontFamily, changeFontSize, changeTheme, preferences.fontFamily, preferences.fontSize, theme]);
+    changeFontFamily(fontFamily);
+  }, [changeFontFamily, changeFontSize, changeTheme, fontFamily, preferences.fontSize, theme]);
 
   useEffect(() => {
     if (!readerReady || !onMetadata) return;
@@ -130,7 +131,7 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
           onReady={() => {
             changeTheme(theme);
             changeFontSize(`${preferences.fontSize}px`);
-            changeFontFamily(preferences.fontFamily === 'serif' ? 'Georgia, "Songti SC", serif' : '-apple-system, "PingFang SC", sans-serif');
+            changeFontFamily(fontFamily);
             setReaderReady(true);
             onReady();
           }}
@@ -182,7 +183,7 @@ const PdfBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function 
   useEffect(() => {
     if (!onMetadata) return;
     let active = true;
-    void probePdfMetadata(uri).then((metadata) => {
+    void readPdfBookMetadata(uri).then((metadata) => {
       if (active && (metadata.title || metadata.author)) onMetadata(metadata);
     });
     return () => { active = false; };
@@ -291,32 +292,6 @@ function loadPdfComponent(): typeof Pdf | null {
   }
 }
 
-async function probePdfMetadata(uri: string): Promise<{ title: string | null; author: string | null }> {
-  try {
-    const bytes = await new File(uri).bytes();
-    const source = new TextDecoder('latin1').decode(bytes);
-    return { title: pdfInfoValue(source, 'Title'), author: pdfInfoValue(source, 'Author') };
-  } catch {
-    return { title: null, author: null };
-  }
-}
-
-function pdfInfoValue(source: string, key: 'Title' | 'Author'): string | null {
-  const match = new RegExp(`\\/${key}\\s+(\\([^)]*(?:\\\\.[^)]*)*\\)|<([\\da-fA-F]+)>)`).exec(source);
-  if (!match) return null;
-  if (match[2]) {
-    const hex = match[2].length % 2 === 0 ? match[2] : `${match[2]}0`;
-    const bytes = Uint8Array.from(hex.match(/.{2}/g) ?? [], (part) => Number.parseInt(part, 16));
-    return cleanPdfMetadata(new TextDecoder('utf-8').decode(bytes)) ?? cleanPdfMetadata(new TextDecoder('latin1').decode(bytes));
-  }
-  return cleanPdfMetadata(match[1].slice(1, -1).replace(/\\([\\()])/g, '$1').replace(/\\n/g, '\n').replace(/\\r/g, '\r'));
-}
-
-function cleanPdfMetadata(value: string): string | null {
-  const cleaned = value.replace(/^\\uFEFF/, '').trim();
-  return cleaned || null;
-}
-
 function epubLocationEvent(location: Location, progression: number, section: Section | null, reflow: boolean): ReaderLocationEvent {
   const safeProgression = normalizeEpubProgression(progression, location.start.percentage);
   return {
@@ -341,7 +316,7 @@ function flattenToc(items: Toc, depth = 0): ReaderTocItem[] {
 }
 
 function epubTheme(preferences: ReadingPreferences, palette: BookReaderProps['palette']): Theme {
-  const family = preferences.fontFamily === 'serif' ? 'Georgia, "Songti SC", serif' : '-apple-system, "PingFang SC", sans-serif';
+  const family = readerFontFamily(preferences);
   return {
     'html, body': { background: `${palette.background} !important`, color: `${palette.text} !important` },
     body: { paddingRight: `${preferences.pageMargin}px !important`, paddingLeft: `${preferences.pageMargin}px !important`, fontFamily: `${family} !important`, fontSize: `${preferences.fontSize}px !important`, lineHeight: `${preferences.lineHeight} !important`, overflowWrap: 'break-word !important' },
@@ -351,6 +326,15 @@ function epubTheme(preferences: ReadingPreferences, palette: BookReaderProps['pa
     'img, svg, video': { maxWidth: '100% !important', height: 'auto !important' },
     '::selection': { background: `${palette.accent}55` },
   };
+}
+
+function readerFontFamily(preferences: ReadingPreferences): string {
+  const fallback = preferences.fontFamily === 'serif'
+    ? 'Georgia, "Songti SC", serif'
+    : '-apple-system, "PingFang SC", sans-serif';
+  if (!preferences.fontName) return fallback;
+  const custom = preferences.fontName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${custom}", ${fallback}`;
 }
 
 function pdfThemeAppearance(theme: ReaderTheme, enabled: boolean, background: string): { surface: ViewStyle; overlay: ViewStyle | null } {

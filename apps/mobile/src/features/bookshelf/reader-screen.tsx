@@ -10,13 +10,14 @@ import { SymbolView } from 'expo-symbols';
 import type { Book, BookExcerpt, Media, ReaderTheme, ReaderTocItem, ReadingPreferences } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { getSystemFontFamilies } from '../../infrastructure/platform/system-fonts';
 import { BookReader } from './book-reader-view';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import type { BookLocator, ReaderLocationEvent, ReaderSelection, ReaderSurfaceHandle } from './book-reader';
 import { createEpubLocator, createPdfLocator, createReflowLocator, detectReaderCapability, locatorFromBook, pageFromBookLocation, ReaderSessionController, readingPreferencesForBook, serializeBookLocator, updateReadingPreferencesJson } from './book-reader';
 
-type ReaderSheet = 'library' | 'display' | 'jump' | 'info' | null;
+type ReaderSheet = 'library' | 'display' | 'font' | 'jump' | 'info' | null;
 type LibraryTab = 'toc' | 'excerpts' | 'notes';
 
 const READER_THEMES: Array<{ id: ReaderTheme; label: string; swatch: string }> = [
@@ -51,12 +52,26 @@ export default function ReaderScreen() {
   const [pendingSelection, setPendingSelection] = useState<ReaderSelection | null>(null);
   const [jumpDraft, setJumpDraft] = useState(() => String(book ? pageFromBookLocation(book.location) : 1));
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [fontSearch, setFontSearch] = useState('');
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
   const readingPreferences = useMemo(() => book ? readingPreferencesForBook(preferences.readerPreferencesJson, book.id) : null, [book?.id, preferences.readerPreferencesJson]);
   const palette = useMemo(() => readerPalette(readingPreferences?.theme ?? 'paper'), [readingPreferences?.theme]);
 
   useEffect(() => {
     bookRef.current = book;
   }, [book]);
+
+  useEffect(() => {
+    if (sheet !== 'font' || fontsLoaded) return;
+    let active = true;
+    void getSystemFontFamilies().then((families) => {
+      if (active) setSystemFonts(families);
+    }).finally(() => {
+      if (active) setFontsLoaded(true);
+    });
+    return () => { active = false; };
+  }, [fontsLoaded, sheet]);
 
   const persistBookPatch = useCallback((changes: Partial<Book>) => {
     const currentBook = bookRef.current;
@@ -218,11 +233,22 @@ export default function ReaderScreen() {
     persistPreferences({ ...readingPreferences, pdfScale: nextScale });
   };
 
+  const selectFont = (fontName: string | null, fontFamily = readingPreferences.fontFamily) => {
+    persistPreferences({ ...readingPreferences, fontFamily, fontName });
+    setSheet('display');
+  };
+
   const locationLabel = formatLocation(book.format, location, book.progress);
   const hudProgressLabel = formatHudProgress(book.format, location, book.progress);
   const currentTocHref = currentTocItemHref(book.format, location, book.chapterHref ?? null, toc);
   const controlBarOpacity = controlsProgress;
   const immersiveHudOpacity = controlsProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  const fontSearchValue = fontSearch.trim().toLocaleLowerCase();
+  const visibleSystemFonts = fontSearchValue
+    ? systemFonts.filter((name) => name.toLocaleLowerCase().includes(fontSearchValue))
+    : systemFonts;
+  const selectedFontLabel = readingPreferences.fontName
+    ?? (readingPreferences.fontFamily === 'serif' ? '默认衬线' : '默认无衬线');
 
   return (
     <SafeAreaView edges={[]} style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -378,8 +404,46 @@ export default function ReaderScreen() {
           </Pressable>
           <SettingLabel color={palette.muted}>阅读主题</SettingLabel>
           <View style={styles.themeOptions}>{READER_THEMES.map((option) => <Pressable key={option.id} accessibilityState={{ selected: readingPreferences.theme === option.id }} onPress={() => persistPreferences({ ...readingPreferences, theme: option.id })} style={({ pressed }) => [styles.themeOption, { borderColor: readingPreferences.theme === option.id ? palette.accent : palette.line }, pressed && styles.pressed]}><View style={[styles.themeSwatch, { backgroundColor: option.swatch }]} /><Text style={[styles.themeLabel, { color: readingPreferences.theme === option.id ? palette.accent : palette.text }]}>{option.label}</Text></Pressable>)}</View>
-          {session.capabilities.reflow ? <><SettingLabel color={palette.muted}>排版</SettingLabel><View>{session.capabilities.fontSize ? <SettingRow label="字号" palette={palette}><Stepper label={`${readingPreferences.fontSize} px`} onDecrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.max(14, readingPreferences.fontSize - 1) })} onIncrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.min(32, readingPreferences.fontSize + 1) })} palette={palette} /></SettingRow> : null}{session.capabilities.lineHeight ? <SettingRow label="行距" palette={palette}><Stepper label={readingPreferences.lineHeight.toFixed(1)} onDecrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.max(1.3, Number((readingPreferences.lineHeight - 0.1).toFixed(1))) })} onIncrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.min(2.4, Number((readingPreferences.lineHeight + 0.1).toFixed(1))) })} palette={palette} /></SettingRow> : null}<SettingRow label="页边距" palette={palette}><Stepper label={`${readingPreferences.pageMargin} px`} onDecrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.max(12, readingPreferences.pageMargin - 2) })} onIncrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.min(44, readingPreferences.pageMargin + 2) })} palette={palette} /></SettingRow><SettingRow label="字体" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.fontFamily === 'serif'} label="衬线" onPress={() => persistPreferences({ ...readingPreferences, fontFamily: 'serif' })} palette={palette} /><Segment active={readingPreferences.fontFamily === 'sans'} label="无衬线" onPress={() => persistPreferences({ ...readingPreferences, fontFamily: 'sans' })} palette={palette} /></View></SettingRow><SettingRow label="翻页" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.flow === 'paginated'} label="左右" onPress={() => persistPreferences({ ...readingPreferences, flow: 'paginated' })} palette={palette} /><Segment active={readingPreferences.flow === 'scrolled'} label="上下" onPress={() => persistPreferences({ ...readingPreferences, flow: 'scrolled' })} palette={palette} /></View></SettingRow></View></> : null}
+          {session.capabilities.reflow ? <>
+            <SettingLabel color={palette.muted}>排版</SettingLabel>
+            <View>
+              {session.capabilities.fontSize ? <SettingRow label="字号" palette={palette}><Stepper label={`${readingPreferences.fontSize} px`} onDecrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.max(14, readingPreferences.fontSize - 1) })} onIncrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.min(32, readingPreferences.fontSize + 1) })} palette={palette} /></SettingRow> : null}
+              {session.capabilities.lineHeight ? <SettingRow label="行距" palette={palette}><Stepper label={readingPreferences.lineHeight.toFixed(1)} onDecrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.max(1.3, Number((readingPreferences.lineHeight - 0.1).toFixed(1))) })} onIncrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.min(2.4, Number((readingPreferences.lineHeight + 0.1).toFixed(1))) })} palette={palette} /></SettingRow> : null}
+              <SettingRow label="页边距" palette={palette}><Stepper label={`${readingPreferences.pageMargin} px`} onDecrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.max(12, readingPreferences.pageMargin - 2) })} onIncrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.min(44, readingPreferences.pageMargin + 2) })} palette={palette} /></SettingRow>
+              <SettingRow label="字体" palette={palette}>
+                <Pressable accessibilityLabel={`当前字体：${selectedFontLabel}`} onPress={() => {
+                  setFontSearch('');
+                  setSheet('font');
+                }} style={({ pressed }) => [styles.fontSettingButton, { backgroundColor: palette.surface }, pressed && styles.pressed]}>
+                  <Text numberOfLines={1} style={[styles.fontSettingValue, { color: palette.text }]}>{selectedFontLabel}</Text>
+                  <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={14} tintColor={palette.muted} type="hierarchical" />
+                </Pressable>
+              </SettingRow>
+              <SettingRow label="翻页" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.flow === 'paginated'} label="左右" onPress={() => persistPreferences({ ...readingPreferences, flow: 'paginated' })} palette={palette} /><Segment active={readingPreferences.flow === 'scrolled'} label="上下" onPress={() => persistPreferences({ ...readingPreferences, flow: 'scrolled' })} palette={palette} /></View></SettingRow>
+            </View>
+          </> : null}
           {session.capabilities.zoom ? <><SettingLabel color={palette.muted}>PDF 页面</SettingLabel><View><SettingRow label="配色" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfThemeEnabled} label="跟随主题" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: true })} palette={palette} /><Segment active={!readingPreferences.pdfThemeEnabled} label="保留原色" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: false })} palette={palette} /></View></SettingRow><SettingRow label="缩放" palette={palette}><Stepper label={`${readingPreferences.pdfScale.toFixed(1)}x`} onDecrease={() => setPdfZoom(readingPreferences.pdfScale - 0.25)} onIncrease={() => setPdfZoom(readingPreferences.pdfScale + 0.25)} palette={palette} /></SettingRow><SettingRow label="快捷缩放" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfScale === 1} label="适合宽度" onPress={() => setPdfZoom(1)} palette={palette} /><Segment active={readingPreferences.pdfScale === 1.5} label="150%" onPress={() => setPdfZoom(1.5)} palette={palette} /></View></SettingRow><SettingRow label="阅读方向" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={!readingPreferences.pdfHorizontal} label="纵向" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: false })} palette={palette} /><Segment active={readingPreferences.pdfHorizontal} label="横向" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: true })} palette={palette} /></View></SettingRow></View></> : null}
+        </ScrollView>
+      </ReaderSheetShell>
+
+      <ReaderSheetShell onClose={() => setSheet(null)} open={sheet === 'font'} palette={palette} paddingBottom={Math.max(spacing.lg, insets.bottom + spacing.md)} title="选择字体">
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={setFontSearch}
+          placeholder="搜索系统字体"
+          placeholderTextColor={palette.muted}
+          style={[styles.fontSearchInput, { backgroundColor: palette.background, color: palette.text }]}
+          value={fontSearch}
+        />
+        <ScrollView contentContainerStyle={styles.fontList} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <SettingLabel color={palette.muted}>内置</SettingLabel>
+          <FontOption active={!readingPreferences.fontName && readingPreferences.fontFamily === 'serif'} label="默认衬线" onPress={() => selectFont(null, 'serif')} palette={palette} previewFontFamily="serif" />
+          <FontOption active={!readingPreferences.fontName && readingPreferences.fontFamily === 'sans'} label="默认无衬线" onPress={() => selectFont(null, 'sans')} palette={palette} previewFontFamily="sans-serif" />
+          <SettingLabel color={palette.muted}>系统字体</SettingLabel>
+          {!fontsLoaded ? <Text style={[styles.fontStateText, { color: palette.muted }]}>正在读取系统字体…</Text> : null}
+          {fontsLoaded && visibleSystemFonts.length === 0 ? <Text style={[styles.fontStateText, { color: palette.muted }]}>{systemFonts.length === 0 ? '当前运行环境无法读取系统字体' : '没有匹配的字体'}</Text> : null}
+          {visibleSystemFonts.map((name) => <FontOption key={name} active={readingPreferences.fontName === name} label={name} onPress={() => selectFont(name)} palette={palette} previewFontFamily={name} />)}
         </ScrollView>
       </ReaderSheetShell>
     </SafeAreaView>
@@ -489,6 +553,16 @@ function SettingLabel({ children, color }: PropsWithChildren<{ color: string }>)
 
 function SettingRow({ children, label, palette }: PropsWithChildren<{ label: string; palette: ReturnType<typeof readerPalette> }>) {
   return <View style={[styles.settingRow, { borderBottomColor: palette.line }]}><Text style={[styles.settingRowLabel, { color: palette.text }]}>{label}</Text><View style={styles.settingRowControl}>{children}</View></View>;
+}
+
+function FontOption({ active, label, onPress, palette, previewFontFamily }: { active: boolean; label: string; onPress(): void; palette: ReturnType<typeof readerPalette>; previewFontFamily: string }) {
+  return <Pressable accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.fontOption, { borderBottomColor: palette.line }, pressed && styles.pressed]}>
+    <View style={styles.fontOptionCopy}>
+      <Text numberOfLines={1} style={[styles.fontOptionLabel, { color: active ? palette.accent : palette.text }]}>{label}</Text>
+      <Text numberOfLines={1} style={[styles.fontOptionPreview, { color: palette.muted, fontFamily: previewFontFamily }]}>山川湖海 Aa 123</Text>
+    </View>
+    {active ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={17} tintColor={palette.accent} type="hierarchical" /> : null}
+  </Pressable>;
 }
 
 function Stepper({ label, onDecrease, onIncrease, palette }: { label: string; onDecrease(): void; onIncrease(): void; palette: ReturnType<typeof readerPalette> }) {
@@ -656,6 +730,13 @@ const styles = createThemedStyles(() => ({
   sheetTitle: { flex: 1, fontFamily: typography.display, fontSize: 18 },
   sheetHint: { marginTop: spacing.sm, fontSize: 11, lineHeight: 18 },
   sheetInput: { minHeight: 52, marginTop: spacing.lg, paddingHorizontal: spacing.md, borderRadius: radius.sm, fontFamily: typography.mono, fontSize: 16 },
+  fontSearchInput: { minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.sm, fontSize: 13 },
+  fontList: { paddingBottom: spacing.lg },
+  fontStateText: { paddingVertical: spacing.xl, fontSize: 11, textAlign: 'center' },
+  fontOption: { minHeight: 64, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  fontOptionCopy: { flex: 1, minWidth: 0, marginRight: spacing.md },
+  fontOptionLabel: { fontSize: 12, fontWeight: '600' },
+  fontOptionPreview: { marginTop: 4, fontSize: 15 },
   primaryAction: { minHeight: 48, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   primaryActionText: { color: colors.onLife, fontSize: 12, fontWeight: '700' },
   tabs: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
@@ -701,6 +782,8 @@ const styles = createThemedStyles(() => ({
   settingRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
   settingRowLabel: { flex: 1, minWidth: 0, marginRight: spacing.sm, fontSize: 11, fontWeight: '600' },
   settingRowControl: { width: '68%', maxWidth: 210, minWidth: 176 },
+  fontSettingButton: { minHeight: 38, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderRadius: radius.sm },
+  fontSettingValue: { flex: 1, minWidth: 0, marginRight: spacing.xs, fontSize: 10, fontWeight: '600', textAlign: 'right' },
   stepper: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.sm },
   stepperButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   stepperValue: { fontFamily: typography.mono, fontSize: 13 },

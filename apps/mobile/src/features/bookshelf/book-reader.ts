@@ -113,6 +113,7 @@ export const DEFAULT_READING_PREFERENCES: ReadingPreferences = {
   lineHeight: 1.8,
   pageMargin: 22,
   fontFamily: 'serif',
+  fontName: null,
   flow: 'scrolled',
   pdfScale: 1,
   pdfHorizontal: false,
@@ -192,11 +193,18 @@ function sanitizePreferences(value: unknown): ReadingPreferences {
     lineHeight: clampNumber(candidate.lineHeight, 1.3, 2.4, DEFAULT_READING_PREFERENCES.lineHeight),
     pageMargin: clampNumber(candidate.pageMargin, 12, 44, DEFAULT_READING_PREFERENCES.pageMargin),
     fontFamily: candidate.fontFamily === 'sans' ? 'sans' : 'serif',
+    fontName: sanitizeFontName(candidate.fontName),
     flow: candidate.flow === 'paginated' ? 'paginated' : DEFAULT_READING_PREFERENCES.flow,
     pdfScale: clampNumber(candidate.pdfScale, 1, 5, DEFAULT_READING_PREFERENCES.pdfScale),
     pdfHorizontal: candidate.pdfHorizontal === true,
     pdfThemeEnabled: candidate.pdfThemeEnabled !== false,
   };
+}
+
+function sanitizeFontName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const name = value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 128);
+  return name || null;
 }
 
 function normalizePage(value: number): number {

@@ -29,6 +29,7 @@ export interface ReadingPreferences {
   lineHeight: number;
   pageMargin: number;
   fontFamily: ReaderFontFamily;
+  fontName: string | null;
   flow: ReaderFlow;
   pdfScale: number;
   pdfHorizontal: boolean;

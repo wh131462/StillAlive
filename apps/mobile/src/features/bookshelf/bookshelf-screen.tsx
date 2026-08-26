@@ -10,7 +10,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { feedback } from '../../shared/feedback';
 import { useAppState } from '../../application/state/app-state';
 import { bookFormatFromName, pickLocalBookAssets, pickLocalBooksFromDirectory } from '../../infrastructure/files/local-assets';
-import { extractBookCover } from '../../infrastructure/files/book-cover-thumbnail';
+import { extractBookCover, readBookFileMetadata } from '../../infrastructure/files/book-cover-thumbnail';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
 import { pageFromBookLocation } from './book-reader';
 import { classifyReflowError, clearReflowBookCache, isReflowBookFormat, probeReflowBook, reflowErrorMessage } from './book-reflow-cache';
@@ -40,18 +40,30 @@ export default function BookshelfScreen() {
   const [editingAuthor, setEditingAuthor] = useState('');
   const [editingCoverId, setEditingCoverId] = useState<string | null>(null);
   const [pendingCover, setPendingCover] = useState<Media | null>(null);
+  const [readingEditMetadata, setReadingEditMetadata] = useState(false);
+  const [editMetadataStatus, setEditMetadataStatus] = useState<string | null>(null);
   const importingRef = useRef(false);
   const booksRef = useRef(books);
   const coverBackfillRunningRef = useRef(false);
   const coverBackfillAttemptedRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
+  const editMetadataRequestRef = useRef(0);
+  const pendingCoverRef = useRef<Media | null>(null);
+  const discardMediaRef = useRef(discardMedia);
   const [coverBackfillTick, setCoverBackfillTick] = useState(0);
 
   booksRef.current = books;
+  discardMediaRef.current = discardMedia;
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      editMetadataRequestRef.current += 1;
+      const cover = pendingCoverRef.current;
+      pendingCoverRef.current = null;
+      if (cover) void discardMediaRef.current(cover).catch(() => undefined);
+    };
   }, []);
 
   useEffect(() => {
@@ -222,26 +234,42 @@ export default function BookshelfScreen() {
   };
 
   const openEditor = (book: Book) => {
+    editMetadataRequestRef.current += 1;
+    const previousCover = pendingCoverRef.current;
+    pendingCoverRef.current = null;
+    if (previousCover) void discardMedia(previousCover).catch(() => undefined);
     setActionBook(null);
     setEditingBook(book);
     setEditingTitle(book.title);
     setEditingAuthor(book.author ?? '');
     setEditingCoverId(book.coverMediaId);
     setPendingCover(null);
+    setReadingEditMetadata(false);
+    setEditMetadataStatus(null);
   };
 
   const closeEditor = () => {
-    if (pendingCover) void discardMedia(pendingCover).catch(() => undefined);
+    editMetadataRequestRef.current += 1;
+    const cover = pendingCoverRef.current;
+    pendingCoverRef.current = null;
+    if (cover) void discardMedia(cover).catch(() => undefined);
     setPendingCover(null);
+    setReadingEditMetadata(false);
+    setEditMetadataStatus(null);
     setEditingBook(null);
   };
 
   const chooseCover = async () => {
+    editMetadataRequestRef.current += 1;
+    setReadingEditMetadata(false);
+    setEditMetadataStatus(null);
     const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [3, 4], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled || !result.assets[0]) return;
     try {
       const item = await persistPickedImage(result.assets[0]);
-      if (pendingCover) await discardMedia(pendingCover).catch(() => undefined);
+      const previousCover = pendingCoverRef.current;
+      if (previousCover) await discardMedia(previousCover).catch(() => undefined);
+      pendingCoverRef.current = item;
       setPendingCover(item);
       setEditingCoverId(item.id);
     } catch (cause) {
@@ -250,13 +278,61 @@ export default function BookshelfScreen() {
   };
 
   const removeEditingCover = () => {
-    if (pendingCover) void discardMedia(pendingCover).catch(() => undefined);
+    editMetadataRequestRef.current += 1;
+    setReadingEditMetadata(false);
+    setEditMetadataStatus(null);
+    const cover = pendingCoverRef.current;
+    pendingCoverRef.current = null;
+    if (cover) void discardMedia(cover).catch(() => undefined);
     setPendingCover(null);
     setEditingCoverId(null);
   };
 
+  const readEditingBookMetadata = async () => {
+    if (!editingBook || readingEditMetadata) return;
+    const source = media.find((item) => item.id === editingBook.fileMediaId);
+    if (!source) {
+      feedback.alert('无法读取元数据', '找不到书籍原始文件，请重新导入后再试。');
+      return;
+    }
+    const requestId = ++editMetadataRequestRef.current;
+    const previousCover = pendingCoverRef.current;
+    pendingCoverRef.current = null;
+    setPendingCover(null);
+    setEditingCoverId(editingBook.coverMediaId);
+    setReadingEditMetadata(true);
+    setEditMetadataStatus(null);
+    if (previousCover) await discardMedia(previousCover).catch(() => undefined);
+    if (editMetadataRequestRef.current !== requestId) return;
+    try {
+      const metadata = await readBookFileMetadata(source, editingBook.format);
+      if (editMetadataRequestRef.current !== requestId) {
+        if (metadata.cover) await discardMedia(metadata.cover).catch(() => undefined);
+        return;
+      }
+      if (metadata.title) setEditingTitle(metadata.title);
+      if (metadata.author) setEditingAuthor(metadata.author);
+      if (metadata.cover) {
+        pendingCoverRef.current = metadata.cover;
+        setPendingCover(metadata.cover);
+        setEditingCoverId(metadata.cover.id);
+      }
+      const fields = [metadata.title ? '书名' : null, metadata.author ? '作者' : null, metadata.cover ? '封面' : null]
+        .filter((item): item is string => Boolean(item));
+      if (!fields.length) {
+        feedback.alert('未读取到元数据', '文件中没有可用于校正的书籍信息，当前内容已保留。');
+      } else {
+        setEditMetadataStatus(`已读取${fields.join('、')}，保存后生效。`);
+      }
+    } catch (cause) {
+      if (editMetadataRequestRef.current === requestId) feedback.alert('元数据读取失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    } finally {
+      if (editMetadataRequestRef.current === requestId) setReadingEditMetadata(false);
+    }
+  };
+
   const saveEditingBook = async () => {
-    if (!editingBook) return;
+    if (!editingBook || readingEditMetadata) return;
     const title = editingTitle.trim();
     if (!title) {
       feedback.alert('无法保存', '书名不能为空。');
@@ -275,10 +351,16 @@ export default function BookshelfScreen() {
         const oldCover = media.find((item) => item.id === oldCoverId);
         if (oldCover) await discardMedia(oldCover).catch(() => undefined);
       }
+      pendingCoverRef.current = null;
       setPendingCover(null);
       setEditingBook(null);
     } catch (cause) {
-      if (pendingCommitted && pendingCover) await discardMedia(pendingCover).catch(() => undefined);
+      if (pendingCommitted && pendingCover) {
+        await discardMedia(pendingCover).catch(() => undefined);
+        pendingCoverRef.current = null;
+        setPendingCover(null);
+        setEditingCoverId(editingBook.coverMediaId);
+      }
       feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
     }
   };
@@ -410,9 +492,11 @@ export default function BookshelfScreen() {
         <View style={styles.editHeader}><Text style={styles.sheetTitle}>编辑书籍</Text></View>
         <Pressable accessibilityLabel={editingCoverId ? '更换书籍封面' : '添加书籍封面'} onPress={() => void chooseCover()} style={({ pressed }) => [styles.editCoverButton, pressed && styles.pressed]}><BookCover book={{ ...editingBook, coverMediaId: editingCoverId }} media={[...media, ...(pendingCover ? [pendingCover] : [])]} size="large" /><View style={styles.coverBadge}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={14} tintColor={colors.onLife} type="hierarchical" /></View></Pressable>
         {editingCoverId ? <Pressable onPress={removeEditingCover} style={styles.removeCoverButton}><Text style={styles.removeCoverText}>移除封面</Text></Pressable> : null}
+        <Pressable accessibilityRole="button" disabled={readingEditMetadata} onPress={() => void readEditingBookMetadata()} style={({ pressed }) => [styles.metadataButton, readingEditMetadata && styles.disabled, pressed && styles.pressed]}>{readingEditMetadata ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'refresh', ios: 'arrow.clockwise', web: 'refresh' }} size={17} tintColor={colors.life} type="hierarchical" />}<Text style={styles.metadataButtonText}>{readingEditMetadata ? '正在读取文件元数据' : '从文件读取元数据'}</Text></Pressable>
+        {editMetadataStatus ? <Text style={styles.metadataStatus}>{editMetadataStatus}</Text> : null}
         <EditField label="书名" value={editingTitle} onChangeText={setEditingTitle} placeholder="输入书名" />
         <EditField label="作者" value={editingAuthor} onChangeText={setEditingAuthor} placeholder="未知作者" />
-        <Pressable accessibilityRole="button" disabled={!editingTitle.trim()} onPress={() => void saveEditingBook()} style={({ pressed }) => [styles.saveButton, !editingTitle.trim() && styles.disabled, pressed && styles.pressed]}><Text style={styles.saveButtonText}>保存修改</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={!editingTitle.trim() || readingEditMetadata} onPress={() => void saveEditingBook()} style={({ pressed }) => [styles.saveButton, (!editingTitle.trim() || readingEditMetadata) && styles.disabled, pressed && styles.pressed]}><Text style={styles.saveButtonText}>保存修改</Text></Pressable>
       </ScrollView> : null}
     </DraggableBottomSheet>
   </SafeAreaView>;
@@ -596,6 +680,9 @@ const styles = createThemedStyles(() => ({
   coverBadge: { position: 'absolute', right: -3, bottom: -3, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.sheet, borderRadius: 14, backgroundColor: colors.life },
   removeCoverButton: { alignSelf: 'center', marginTop: spacing.sm, padding: spacing.xs },
   removeCoverText: { color: colors.danger, fontSize: 10 },
+  metadataButton: { minHeight: 44, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  metadataButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
+  metadataStatus: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   editField: { marginTop: spacing.lg },
   editLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
   editInput: { minHeight: 50, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 14 },
