@@ -260,7 +260,7 @@ function ZoomableImage({ active, index, onSourceSize, uri }: { active: boolean; 
 
 function containSize(source: Size, viewport: Size): Size {
   if (!source.width || !source.height || !viewport.width || !viewport.height) return { width: 0, height: 0 };
-  const scale = Math.min(viewport.width / source.width, viewport.height / source.height, 1);
+  const scale = Math.min(viewport.width / source.width, viewport.height / source.height);
   return { width: source.width * scale, height: source.height * scale };
 }
 
