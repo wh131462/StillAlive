@@ -7,25 +7,55 @@ export interface ResolvedDeviceLocation {
   city: string;
 }
 
-let currentPositionTask: Promise<Location.LocationObject> | null = null;
-let resolveLocationTask: Promise<ResolvedDeviceLocation> | null = null;
-let resolvedLocationCache: { resolvedAt: number; value: ResolvedDeviceLocation } | null = null;
+export type DeviceLocationDetail = 'address' | 'city';
 
-const RESOLVED_LOCATION_MAX_AGE_MS = 5 * 60 * 1000;
+interface LocationProfile {
+  cacheMaxAgeMs: number;
+  lastKnownMaxAgeMs: number;
+  lastKnownRequiredAccuracy: number;
+  accuracy: Location.Accuracy;
+  maxAccuracy: number;
+  timeoutMs: number;
+}
 
-export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
-  writePersistentLog('INFO', 'location.resolve.started', { platform: Platform.OS, cached: Boolean(resolvedLocationCache) });
+const LOCATION_PROFILES: Record<DeviceLocationDetail, LocationProfile> = {
+  city: {
+    cacheMaxAgeMs: 5 * 60 * 1000,
+    lastKnownMaxAgeMs: 5 * 60 * 1000,
+    lastKnownRequiredAccuracy: 3_000,
+    accuracy: Location.Accuracy.Balanced,
+    maxAccuracy: 5_000,
+    timeoutMs: 10_000,
+  },
+  address: {
+    cacheMaxAgeMs: 60 * 1000,
+    lastKnownMaxAgeMs: 60 * 1000,
+    lastKnownRequiredAccuracy: 500,
+    accuracy: Location.Accuracy.High,
+    maxAccuracy: 500,
+    timeoutMs: 15_000,
+  },
+};
+
+const currentPositionTasks = new Map<DeviceLocationDetail, Promise<Location.LocationObject>>();
+const resolveLocationTasks = new Map<DeviceLocationDetail, Promise<ResolvedDeviceLocation>>();
+const resolvedLocationCaches = new Map<DeviceLocationDetail, { resolvedAt: number; accuracy: number | null; value: ResolvedDeviceLocation }>();
+
+export async function resolveDeviceLocation(detail: DeviceLocationDetail = 'address'): Promise<ResolvedDeviceLocation> {
+  writePersistentLog('INFO', 'location.resolve.started', { detail, platform: Platform.OS, cached: resolvedLocationCaches.has(detail) });
   if (Platform.OS === 'web') throw new Error('网页端暂不支持记录实际地址');
 
+  let resolveLocationTask = resolveLocationTasks.get(detail);
   if (!resolveLocationTask) {
-    const task = resolveDeviceLocationOnce();
-    resolveLocationTask = task;
+    const task = resolveDeviceLocationOnce(detail);
+    resolveLocationTasks.set(detail, task);
     void task.finally(() => {
-      if (resolveLocationTask === task) resolveLocationTask = null;
+      if (resolveLocationTasks.get(detail) === task) resolveLocationTasks.delete(detail);
     }).catch(() => undefined);
+    resolveLocationTask = task;
   }
   return resolveLocationTask.then((value) => {
-    writePersistentLog('INFO', 'location.resolve.finished', { address: value.address, city: value.city });
+    writePersistentLog('INFO', 'location.resolve.finished', { address: value.address, city: value.city, detail });
     return value;
   }, (cause) => {
     writePersistentError('location.resolve.failed', cause);
@@ -33,21 +63,30 @@ export async function resolveDeviceLocation(): Promise<ResolvedDeviceLocation> {
   });
 }
 
-async function resolveDeviceLocationOnce(): Promise<ResolvedDeviceLocation> {
+async function resolveDeviceLocationOnce(detail: DeviceLocationDetail): Promise<ResolvedDeviceLocation> {
+  const profile = LOCATION_PROFILES[detail];
   const permission = await Location.getForegroundPermissionsAsync();
   if (!permission.granted) throw new Error('定位权限未开启');
   if (!await Location.hasServicesEnabledAsync()) throw new Error('系统定位服务未开启');
+  const providerStatus = await Location.getProviderStatusAsync();
+  writePersistentLog('INFO', 'location.providers.status', providerStatus);
 
-  if (resolvedLocationCache && Date.now() - resolvedLocationCache.resolvedAt <= RESOLVED_LOCATION_MAX_AGE_MS) {
+  const resolvedLocationCache = resolvedLocationCaches.get(detail);
+  if (resolvedLocationCache && Date.now() - resolvedLocationCache.resolvedAt <= profile.cacheMaxAgeMs && isAccurateEnough(resolvedLocationCache.accuracy, profile.maxAccuracy)) {
     return resolvedLocationCache.value;
   }
 
   const cachedPosition = await withTimeout(
-    Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000, requiredAccuracy: 1_000 }),
+    Location.getLastKnownPositionAsync({ maxAge: profile.lastKnownMaxAgeMs, requiredAccuracy: profile.lastKnownRequiredAccuracy }),
     800,
     '缓存位置读取超时',
   ).catch(() => null);
-  const position = cachedPosition ?? await getCurrentPosition();
+  const position = cachedPosition && isUsablePosition(cachedPosition, profile.maxAccuracy)
+    ? cachedPosition
+    : await getCurrentPosition(detail);
+  if (!isUsablePosition(position, profile.maxAccuracy)) {
+    throw new Error(detail === 'city' ? '系统未返回有效城市定位，请稍后重试' : '系统未返回足够精确的位置，请移到室外后重试');
+  }
   const [place] = await withTimeout(Location.reverseGeocodeAsync({
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
@@ -66,23 +105,59 @@ async function resolveDeviceLocationOnce(): Promise<ResolvedDeviceLocation> {
   ]), place);
   if (!city || !address) throw new Error('暂时无法识别当前位置');
   const value = { address: address.slice(0, 80), city: city.slice(0, 40) };
-  resolvedLocationCache = { resolvedAt: Date.now(), value };
+  resolvedLocationCaches.set(detail, { resolvedAt: Date.now(), accuracy: position.coords.accuracy ?? null, value });
   return value;
 }
 
-function getCurrentPosition(): Promise<Location.LocationObject> {
+function isUsablePosition(position: Location.LocationObject, maxAccuracy: number): boolean {
+  const { latitude, longitude } = position.coords;
+  return Number.isFinite(latitude)
+    && Number.isFinite(longitude)
+    && Math.abs(latitude) > 0.0001
+    && Math.abs(longitude) > 0.0001
+    && isAccurateEnough(position.coords.accuracy ?? null, maxAccuracy);
+}
+
+function isAccurateEnough(accuracy: number | null, maxAccuracy: number): boolean {
+  return accuracy === null || (Number.isFinite(accuracy) && accuracy <= maxAccuracy);
+}
+
+function getCurrentPosition(detail: DeviceLocationDetail): Promise<Location.LocationObject> {
+  let currentPositionTask = currentPositionTasks.get(detail);
   if (!currentPositionTask) {
-    const task = withTimeout(
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low, mayShowUserSettingsDialog: false }),
-      10_000,
-      '定位超时，请稍后重试',
-    );
-    currentPositionTask = task;
+    const task = getCurrentPositionWithTimeout(detail);
+    currentPositionTasks.set(detail, task);
     void task.finally(() => {
-      if (currentPositionTask === task) currentPositionTask = null;
+      if (currentPositionTasks.get(detail) === task) currentPositionTasks.delete(detail);
     }).catch(() => undefined);
+    currentPositionTask = task;
   }
   return currentPositionTask;
+}
+
+function getCurrentPositionWithTimeout(detail: DeviceLocationDetail): Promise<Location.LocationObject> {
+  const profile = LOCATION_PROFILES[detail];
+  if (detail === 'city') return getCurrentPositionAttempt(profile.accuracy, profile.timeoutMs);
+
+  // 详细地址先使用系统融合定位；精度不足或超时时再请求 GPS，避免室内设备无谓等待。
+  return getCurrentPositionAttempt(Location.Accuracy.Balanced, 7_000)
+    .then((position) => isUsablePosition(position, profile.maxAccuracy) ? position : getHighAccuracyFallback(position, profile))
+    .catch((cause) => getHighAccuracyFallback(cause, profile));
+}
+
+function getCurrentPositionAttempt(accuracy: Location.Accuracy, timeoutMs: number): Promise<Location.LocationObject> {
+  return withTimeout(
+    Location.getCurrentPositionAsync({ accuracy, mayShowUserSettingsDialog: true }),
+    timeoutMs,
+    '定位超时，请稍后重试',
+  );
+}
+
+function getHighAccuracyFallback(cause: unknown, profile: LocationProfile): Promise<Location.LocationObject> {
+  writePersistentLog('WARN', 'location.resolve.high-accuracy-fallback', {
+    cause: cause instanceof Error ? cause.message : '平衡定位精度不足',
+  });
+  return getCurrentPositionAttempt(Location.Accuracy.High, profile.timeoutMs - 7_000);
 }
 
 function formatCityLabel(place: Location.LocationGeocodedAddress): string {

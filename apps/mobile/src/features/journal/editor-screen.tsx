@@ -560,7 +560,7 @@ export default function EditorScreen() {
     try {
       setLocating(detail);
       if (!await ensureAppPermission('location')) return;
-      const location = await resolveDeviceLocation();
+      const location = await resolveDeviceLocation(detail);
       setLocationName(detail === 'city' ? location.city : location.address);
       setLocationPickerOpen(false);
     } catch (cause: unknown) {

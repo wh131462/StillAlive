@@ -88,7 +88,7 @@ export default function SpaceScreen() {
     checkInLocationTasksRef.current.add(checkInId);
     try {
       if (requestPermission && !await ensureAppPermission('location')) return;
-      const location = await resolveDeviceLocation();
+      const location = await resolveDeviceLocation('city');
       await updateCheckInCity(checkInId, location.city);
     } catch (cause: unknown) {
       writePersistentError('location.check-in-city.failed', cause, { checkInId });
