@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "1.1.2",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.2.apk",
-  "releaseNotes": "新增备份合并导入与完整数据恢复能力，支持诊断扫描、错误日志和开发者诊断工具。\n优化记录编辑、阅读、音乐播放列表及批量导入体验。\n修复视频控制器显示、媒体兼容性和 Android 构建问题。"
+  "versionCode": 12,
+  "versionName": "1.1.3",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.3.apk",
+  "releaseNotes": "新增 EPUB 系统字体选择，支持重新读取书籍与歌曲元数据，完善加密音乐解锁、MP4 音频转换及更多标签格式解析。\n优化产品门户、阅读器加载、图片预览缩放和定位精度。\n修复个人签名显示及时间线月份切换按钮样式。"
 }
