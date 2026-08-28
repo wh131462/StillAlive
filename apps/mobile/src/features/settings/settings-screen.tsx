@@ -52,7 +52,7 @@ export default function SettingsScreen() {
           </View>
         </View>
         <View style={styles.separator} />
-        <NameStylePicker includePersonalOnly label="个人名字" onChange={(value) => savePreference({ selfNameStyle: value })} sample={preferences.nickname || '我的名字'} value={preferences.selfNameStyle} />
+        <NameStylePicker includePersonalOnly label="个人名字" onChange={(value) => savePreference({ selfNameStyle: value })} sample={preferences.nickname || preferences.profileName || '我的名字'} value={preferences.selfNameStyle} />
         <View style={styles.separator} />
         <NameStylePicker label="朋友名字" onChange={(value) => savePreference({ friendNameStyle: value })} sample="朋友名字" value={preferences.friendNameStyle} />
       </View>

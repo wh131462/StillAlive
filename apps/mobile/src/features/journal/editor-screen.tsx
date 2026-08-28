@@ -32,6 +32,7 @@ import { resolveDeviceLocation } from '../../infrastructure/platform/device-loca
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
 import { extractEmbeddedMediaIds } from './embedded-media';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { personDisplayName } from '../people/person-profile';
 import { MusicShareCard } from '../../application/components/music-share-card';
 import { ReadingShareCard } from '../../application/components/reading-share-card';
 import { createMusicShare, extractMusicShares, withMusicShare, withoutMusicShares } from '../../application/music-share';
@@ -700,8 +701,8 @@ export default function EditorScreen() {
                 {people.map((person) => {
                   const selected = selectedPersonIds.includes(person.id);
                   return <Pressable key={person.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => selectPerson(person)} style={styles.personRow}>
-                    <View style={styles.avatar}><Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text></View>
-                    <View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRelation}>{person.relationToMe ?? '还没有填写关系'}</Text></View>
+                    <View style={styles.avatar}><Text style={styles.avatarText}>{personDisplayName(person).slice(0, 1)}</Text></View>
+                    <View style={styles.personInfo}><Text style={styles.personName}>{personDisplayName(person)}</Text><Text style={styles.personRelation}>{person.relationToMe ?? '还没有填写关系'}</Text></View>
                     <Text style={[styles.personSelect, selected && styles.personSelected]}>{selected ? '取消关联' : '提到'}</Text>
                   </Pressable>;
                 })}

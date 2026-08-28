@@ -43,7 +43,7 @@ export interface AppStateValue {
   replaceMedia(mediaId: string, replacement: Media): Promise<void>;
   discardMedia(media: Media): Promise<void>;
   createPerson(name: string): Promise<Person>;
-  updatePerson(personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
+  updatePerson(personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
   deletePerson(personId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
   setPersonBooks(personId: string, bookIds: string[]): Promise<void>;

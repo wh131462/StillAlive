@@ -5,7 +5,7 @@ export type BuiltInTagSystem = 'mbti' | 'constellation' | 'zodiac' | 'custom';
 export type Gender = 'female' | 'male' | 'other';
 export type AppThemeId = 'moss' | 'sand' | 'midnight';
 export type NameStyleId = 'fresh' | 'journal' | 'sunlit' | 'colorful' | 'iridescent';
-export type ProfileCollectionField = 'name' | 'gender' | 'birthday' | 'mbti' | 'customTags';
+export type ProfileCollectionField = 'name' | 'nickname' | 'bio' | 'gender' | 'birthday' | 'mbti' | 'customTags';
 export type ProfileCollectionRequestStatus = 'pending' | 'consumed';
 export type MusicCollectionTargetType = 'self' | 'person';
 export type MusicPlaybackMode = 'list' | 'shuffle' | 'single';
@@ -67,6 +67,8 @@ export interface Post {
 export interface Person {
   id: string;
   name: string;
+  nickname: string;
+  bio: string | null;
   avatarMediaId: string | null;
   gender: Gender | null;
   relationToMe: string | null;

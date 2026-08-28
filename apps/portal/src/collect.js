@@ -1,7 +1,7 @@
 const MAX_REQUEST_CHARS = 8192;
 const MAX_PLAINTEXT_BYTES = 4096;
 const MBTI_TYPES = ['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP', 'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'];
-const ALLOWED_FIELDS = new Set(['name', 'gender', 'birthday', 'mbti', 'customTags']);
+const ALLOWED_FIELDS = new Set(['name', 'nickname', 'bio', 'gender', 'birthday', 'mbti', 'customTags']);
 const statusPanel = document.querySelector('[data-status]');
 const form = document.querySelector('[data-form]');
 const fieldsRoot = document.querySelector('[data-fields]');
@@ -76,6 +76,8 @@ document.querySelector('[data-copy]').addEventListener('click', async () => {
 function renderForm(request) {
   const sections = [];
   if (request.f.includes('name')) sections.push(section('姓名', '填写你平时最常使用的名字。', '<input class="text-input" name="name" maxlength="40" autocomplete="name" placeholder="姓名" />'));
+  if (request.f.includes('nickname')) sections.push(section('昵称', '填写你更常使用的称呼，也可以留空。', '<input class="text-input" name="nickname" maxlength="30" placeholder="昵称" />'));
+  if (request.f.includes('bio')) sections.push(section('个人简介', '简单介绍一下自己，也可以留空。', '<textarea class="text-input" name="bio" maxlength="500" rows="4" placeholder="个人简介"></textarea>'));
   if (request.f.includes('gender')) sections.push(section('性别', '选择你认同的选项，也可以留空。', optionGrid('gender', [['female', '女'], ['male', '男'], ['other', '其他'], ['', '暂不填写']], 'gender-grid')));
   if (request.f.includes('birthday')) sections.push(section('生日', '年份、月份和日期需要一起填写。', '<div class="calendar-toggle option-grid"><label class="option-chip"><input type="radio" name="calendar" value="solar" checked /><span>公历</span></label><label class="option-chip"><input type="radio" name="calendar" value="lunar" /><span>农历</span></label></div><div class="birthday-grid"><input class="number-input" name="year" type="number" inputmode="numeric" min="1900" max="2200" placeholder="年" /><input class="number-input" name="month" type="number" inputmode="numeric" min="1" max="12" placeholder="月" /><input class="number-input" name="day" type="number" inputmode="numeric" min="1" max="31" placeholder="日" /></div><label class="leap-row" data-leap-row hidden><input name="isLeapMonth" type="checkbox" />这是农历闰月</label>'));
   if (request.f.includes('mbti')) sections.push(section('MBTI', '从标准类型中选择，也可以留空。', optionGrid('mbti', [['', '暂不填写'], ...MBTI_TYPES.map((value) => [value, value])], 'mbti-grid')));
@@ -146,6 +148,14 @@ function collectAnswers(request) {
     const name = String(data.get('name') || '').trim();
     if (name) answers.name = name;
   }
+  if (request.f.includes('nickname')) {
+    const nickname = String(data.get('nickname') || '').trim();
+    if (nickname) answers.nickname = nickname;
+  }
+  if (request.f.includes('bio')) {
+    const bio = String(data.get('bio') || '').trim();
+    if (bio) answers.bio = bio;
+  }
   if (request.f.includes('gender')) {
     const gender = data.get('gender');
     if (gender === 'female' || gender === 'male' || gender === 'other') answers.gender = gender;
@@ -196,7 +206,7 @@ async function encryptResponse(request, plaintext) {
 
 function parseInvitation(encoded) {
   const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(decodeBase64Url(encoded)));
-  if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'exp,f,id,pk,tags,v' || value.v !== 1 || !validRequestId(value.id) || !validIsoDate(value.exp) || typeof value.pk !== 'string' || !Array.isArray(value.f) || !value.f.length || value.f.some((field) => !ALLOWED_FIELDS.has(field)) || new Set(value.f).size !== value.f.length || !Array.isArray(value.tags) || value.tags.length > 100) throw new Error('Invalid request');
+  if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'exp,f,id,pk,tags,v' || value.v !== 1 || !validRequestId(value.id) || !validIsoDate(value.exp) || typeof value.pk !== 'string' || !Array.isArray(value.f) || !value.f.length || value.f.length > 7 || value.f.some((field) => !ALLOWED_FIELDS.has(field)) || new Set(value.f).size !== value.f.length || !Array.isArray(value.tags) || value.tags.length > 100) throw new Error('Invalid request');
   const publicKey = decodeBase64Url(value.pk);
   if (publicKey.byteLength !== 65 || publicKey[0] !== 4) throw new Error('Invalid public key');
   for (const tag of value.tags) if (!isRecord(tag) || Object.keys(tag).sort().join(',') !== 'group,id,label' || !/^[A-Za-z0-9_-]{8,64}$/.test(tag.id) || typeof tag.label !== 'string' || !tag.label.trim() || tag.label.length > 24 || (tag.group !== null && (typeof tag.group !== 'string' || !tag.group.trim() || tag.group.length > 24))) throw new Error('Invalid tags');

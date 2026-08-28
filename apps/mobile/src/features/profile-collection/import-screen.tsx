@@ -59,6 +59,8 @@ export default function ProfileCollectionImportScreen() {
     if (!person || !payload) return [];
     const result: Difference[] = [];
     if (payload.answers.name && payload.answers.name !== person.name) result.push({ field: 'name', label: '姓名', before: person.name, after: payload.answers.name });
+    if (payload.answers.nickname && payload.answers.nickname !== person.nickname) result.push({ field: 'nickname', label: '昵称', before: person.nickname || '未记录', after: payload.answers.nickname });
+    if (payload.answers.bio && payload.answers.bio !== (person.bio ?? '')) result.push({ field: 'bio', label: '个人简介', before: person.bio || '未记录', after: payload.answers.bio });
     if (payload.answers.gender && payload.answers.gender !== person.gender) result.push({ field: 'gender', label: '性别', before: formatGender(person.gender), after: formatGender(payload.answers.gender) });
     if (payload.answers.birthday && !sameBirthday(person.birthday, payload.answers.birthday)) result.push({ field: 'birthday', label: '生日', before: person.birthday ? formatBirthday(person.birthday) : '未记录', after: formatBirthday(toBirthday(payload.answers.birthday, person.birthday)) });
     if (payload.answers.mbti && payload.answers.mbti !== currentMbti) result.push({ field: 'mbti', label: 'MBTI', before: currentMbti ?? '未记录', after: payload.answers.mbti });
@@ -139,6 +141,8 @@ export default function ProfileCollectionImportScreen() {
     const nextPerson: Person = {
       ...person,
       name: selected.has('name') && answers.name ? answers.name : person.name,
+      nickname: selected.has('nickname') && answers.nickname ? answers.nickname : person.nickname,
+      bio: selected.has('bio') && answers.bio ? answers.bio : person.bio,
       gender: selected.has('gender') && answers.gender ? answers.gender : person.gender,
       birthday: selected.has('birthday') && answers.birthday ? toBirthday(answers.birthday, person.birthday) : person.birthday,
     };

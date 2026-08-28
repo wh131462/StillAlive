@@ -10,15 +10,17 @@ import { feedback } from '../../shared/feedback';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { personDisplayName } from './person-profile';
 
 export default function PersonBooksScreen() {
   const router = useRouter();
   const { personId } = useLocalSearchParams<{ personId?: string }>();
   const { books, media, people, personBooks, setPersonBooks } = useAppState();
+  const person = personId ? people.find((item) => item.id === personId) : null;
+  const displayName = person ? personDisplayName(person) : '';
   const [pickerVisible, setPickerVisible] = useState(false);
   const [search, setSearch] = useState('');
   const savingRef = useRef(false);
-  const person = people.find((item) => item.id === personId);
   const selectedIds = useMemo(() => new Set(personBooks.filter((entry) => entry.personId === personId).map((entry) => entry.bookId)), [personBooks, personId]);
   const selectionRef = useRef(selectedIds);
   const selectedBooks = useMemo(() => books.filter((book) => selectedIds.has(book.id)), [books, selectedIds]);
@@ -58,7 +60,7 @@ export default function PersonBooksScreen() {
       <ToolPageHeader
         onBack={() => router.back()}
         right={<ToolPageHeaderAction accessibilityLabel="添加喜欢的书籍" disabled={!person || !books.length} onPress={() => setPickerVisible(true)}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={22} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction>}
-        title={person ? `${person.name}喜欢的书籍` : '喜欢的书籍'}
+      title={person ? `${displayName}喜欢的书籍` : '喜欢的书籍'}
       />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={styles.summary}>{selectedBooks.length} 本书籍</Text>

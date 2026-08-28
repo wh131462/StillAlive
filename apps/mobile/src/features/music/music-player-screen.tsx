@@ -13,6 +13,7 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 import { useAppState } from '../../application/state/app-state';
 import { MusicCover } from './music-cover';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { personDisplayName } from '../people/person-profile';
 
 type QueueSourceControl = MusicQueueSource | 'people';
 
@@ -200,7 +201,8 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
                 {peopleWithMusic.map(({ person, count }) => {
                   const avatar = person.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
                   const selected = person.id === player.queuePersonId;
-                  return <Pressable key={person.id} accessibilityLabel={`查看${person.name}喜欢的音乐`} accessibilityState={{ selected }} onPress={() => selectPerson(person.id)} style={({ pressed }) => [styles.personChoice, selected && styles.personChoiceSelected, pressed && styles.pressed]}><View style={styles.personAvatar}>{avatar ? <Image resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.personAvatarImage} /> : <Text style={styles.personAvatarText}>{person.name.slice(0, 1)}</Text>}</View><View style={styles.personChoiceCopy}><Text numberOfLines={1} style={[styles.personChoiceName, selected && styles.personChoiceNameSelected]}>{person.name}</Text><Text style={styles.personChoiceMeta}>{count} 首喜欢的音乐</Text></View><SymbolView name={{ android: selected ? 'check' : 'chevron_right', ios: selected ? 'checkmark' : 'chevron.right', web: selected ? 'check' : 'chevron_right' }} size={18} tintColor={selected ? colors.life : colors.inkFaint} type="hierarchical" /></Pressable>;
+                  const displayName = personDisplayName(person);
+                  return <Pressable key={person.id} accessibilityLabel={`查看${displayName}喜欢的音乐`} accessibilityState={{ selected }} onPress={() => selectPerson(person.id)} style={({ pressed }) => [styles.personChoice, selected && styles.personChoiceSelected, pressed && styles.pressed]}><View style={styles.personAvatar}>{avatar ? <Image resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.personAvatarImage} /> : <Text style={styles.personAvatarText}>{displayName.slice(0, 1)}</Text>}</View><View style={styles.personChoiceCopy}><Text numberOfLines={1} style={[styles.personChoiceName, selected && styles.personChoiceNameSelected]}>{displayName}</Text><Text style={styles.personChoiceMeta}>{count} 首喜欢的音乐</Text></View><SymbolView name={{ android: selected ? 'check' : 'chevron_right', ios: selected ? 'checkmark' : 'chevron.right', web: selected ? 'check' : 'chevron_right' }} size={18} tintColor={selected ? colors.life : colors.inkFaint} type="hierarchical" /></Pressable>;
                 })}
                 {peopleWithMusic.length === 0 ? <View style={styles.queueEmpty}><Text style={styles.emptyText}>还没有人物收藏音乐</Text></View> : null}
               </ScrollView>

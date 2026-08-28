@@ -9,6 +9,7 @@ import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-av
 import { useAppState } from '../../application/state/app-state';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
 import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
+import { personDisplayName } from './person-profile';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
 export default function PeopleScreen() {
@@ -38,7 +39,7 @@ export default function PeopleScreen() {
   const visiblePeople = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     return people
-      .filter((person) => !normalizedQuery || [person.name, person.relationToMe ?? '', person.impression ?? ''].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
+      .filter((person) => !normalizedQuery || [person.name, person.nickname, person.relationToMe ?? '', person.impression ?? ''].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
       .sort((a, b) => {
         if (sortByName) return a.name.localeCompare(b.name, 'zh-CN');
         const latestA = summaries[a.id]?.latestDay ?? '';
@@ -124,11 +125,12 @@ export default function PeopleScreen() {
             {visiblePeople.map((person, index) => {
               const avatar = person.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
               const summary = summaries[person.id];
-              return <Pressable key={person.id} accessibilityLabel={`查看${person.name}的人物详情`} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, index === visiblePeople.length - 1 && styles.personRowLast, pressed && styles.personRowPressed]}>
-                <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
+              const displayName = personDisplayName(person);
+              return <Pressable key={person.id} accessibilityLabel={`查看${displayName}的人物详情`} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, index === visiblePeople.length - 1 && styles.personRowLast, pressed && styles.personRowPressed]}>
+                <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${displayName}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{displayName.slice(0, 1)}</Text>}</View>
                 <View style={styles.personInfo}>
                   <View style={styles.personTitleRow}>
-                    <Text numberOfLines={1} style={[styles.personName, nameTextStyle(preferences.friendNameStyle)]}>{person.name}</Text>
+                    <Text numberOfLines={1} style={[styles.personName, nameTextStyle(preferences.friendNameStyle)]}>{displayName}</Text>
                     {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
                   </View>
                   <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>

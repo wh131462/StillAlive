@@ -8,7 +8,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
 import { genderOption } from './gender-picker';
 import { extractAudioEmbeds } from '../journal/embedded-media';
-import { constellationForBirthday, formatBirthday, nextBirthday, toLocalDayKey, zodiacForBirthday } from './person-profile';
+import { constellationForBirthday, formatBirthday, nextBirthday, personDisplayName, toLocalDayKey, zodiacForBirthday } from './person-profile';
 import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
 import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
 import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
@@ -21,6 +21,7 @@ export default function PersonScreen() {
   const { albums, getPostsByPerson, media, musicCollectionEntries, people, personBooks, personTags, posts: allPosts, preferences, readingNoteSources, ready, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
+  const displayName = person ? personDisplayName(person) : '';
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
   const gender = genderOption(person?.gender ?? null);
   const personAssignments = personTags.filter((item) => item.personId === person?.id);
@@ -56,13 +57,14 @@ export default function PersonScreen() {
           <>
             <View style={styles.identityCard}>
               <View style={styles.identityRow}>
-                <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${person.name}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{person.name.slice(0, 1)}</Text>}</View>
+                <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${displayName}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{displayName.slice(0, 1)}</Text>}</View>
                 <View style={styles.identityCopy}>
-                  <Text numberOfLines={2} style={[styles.name, nameTextStyle(preferences.friendNameStyle)]}>{person.name}</Text>
+                  <Text numberOfLines={2} style={[styles.name, nameTextStyle(preferences.friendNameStyle)]}>{displayName}</Text>
                   <View style={styles.relationPill}><Text numberOfLines={1} style={styles.relation}>{person.relationToMe ?? '暂时不定义关系'}</Text></View>
                 </View>
               </View>
               <View style={styles.impressionBlock}>
+                {person.bio ? <><Text style={styles.impressionLabel}>个人简介</Text><Text style={styles.impression}>{person.bio}</Text></> : null}
                 <Text style={styles.impressionLabel}>关于 ta 的印象</Text>
                 <Text style={[styles.impression, !person.impression && styles.impressionEmpty]}>{person.impression ?? '还没有留下印象'}</Text>
               </View>
@@ -98,24 +100,24 @@ export default function PersonScreen() {
             <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>收藏与回忆</Text></View>
             <View style={styles.featureCard}>
               <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/music', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
-                <View style={styles.featureCopy}><Text style={styles.featureTitle}>喜欢的音乐</Text><Text style={styles.featureHint}>收藏 {person.name} 喜欢的音乐</Text></View>
+                <View style={styles.featureCopy}><Text style={styles.featureTitle}>喜欢的音乐</Text><Text style={styles.featureHint}>收藏 {displayName} 喜欢的音乐</Text></View>
                 <View style={styles.featureMeta}><Text style={styles.albumCount}>{personMusicCount} 首</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
               </Pressable>
               <View style={styles.featureDivider} />
               <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/books', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
-                <View style={styles.featureCopy}><Text style={styles.featureTitle}>喜欢的书籍</Text><Text style={styles.featureHint}>收藏 {person.name} 喜欢的书籍</Text></View>
+                <View style={styles.featureCopy}><Text style={styles.featureTitle}>喜欢的书籍</Text><Text style={styles.featureHint}>收藏 {displayName} 喜欢的书籍</Text></View>
                 <View style={styles.featureMeta}><Text style={styles.albumCount}>{personBookCount} 本</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
               </Pressable>
               <View style={styles.featureDivider} />
               <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/person/albums', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
-                <View style={styles.featureCopy}><Text style={styles.featureTitle}>人物相册</Text><Text style={styles.featureHint}>按文件夹整理只属于 {person.name} 的照片和视频</Text></View>
+                <View style={styles.featureCopy}><Text style={styles.featureTitle}>人物相册</Text><Text style={styles.featureHint}>按文件夹整理只属于 {displayName} 的照片和视频</Text></View>
                 <View style={styles.featureMeta}><Text style={styles.albumCount}>{albums.filter((album) => album.personId === person.id).length} 个</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
               </Pressable>
               <View style={styles.featureDivider} />
               <Pressable accessibilityRole="switch" accessibilityState={{ checked: person.memoryEnabled }} onPress={() => void setPersonMemoryEnabled(person.id, !person.memoryEnabled)} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
                 <View style={styles.featureCopy}>
                   <Text style={styles.featureTitle}>空间回忆</Text>
-                  <Text style={styles.featureHint}>{person.memoryEnabled ? `会偶尔在空间里想起 ${person.name}` : '已关闭，记录仍会完整保留'}</Text>
+                  <Text style={styles.featureHint}>{person.memoryEnabled ? `会偶尔在空间里想起 ${displayName}` : '已关闭，记录仍会完整保留'}</Text>
                 </View>
                 <View style={[styles.memorySwitch, person.memoryEnabled && styles.memorySwitchOn]}><View style={[styles.memoryThumb, person.memoryEnabled && styles.memoryThumbOn]} /></View>
               </Pressable>

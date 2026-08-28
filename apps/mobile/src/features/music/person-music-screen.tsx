@@ -15,6 +15,7 @@ import { MusicCover } from './music-cover';
 import { MusicPlayCount } from './music-play-count';
 import { reportMusicImportFailure } from './music-import-coordinator';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { personDisplayName } from '../people/person-profile';
 
 export default function PersonMusicScreen() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function PersonMusicScreen() {
   const [importing, setImporting] = useState(false);
   const importingRef = useRef(false);
   const person = people.find((item) => item.id === personId);
+  const displayName = person ? personDisplayName(person) : '';
   const personEntries = useMemo(() => musicCollectionEntries.filter((entry) => entry.targetType === 'person' && entry.targetId === personId), [musicCollectionEntries, personId]);
   const tracks = useMemo(() => orderMusicTracksByCollectionEntries(musicTracks, personEntries), [musicTracks, personEntries]);
   const trackIds = useMemo(() => new Set(tracks.map((track) => track.id)), [tracks]);
@@ -69,7 +71,7 @@ export default function PersonMusicScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderAction accessibilityLabel="添加音乐" disabled={!person} onPress={() => setPickerVisible(true)}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={22} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction>} title={person ? `${person.name}喜欢的音乐` : '喜欢的音乐'} />
+      <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderAction accessibilityLabel="添加音乐" disabled={!person} onPress={() => setPickerVisible(true)}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={22} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction>} title={person ? `${displayName}喜欢的音乐` : '喜欢的音乐'} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.summary}><Text style={styles.summaryText}>{tracks.length} 首音乐</Text></View>

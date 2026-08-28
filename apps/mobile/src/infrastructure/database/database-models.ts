@@ -5,7 +5,7 @@ export interface CheckInRow { id: string; day_key: string; city: string | null; 
 export interface PostRow { id: string; day_key: string; body_markdown: string; location_name: string | null; created_at: string; updated_at: string; }
 export interface DraftRow { id: string; day_key: string; body_markdown: string; updated_at: string; }
 export interface PersonRow {
-  id: string; name: string; avatar_media_id: string | null; gender: Gender | null; relation_to_me: string | null; impression: string | null;
+  id: string; name: string; nickname: string | null; bio: string | null; avatar_media_id: string | null; gender: Gender | null; relation_to_me: string | null; impression: string | null;
   birthday_calendar: 'solar' | 'lunar' | null; birthday_year: number | null; birthday_month: number | null; birthday_day: number | null;
   birthday_is_leap_month: number; birthday_reminder_mode: BirthdayReminderMode | null; birthday_reminder_enabled: number;
   birthday_reminder_hour: number | null; birthday_reminder_minute: number | null; memory_enabled: number; created_at: string; updated_at: string;
@@ -34,7 +34,7 @@ export interface BackupSnapshot {
 }
 
 export interface AppPreferences {
-  onboardingCompleted: boolean; nickname: string; profileBio: string; profileSignature: string; profileGender: Gender | null;
+  onboardingCompleted: boolean; profileName: string; nickname: string; profileBio: string; profileSignature: string; profileGender: Gender | null;
   appearanceTheme: AppThemeId; selfNameStyle: NameStyleId; friendNameStyle: NameStyleId; birthDate: string; birthDateCalendar: BirthdayCalendar;
   birthDateIsLeapMonth: boolean; profileAvatarMediaId: string | null; profileMbti: string; profileCustomTagIds: string[]; globalMemoryEnabled: boolean;
   lastExportAt: string | null; lastExportPostCount: number; backupReminderShownAt: string | null; birthdayNotificationsEnabled: boolean;
@@ -45,6 +45,6 @@ export interface AppPreferences {
 
 export type HomeMemory =
   | { kind: 'onThisDay'; post: Post }
-  | { kind: 'person'; post: Post; person: { id: string; name: string } };
+  | { kind: 'person'; post: Post; person: { id: string; name: string; nickname: string } };
 
 export type { MemoryNotificationExposure, MemoryNotificationSchedule };

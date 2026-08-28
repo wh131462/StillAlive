@@ -13,6 +13,7 @@ import { DatePickerField } from '../people/date-time-picker';
 import type { DateParts } from '../people/date-time-picker';
 import MarkdownView from '../journal/markdown-view.dom';
 import { StyledName } from '../people/styled-name';
+import { personDisplayName } from '../people/person-profile';
 import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview.types';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } from '../journal/embedded-media';
@@ -47,6 +48,7 @@ const POST_PREVIEW_MAX_HEIGHT = 168;
 export default function SpaceScreen() {
   const router = useRouter();
   const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, readingNoteSources, ready, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
+  const [profileName, setProfileName] = useState('');
   const [nickname, setNickname] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [birthDateCalendar, setBirthDateCalendar] = useState<BirthdayCalendar>('solar');
@@ -77,11 +79,12 @@ export default function SpaceScreen() {
   const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
 
   useEffect(() => {
+    setProfileName(preferences.profileName);
     setNickname(preferences.nickname);
     setBirthDate(preferences.birthDate);
     setBirthDateCalendar(preferences.birthDateCalendar);
     setBirthDateIsLeapMonth(preferences.birthDateIsLeapMonth);
-  }, [preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth, preferences.nickname]);
+  }, [preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth, preferences.nickname, preferences.profileName]);
 
   const resolveCheckInCity = useCallback(async (checkInId: string, requestPermission = true) => {
     if (checkInLocationTasksRef.current.has(checkInId)) return;
@@ -125,7 +128,7 @@ export default function SpaceScreen() {
       feedback.alert('生日日期不存在');
       return;
     }
-    await updatePreferences({ onboardingCompleted: true, nickname: nickname.trim(), birthDate, birthDateCalendar, birthDateIsLeapMonth: birthDateCalendar === 'lunar' && birthDateIsLeapMonth });
+    await updatePreferences({ onboardingCompleted: true, profileName: profileName.trim(), nickname: nickname.trim(), birthDate, birthDateCalendar, birthDateIsLeapMonth: birthDateCalendar === 'lunar' && birthDateIsLeapMonth });
   };
   const birthDateParts: DateParts | null = /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? (() => { const [year, month, day] = birthDate.split('-').map(Number); return { year, month, day }; })() : null;
   const onboardingBirthday = birthdayFromDateString(birthDate, birthDateCalendar, birthDateIsLeapMonth);
@@ -207,11 +210,11 @@ export default function SpaceScreen() {
 
       {upcomingBirthday ? (
         <Pressable accessibilityRole="button" onPress={() => router.push(`/person/${upcomingBirthday.person.id}`)} style={({ pressed }) => [styles.birthdayCard, pressed && styles.pressed]}>
-          <View style={styles.birthdayAvatar}><Text style={styles.birthdayAvatarText}>{upcomingBirthday.person.name.slice(0, 1)}</Text></View>
+          <View style={styles.birthdayAvatar}><Text style={styles.birthdayAvatarText}>{personDisplayName(upcomingBirthday.person).slice(0, 1)}</Text></View>
           <View style={styles.birthdayContent}>
             <Text style={styles.promptLabel}>生日提示</Text>
             <Text style={styles.birthdayTitle}>{birthdayPromptTitle(upcomingBirthday)}</Text>
-            <Text style={styles.promptFoot}>去看看关于 {upcomingBirthday.person.name} 的记录　›</Text>
+            <Text style={styles.promptFoot}>去看看关于 {personDisplayName(upcomingBirthday.person)} 的记录　›</Text>
           </View>
         </Pressable>
       ) : null}
@@ -225,7 +228,7 @@ export default function SpaceScreen() {
           <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${homeMemory.post.id}`)} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
             {memoryImage ? <MediaThumbnail accessibilityLabel="回忆媒体" item={memoryImage} style={styles.memoryImage} /> : null}
             <Text numberOfLines={4} style={styles.memoryText}>{memoryExcerpt(homeMemory.post.bodyMarkdown, memoryReadingSource)}</Text>
-            <Text style={styles.memoryFoot}>{homeMemory.kind === 'person' ? `与 ${homeMemory.person.name} 有关的一段过去` : '那一天留下的坐标'}　›</Text>
+        <Text style={styles.memoryFoot}>{homeMemory.kind === 'person' ? `与 ${personDisplayName(homeMemory.person)} 有关的一段过去` : '那一天留下的坐标'}　›</Text>
           </Pressable>
         </View>
       ) : null}
@@ -261,7 +264,7 @@ export default function SpaceScreen() {
         ListHeaderComponent={listHeader}
         renderItem={({ item }) => item.kind === 'post' ? (
           <PostCard
-            authorName={preferences.nickname || '我'}
+            authorName={preferences.nickname || preferences.profileName || '我'}
             avatarUri={profileAvatar?.localPath ?? null}
             mediaById={mediaById}
             onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
@@ -283,7 +286,8 @@ export default function SpaceScreen() {
               <Text style={styles.onboardingLabel}>STILL ALIVE 仍在</Text>
               <Text style={styles.onboardingTitle}>每天留下一点，{`\n`}慢慢得到一份生命档案。</Text>
               <Text style={styles.onboardingText}>无需注册。记录、人物和媒体默认只保存在这台设备，可以随时完整导出。</Text>
-              <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可跳过" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
+              <TextInput maxLength={40} onChangeText={setProfileName} placeholder="姓名" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={profileName} />
+              <TextInput maxLength={30} onChangeText={setNickname} placeholder="昵称 可选" placeholderTextColor={colors.inkFaint} style={styles.onboardingInput} value={nickname} />
               <View style={styles.onboardingCalendar}>
                 <Text style={styles.onboardingCalendarLabel}>生日历法</Text>
                 <View style={styles.onboardingSegmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} accessibilityRole="button" accessibilityState={{ selected: birthDateCalendar === calendar }} onPress={() => changeBirthDateCalendar(calendar)} style={[styles.onboardingSegment, birthDateCalendar === calendar && styles.onboardingSegmentActive]}><Text style={[styles.onboardingSegmentText, birthDateCalendar === calendar && styles.onboardingSegmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
@@ -456,13 +460,14 @@ function findUpcomingBirthday(people: Person[], today: DayKey): BirthdayPrompt |
     const daysUntil = Math.round((date.getTime() - start.getTime()) / 86_400_000);
     return daysUntil <= 3 ? [{ daysUntil, person }] : [];
   });
-  return prompts.sort((left, right) => left.daysUntil - right.daysUntil || left.person.name.localeCompare(right.person.name))[0] ?? null;
+  return prompts.sort((left, right) => left.daysUntil - right.daysUntil || personDisplayName(left.person).localeCompare(personDisplayName(right.person)))[0] ?? null;
 }
 
 function birthdayPromptTitle(prompt: BirthdayPrompt): string {
-  if (prompt.daysUntil === 0) return `今天是 ${prompt.person.name} 的生日`;
-  if (prompt.daysUntil === 1) return `${prompt.person.name} 的生日就在明天`;
-  return `${prompt.person.name} 的生日还有 ${prompt.daysUntil} 天`;
+  const name = personDisplayName(prompt.person);
+  if (prompt.daysUntil === 0) return `今天是 ${name} 的生日`;
+  if (prompt.daysUntil === 1) return `${name} 的生日就在明天`;
+  return `${name} 的生日还有 ${prompt.daysUntil} 天`;
 }
 
 function previewAspectRatio(media: Media): number {
@@ -531,7 +536,7 @@ function memoryExcerpt(markdown: string, readingSource: ReturnType<typeof useApp
 }
 
 function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMemory']>, today: string): string {
-  if (memory.kind === 'person') return `想起 ${memory.person.name}`;
+  if (memory.kind === 'person') return `想起 ${personDisplayName(memory.person)}`;
   const years = Number(today.slice(0, 4)) - Number(memory.post.dayKey.slice(0, 4));
   return years === 1 ? '一年前的今天' : `${years} 年前的今天`;
 }

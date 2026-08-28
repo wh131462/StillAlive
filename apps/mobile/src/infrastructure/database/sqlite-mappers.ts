@@ -51,6 +51,8 @@ export function mapPerson(row: PersonRow): Person {
   return {
     id: row.id,
     name: row.name,
+    nickname: row.nickname ?? '',
+    bio: row.bio,
     avatarMediaId: row.avatar_media_id,
     gender: parseGender(row.gender ?? undefined),
     relationToMe: row.relation_to_me,

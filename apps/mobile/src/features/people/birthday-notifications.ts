@@ -1,5 +1,5 @@
 import type { BirthdayCalendar, BirthdayNotificationSchedule, Person } from '@still-alive/types';
-import { nextBirthday, toLocalDayKey } from './person-profile';
+import { nextBirthday, personDisplayName, toLocalDayKey } from './person-profile';
 
 export interface PlannedBirthdayNotification {
   key: string;
@@ -87,7 +87,7 @@ export async function cancelBirthdayNotifications(store: BirthdayScheduleStore, 
 }
 
 function planned(person: Person, calendar: BirthdayCalendar, eventType: 'advance' | 'today', birthdayDayKey: ReturnType<typeof toLocalDayKey>, triggerAt: Date): PlannedBirthdayNotification {
-  return { key: scheduleKey(person.id, eventType, birthdayDayKey, triggerAt), personId: person.id, personName: person.name, calendar, eventType, birthdayDayKey, triggerAt };
+  return { key: scheduleKey(person.id, eventType, birthdayDayKey, triggerAt), personId: person.id, personName: personDisplayName(person), calendar, eventType, birthdayDayKey, triggerAt };
 }
 
 function scheduleKey(personId: string, eventType: string, birthdayDayKey: string, triggerAt: Date): string {

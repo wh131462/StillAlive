@@ -624,6 +624,7 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   }
   for (const person of value.people) {
     if (person.avatarMediaId && !mediaIds.has(person.avatarMediaId)) throw new Error('备份中的人物头像关联无效');
+    if (person.bio != null && (typeof person.bio !== 'string' || person.bio.length > 500)) throw new Error('备份中的人物简介无效');
     if (person.gender && !['female', 'male', 'other'].includes(person.gender)) throw new Error('备份中的人物性别无效');
     if (person.birthday && !['solar', 'lunar', 'both'].includes(person.birthday.reminderMode)) throw new Error('备份中的生日提醒方式无效');
     if (person.birthday && (typeof person.birthday.reminderEnabled !== 'boolean' || !validReminderTime(person.birthday.reminderHour, person.birthday.reminderMinute))) throw new Error('备份中的生日提醒设置无效');

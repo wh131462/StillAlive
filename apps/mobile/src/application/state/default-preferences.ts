@@ -2,6 +2,7 @@ import type { AppPreferences } from '../../infrastructure/database/database-mode
 
 export const DEFAULT_PREFERENCES: AppPreferences = {
   onboardingCompleted: false,
+  profileName: '',
   nickname: '',
   profileBio: '',
   profileSignature: '',

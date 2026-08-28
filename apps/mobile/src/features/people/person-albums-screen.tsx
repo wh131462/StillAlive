@@ -9,6 +9,7 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader, ToolPageHeaderAction, ToolPageOverview } from '../../shared/components/tool-page-header';
+import { personDisplayName } from './person-profile';
 
 export default function PersonAlbumsScreen() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function PersonAlbumsScreen() {
   const { albumMedia, albums, createAlbum, media, people, updateAlbum } = useAppState();
   const ownerId = personId ?? null;
   const person = personId ? people.find((item) => item.id === personId) : null;
+  const displayName = person ? personDisplayName(person) : '';
   const ownerAlbums = useMemo(() => albums.filter((item) => item.personId === ownerId).sort((a, b) => a.sortOrder - b.sortOrder), [albums, ownerId]);
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(false);
@@ -33,13 +35,13 @@ export default function PersonAlbumsScreen() {
     <ToolPageHeader
       onBack={() => router.back()}
       right={<><ToolPageHeaderAction accessibilityLabel={managing ? '完成整理' : '整理相册'} active={managing} onPress={() => setManaging((value) => !value)}><SymbolView name={{ android: managing ? 'done' : 'swap_vert', ios: managing ? 'checkmark' : 'arrow.up.arrow.down', web: managing ? 'done' : 'swap_vert' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="新建相册" onPress={() => setCreating(true)}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={22} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction></>}
-      title={person ? `${person.name}的相册` : '我的相册'}
+      title={person ? `${displayName}的相册` : '我的相册'}
     />
     <ScrollView contentContainerStyle={styles.content}>
       <ToolPageOverview
         eyebrow={person ? '人物相册' : '私人相册'}
         icon={<SymbolView name={{ android: 'photo_library', ios: 'photo.on.rectangle', web: 'photo_library' }} size={26} tintColor={colors.life} type="hierarchical" />}
-        subtitle={managing ? '使用箭头调整相册顺序。' : person ? `整理和 ${person.name} 有关的影像与共同经历。` : '按生活片段整理只属于你的照片和视频。'}
+      subtitle={managing ? '使用箭头调整相册顺序。' : person ? `整理和 ${displayName} 有关的影像与共同经历。` : '按生活片段整理只属于你的照片和视频。'}
         title={`${ownerAlbums.length} 个相册`}
       />
       {ownerAlbums.length ? <View style={styles.grid}>{ownerAlbums.map((album, index) => {

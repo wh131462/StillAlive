@@ -29,6 +29,8 @@ export default function EditPersonScreen() {
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const currentAvatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
   const [name, setName] = useState(person?.name ?? '');
+  const [nickname, setNickname] = useState(person?.nickname ?? '');
+  const [bio, setBio] = useState(person?.bio ?? '');
   const [gender, setGender] = useState(person?.gender ?? null);
   const [relation, setRelation] = useState(person?.relationToMe ?? '');
   const [impression, setImpression] = useState(person?.impression ?? '');
@@ -107,6 +109,8 @@ export default function EditPersonScreen() {
       }
       await updatePerson(person.id, {
         name: name.trim(),
+        nickname: nickname.trim(),
+        bio: bio.trim(),
         avatarMediaId,
         gender,
         relationToMe: relation.trim() || null,
@@ -162,6 +166,8 @@ export default function EditPersonScreen() {
 
           <SectionHeader description="记录最常用的信息，之后仍可随时修改。" index="01" title="基本资料" />
           <Field label="名字 必填" maxLength={40} onChangeText={setName} placeholder="例如：小满" value={name} />
+          <Field label="昵称" maxLength={30} onChangeText={setNickname} placeholder="更常用的称呼，可选" value={nickname} />
+          <Field label="个人简介" maxLength={500} multiline onChangeText={setBio} placeholder="介绍一下这个人，可选" value={bio} />
           <GenderPickerField onChange={setGender} value={gender} />
           <RelationshipPicker onChange={setRelation} value={relation} />
           <Field label="一句话印象" maxLength={100} multiline onChangeText={setImpression} placeholder="不必完整，写下此刻最自然的一句话。" value={impression} />

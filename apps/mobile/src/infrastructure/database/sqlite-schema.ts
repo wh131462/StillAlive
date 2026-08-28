@@ -32,6 +32,8 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     CREATE TABLE IF NOT EXISTS persons (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
+      nickname TEXT,
+      bio TEXT,
       avatar_media_id TEXT,
       relation_to_me TEXT,
       impression TEXT,
@@ -448,6 +450,14 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     ALTER TABLE music_tracks ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0;
     PRAGMA user_version = 27;
   `);
+  if (currentVersion < 28) {
+    await addColumnIfMissing(db, 'persons', 'nickname', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 28;');
+  }
+  if (currentVersion < 29) {
+    await addColumnIfMissing(db, 'persons', 'bio', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 29;');
+  }
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

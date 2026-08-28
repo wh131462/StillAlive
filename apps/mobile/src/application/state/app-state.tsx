@@ -281,6 +281,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const person: Person = {
       id: `person_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       name: name.trim(),
+      nickname: '',
+      bio: null,
       avatarMediaId: null,
       gender: null,
       relationToMe: null,
@@ -309,15 +311,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPersonBooksState(await repository.listPersonBooks());
   }, [books, people, repository]);
 
-  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
+  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
     if (!changes.name.trim()) throw new Error('人物名字不能为空');
     if ((changes.impression?.length ?? 0) > 100) throw new Error('一句话印象最多 100 字');
+    if ((changes.bio?.length ?? 0) > 500) throw new Error('个人简介最多 500 字');
     const existing = people.find((person) => person.id === personId);
     if (!existing) throw new Error('要编辑的人物不存在');
     if (changes.birthday) validateBirthday(changes.birthday);
     if (mbti && !MBTI_TYPES.includes(mbti as typeof MBTI_TYPES[number])) throw new Error('MBTI 类型无效');
     const previousAvatarId = existing.avatarMediaId;
-    await repository.updatePerson({ ...existing, ...changes, name: changes.name.trim(), updatedAt: new Date().toISOString() });
+    await repository.updatePerson({ ...existing, ...changes, name: changes.name.trim(), nickname: changes.nickname.trim(), bio: changes.bio?.trim() || null, updatedAt: new Date().toISOString() });
     if (mbti !== undefined || customTagIds !== undefined) await repository.setPersonTags(personId, mbti ?? null, customTagIds ?? []);
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);
@@ -361,7 +364,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       updatedAt: now,
     } satisfies TagDefinition));
     const importedTagIds = normalizedNames.map((name) => existingTags.get(name)?.id ?? newTags.find((tag) => tag.normalizedName === name)!.id);
-    const nextPerson = { ...person, name: person.name.trim(), updatedAt: new Date().toISOString() };
+    const nextPerson = { ...person, name: person.name.trim(), nickname: person.nickname.trim(), bio: person.bio?.trim() || null, updatedAt: new Date().toISOString() };
     await repository.applyProfileCollectionUpdate(requestId, nextPerson, mbti, [...new Set([...customTagIds, ...importedTagIds])], newTags, new Date().toISOString());
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);

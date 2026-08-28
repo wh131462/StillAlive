@@ -35,6 +35,8 @@ export interface ProfileCollectionBirthdayAnswer {
 
 export interface ProfileCollectionAnswers {
   name?: string;
+  nickname?: string;
+  bio?: string;
   gender?: Gender;
   birthday?: ProfileCollectionBirthdayAnswer;
   mbti?: string;
@@ -121,13 +123,23 @@ export function parseProfileCollectionResponseInput(input: string): string {
 export function validateProfileCollectionPayload(payload: unknown, request: ProfileCollectionRequest): ProfileCollectionResponsePayloadV1 {
   if (!isRecord(payload) || !hasOnlyKeys(payload, ['v', 'id', 'submittedAt', 'answers']) || payload.v !== 1 || payload.id !== request.id || !validIsoDate(payload.submittedAt) || !isRecord(payload.answers)) throw new Error('填写结果格式无效');
   const answers = payload.answers;
-  const allowedAnswerKeys = new Set(['name', 'gender', 'birthday', 'mbti', 'customTags', 'newCustomTags']);
+  const allowedAnswerKeys = new Set(['name', 'nickname', 'bio', 'gender', 'birthday', 'mbti', 'customTags', 'newCustomTags']);
   if (Object.keys(answers).some((key) => !allowedAnswerKeys.has(key))) throw new Error('填写结果包含不支持的字段');
   const result: ProfileCollectionAnswers = {};
   if (answers.name !== undefined) {
     assertRequested(request, 'name');
     if (typeof answers.name !== 'string' || !answers.name.trim() || answers.name.trim().length > 40) throw new Error('姓名内容无效');
     result.name = answers.name.trim();
+  }
+  if (answers.nickname !== undefined) {
+    assertRequested(request, 'nickname');
+    if (typeof answers.nickname !== 'string' || answers.nickname.trim().length > 30) throw new Error('昵称内容无效');
+    if (answers.nickname.trim()) result.nickname = answers.nickname.trim();
+  }
+  if (answers.bio !== undefined) {
+    assertRequested(request, 'bio');
+    if (typeof answers.bio !== 'string' || answers.bio.trim().length > 500) throw new Error('个人简介内容无效');
+    if (answers.bio.trim()) result.bio = answers.bio.trim();
   }
   if (answers.gender !== undefined) {
     assertRequested(request, 'gender');
@@ -179,9 +191,9 @@ export function decodeBase64Url(value: string, maxBytes: number): Uint8Array {
 }
 
 function validateInvitation(value: unknown): asserts value is ProfileCollectionInvitationV1 {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['v', 'id', 'exp', 'pk', 'f', 'tags']) || value.v !== 1 || !validRequestId(value.id) || !validIsoDate(value.exp) || typeof value.pk !== 'string' || !Array.isArray(value.f) || !value.f.length || value.f.length > 5 || !Array.isArray(value.tags) || value.tags.length > 100) throw new Error('邀请内容无效');
+  if (!isRecord(value) || !hasOnlyKeys(value, ['v', 'id', 'exp', 'pk', 'f', 'tags']) || value.v !== 1 || !validRequestId(value.id) || !validIsoDate(value.exp) || typeof value.pk !== 'string' || !Array.isArray(value.f) || !value.f.length || value.f.length > 7 || !Array.isArray(value.tags) || value.tags.length > 100) throw new Error('邀请内容无效');
   const fields = value.f;
-  if (fields.some((field) => field !== 'name' && field !== 'gender' && field !== 'birthday' && field !== 'mbti' && field !== 'customTags') || new Set(fields).size !== fields.length) throw new Error('邀请字段无效');
+  if (fields.some((field) => !['name', 'nickname', 'bio', 'gender', 'birthday', 'mbti', 'customTags'].includes(field)) || new Set(fields).size !== fields.length) throw new Error('邀请字段无效');
   decodeBase64Url(value.pk, 65);
   if (decodeBase64Url(value.pk, 65).byteLength !== 65) throw new Error('邀请公钥无效');
   for (const option of value.tags) {

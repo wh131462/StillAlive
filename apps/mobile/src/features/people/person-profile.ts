@@ -1,7 +1,11 @@
 import { LunarDay, LunarMonth, LunarYear, SolarDay } from 'tyme4ts';
-import type { Birthday, BirthdayCalendar, DayKey } from '@still-alive/types';
+import type { Birthday, BirthdayCalendar, DayKey, Person } from '@still-alive/types';
 
 export const MBTI_TYPES = ['INTJ', 'INTP', 'ENTJ', 'ENTP', 'INFJ', 'INFP', 'ENFJ', 'ENFP', 'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ', 'ISTP', 'ISFP', 'ESTP', 'ESFP'] as const;
+
+export function personDisplayName(person: Pick<Person, 'name' | 'nickname'>): string {
+  return person.nickname.trim() || person.name;
+}
 
 export function validateBirthday(birthday: Birthday, today = new Date()): void {
   if (!Number.isInteger(birthday.year) || birthday.year < 1900 || birthday.year > today.getFullYear()) throw new Error('生日年份无效');

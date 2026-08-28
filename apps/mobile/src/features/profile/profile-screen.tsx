@@ -25,6 +25,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { createTag, discardMedia, media, preferences, saveMedia, tagDefinitions, tagGroups, tagSystemSettings, updatePreferences } = useAppState();
   const currentAvatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
+  const [profileName, setProfileName] = useState(preferences.profileName);
   const [nickname, setNickname] = useState(preferences.nickname);
   const [bio, setBio] = useState(preferences.profileBio);
   const [signature, setSignature] = useState(preferences.profileSignature);
@@ -83,7 +84,7 @@ export default function ProfileScreen() {
       let avatarMediaId = preferences.profileAvatarMediaId;
       if (pickedAsset) { importedMedia = await persistPickedImage(pickedAsset); await saveMedia(importedMedia); avatarMediaId = importedMedia.id; }
       const previousAvatar = preferences.profileAvatarMediaId;
-      await updatePreferences({ nickname: nickname.trim(), profileBio: bio.trim(), profileSignature: signature.trim(), profileGender: gender, birthDate, birthDateCalendar, birthDateIsLeapMonth: birthDateCalendar === 'lunar' && birthDateIsLeapMonth, profileAvatarMediaId: avatarMediaId, profileMbti: mbti, profileCustomTagIds: customTagIds });
+      await updatePreferences({ profileName: profileName.trim(), nickname: nickname.trim(), profileBio: bio.trim(), profileSignature: signature.trim(), profileGender: gender, birthDate, birthDateCalendar, birthDateIsLeapMonth: birthDateCalendar === 'lunar' && birthDateIsLeapMonth, profileAvatarMediaId: avatarMediaId, profileMbti: mbti, profileCustomTagIds: customTagIds });
       if (previousAvatar && previousAvatar !== avatarMediaId) {
         const previous = media.find((item) => item.id === previousAvatar);
         if (previous) await discardMedia(previous);
@@ -98,8 +99,9 @@ export default function ProfileScreen() {
   return <SafeAreaView style={styles.safeArea}><AppKeyboardAvoidingView style={styles.flex}>
     <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderTextAction disabled={saving} label={saving ? '保存中' : '保存'} onPress={() => void save()} />} title="个人信息" />
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-      <Pressable accessibilityHint="可以拍照或从照片中选择" accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(true)} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image onError={() => setAvatarFailed(true)} source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{nickname.trim().slice(0, 1) || '我'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={15} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
+      <Pressable accessibilityHint="可以拍照或从照片中选择" accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(true)} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image onError={() => setAvatarFailed(true)} source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{(nickname || profileName).trim().slice(0, 1) || '我'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={15} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
 
+      <Field label="姓名" maxLength={40} onChangeText={setProfileName} placeholder="你的姓名" value={profileName} />
       <Field label="昵称" maxLength={30} onChangeText={setNickname} placeholder="怎么称呼你" value={nickname} />
       <Field label="个性签名" onChangeText={setSignature} placeholder="写一句此刻想说的话" value={signature} />
       <Field label="简介" multiline onChangeText={setBio} placeholder="写几句话介绍自己" value={bio} />
