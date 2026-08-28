@@ -63,6 +63,13 @@ export ANDROID_HOME="$SDK_DIR"
 export ANDROID_SDK_ROOT="$SDK_DIR"
 export NODE_ENV="${NODE_ENV:-production}"
 export STILL_ALIVE_APP_VARIANT=production
+if [[ -z "${STILL_ALIVE_UPDATE_CHANNEL:-}" ]]; then
+  if [[ "$BUILD_FORMAT" == "aab" ]]; then
+    export STILL_ALIVE_UPDATE_CHANNEL=play
+  else
+    export STILL_ALIVE_UPDATE_CHANNEL=github
+  fi
+fi
 
 if [[ ! -f "$SDK_DIR/ndk/$NDK_VERSION/source.properties" ]]; then
   for NDK_SOURCE in "$SDK_DIR"/ndk/27.*/source.properties; do

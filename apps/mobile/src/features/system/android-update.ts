@@ -1,4 +1,5 @@
 import { requireOptionalNativeModule } from 'expo';
+import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
@@ -30,6 +31,7 @@ export interface AndroidUpdateManifest {
   apkUrl: string;
   apkUrls?: string[];
   releaseNotes?: string;
+  channel?: 'github' | 'play';
 }
 
 export type AndroidUpdateCheckResult =
@@ -59,9 +61,18 @@ interface ApkInstallerModule {
   installApkAsync(contentUri: string): Promise<'started' | 'permission-required'>;
 }
 
+interface PlayInAppUpdateModule {
+  checkAsync(): Promise<{ available: boolean; immediateAllowed: boolean; flexibleAllowed: boolean }>;
+  startAsync(immediate: boolean): Promise<boolean>;
+}
+
 const apkInstaller = Platform.OS === 'android'
   ? requireOptionalNativeModule<ApkInstallerModule>('StillAliveApkInstaller')
   : null;
+const playUpdate = Platform.OS === 'android'
+  ? requireOptionalNativeModule<PlayInAppUpdateModule>('StillAlivePlayInAppUpdate')
+  : null;
+const updateChannel: 'github' | 'play' = Constants.expoConfig?.extra?.updateChannel === 'github' ? 'github' : 'play';
 
 export function getCurrentAndroidVersion() {
   return {
@@ -72,10 +83,17 @@ export function getCurrentAndroidVersion() {
 
 export async function checkForAndroidUpdate(): Promise<AndroidUpdateCheckResult> {
   writePersistentLog('INFO', 'update.check.started', { platform: Platform.OS });
-  if (Platform.OS !== 'android' || !apkInstaller) {
+  if (Platform.OS !== 'android') {
     writePersistentLog('INFO', 'update.check.finished', { status: 'unsupported' });
     return { status: 'unsupported' };
   }
+  if (updateChannel === 'play') {
+    if (!playUpdate) return { status: 'unsupported' };
+    const state = await playUpdate.checkAsync();
+    if (!state.available || !state.immediateAllowed) return { status: 'current' };
+    return { status: 'available', manifest: { versionCode: getCurrentAndroidVersion().versionCode + 1, versionName: 'Google Play', apkUrl: '', releaseNotes: 'Google Play 检测到可用更新。', channel: 'play' } };
+  }
+  if (!apkInstaller) return { status: 'unsupported' };
   const sources = ANDROID_UPDATE_SOURCES.filter((source) => source.manifestUrl.trim());
   if (!sources.length) {
     writePersistentLog('WARN', 'update.check.finished', { status: 'not-configured' });
@@ -114,6 +132,12 @@ export async function downloadAndInstallAndroidUpdate(
   options: AndroidUpdateDownloadOptions = {},
 ): Promise<AndroidUpdateInstallResult> {
   try {
+    if (manifest.channel === 'play') {
+      if (!playUpdate) throw new Error('当前版本未包含 Google Play 更新模块');
+      const started = await playUpdate.startAsync(true);
+      if (!started) throw new Error('Google Play 当前无法启动更新，请稍后重试。');
+      return { status: 'started', contentUri: '' };
+    }
     if (Platform.OS !== 'android' || !apkInstaller) throw new Error('当前环境不支持 APK 更新');
     writePersistentLog('INFO', 'update.install.started', { versionCode: manifest.versionCode, versionName: manifest.versionName });
     const apkUrls = getManifestApkUrls(manifest);

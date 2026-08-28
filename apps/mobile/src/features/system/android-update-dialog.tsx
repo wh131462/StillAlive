@@ -147,10 +147,10 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
 
           {!checking && !notice && manifest && phase === 'ready' ? (
             <>
-              <Text style={styles.title}>发现新版本 v{manifest.versionName}</Text>
+              <Text style={styles.title}>{manifest.channel === 'play' ? 'Google Play 有可用更新' : `发现新版本 v${manifest.versionName}`}</Text>
               <Text style={styles.subtitle}>当前版本 v{currentVersion.versionName}</Text>
               <ScrollView bounces={false} contentContainerStyle={styles.longTextContent} nestedScrollEnabled persistentScrollbar showsVerticalScrollIndicator style={[styles.notes, { maxHeight: longTextMaxHeight }]}><Text style={styles.notesText}>{manifest.releaseNotes || '包含体验优化与稳定性改进。'}</Text></ScrollView>
-              <PrimaryButton label="立即更新" onPress={() => void startDownload()} />
+              <PrimaryButton label={manifest.channel === 'play' ? '通过 Google Play 更新' : '立即更新'} onPress={() => void startDownload()} />
               <SecondaryButton label="稍后再说" onPress={onDismiss} />
             </>
           ) : null}

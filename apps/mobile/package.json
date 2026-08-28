@@ -18,6 +18,8 @@
     "dev:android": "./scripts/dev-android.sh",
     "dev:ios": "./scripts/dev-ios.sh",
     "build": "EXPO_NO_BUNDLE_SPLITTING=1 expo export --platform ios --output-dir dist/ios && EXPO_NO_BUNDLE_SPLITTING=1 expo export --platform android --output-dir dist/android",
+    "build:android:play": "eas build --platform android --profile production",
+    "build:android:github": "eas build --platform android --profile github",
     "typecheck": "tsc --noEmit",
     "test": "echo 'No mobile tests yet'",
     "clean": "rm -rf .expo dist"

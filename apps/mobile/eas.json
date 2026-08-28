@@ -9,6 +9,18 @@
         "buildType": "app-bundle"
       },
       "env": {
+        "STILL_ALIVE_UPDATE_CHANNEL": "play",
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
+      }
+    },
+    "github": {
+      "autoIncrement": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "STILL_ALIVE_UPDATE_CHANNEL": "github",
         "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
       }
     }

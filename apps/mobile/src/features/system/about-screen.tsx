@@ -46,7 +46,7 @@ export default function AboutScreen() {
       if (result.status === 'not-configured') {
         setUpdateNotice({ title: '更新服务未配置', status: '不可用', message: '请先填写 Android 更新清单地址。' });
       } else if (result.status === 'unsupported') {
-        setUpdateNotice({ title: '当前平台不支持', status: '不可用', message: 'APK 自动更新仅支持 Android 安装包。' });
+        setUpdateNotice({ title: '当前平台不支持', status: '不可用', message: '应用内更新仅支持 Android 正式安装包。' });
       } else if (result.status === 'current') {
         setUpdateNotice({ title: '已是最新版本', status: '最新', message: `当前版本 v${currentVersion.versionName}，暂无可用更新。` });
       } else {
@@ -81,7 +81,7 @@ export default function AboutScreen() {
           <View style={styles.linkIcon}><SymbolView name={{ android: 'system_update', ios: 'arrow.down.circle', web: 'system_update' }} size={20} tintColor={colors.life} type="hierarchical" /></View>
           <View style={styles.linkCopy}>
             <Text style={styles.linkText}>{checkingUpdate ? '正在检查更新…' : '检查更新'}</Text>
-            <Text style={styles.linkHint}>{checkingUpdate ? '正在连接更新服务' : Platform.OS === 'android' ? '启动时也会自动检查' : '仅 Android APK 支持'}</Text>
+            <Text style={styles.linkHint}>{checkingUpdate ? '正在连接更新服务' : Platform.OS === 'android' ? '启动时也会自动检查' : '仅 Android 支持'}</Text>
           </View>
           {checkingUpdate ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />}
         </Pressable>
