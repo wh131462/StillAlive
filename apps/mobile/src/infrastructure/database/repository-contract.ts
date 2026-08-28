@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
@@ -23,6 +23,12 @@ export interface StillAliveRepository {
   createPerson(person: Person): Promise<void>;
   updatePerson(person: Person): Promise<void>;
   deletePerson(personId: string): Promise<string[]>;
+  listPersonRelationships(): Promise<PersonRelationship[]>;
+  listPersonRelationshipNodes(): Promise<PersonRelationshipNode[]>;
+  savePersonRelationshipNode(node: PersonRelationshipNode): Promise<void>;
+  deletePersonRelationshipNode(nodeId: string): Promise<void>;
+  savePersonRelationship(relationship: PersonRelationship): Promise<void>;
+  deletePersonRelationship(relationshipId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
   listPersonBooks(): Promise<PersonBook[]>;
   setPersonBooks(personId: string, bookIds: string[]): Promise<void>;

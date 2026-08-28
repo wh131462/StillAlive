@@ -1,4 +1,4 @@
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, Draft, Gender, Media, MusicCollectionEntry, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, Draft, Gender, Media, MusicCollectionEntry, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonRelationshipNodeKind, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
 
 export interface CheckInRow { id: string; day_key: string; city: string | null; created_at: string; }
@@ -16,6 +16,8 @@ export interface MusicCollectionEntryRow { track_id: string; target_type: MusicC
 export interface MusicPlaylistRow { id: string; name: string; cover_media_id: string | null; created_at: string; updated_at: string; }
 export interface MusicPlaylistEntryRow { playlist_id: string; track_id: string; added_at: string; }
 export interface PersonBookRow { person_id: string; book_id: string; created_at: string; }
+export interface PersonRelationshipRow { id: string; source_node_id: string; target_node_id: string; kind: PersonRelationshipKind; created_at: string; updated_at: string; }
+export interface PersonRelationshipNodeRow { id: string; node_type: PersonRelationshipNodeKind; person_id: string | null; label: string | null; created_at: string; updated_at: string; }
 export interface BookListRow { id: string; name: string; created_at: string; updated_at: string; }
 export interface BookListEntryRow { list_id: string; book_id: string; added_at: string; }
 export interface BookRow { id: string; file_media_id: string; cover_media_id: string | null; title: string; author: string | null; format: BookFormat; parse_status: BookParseStatus; parse_message: string | null; progress: number; last_read_at: string | null; location: string | null; location_type: BookLocationType | null; chapter_href: string | null; chapter_title: string | null; engine_version: string | null; page_count: number | null; chapter_cache_json: string | null; created_at: string; updated_at: string; }
@@ -28,6 +30,8 @@ export interface BackupSnapshot {
   settings: Record<string, string>;
   tagDefinitions?: TagDefinition[]; tagSystemSettings?: TagSystemSetting[]; personTags?: PersonTagAssignment[]; tagGroups?: TagGroup[];
   albums?: PersonAlbum[]; albumMedia?: AlbumMedia[]; personBooks?: PersonBook[]; musicTracks?: MusicTrack[]; musicCollectionEntries?: MusicCollectionEntry[];
+  personRelationships?: PersonRelationship[];
+  personRelationshipNodes?: PersonRelationshipNode[];
   musicPlaylists?: MusicPlaylist[]; musicPlaylistEntries?: MusicPlaylistEntry[];
   bookLists?: BookList[]; bookListEntries?: BookListEntry[];
   books?: Book[]; bookExcerpts?: BookExcerpt[]; readingNoteSources?: ReadingNoteSource[];

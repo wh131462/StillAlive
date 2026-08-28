@@ -3,7 +3,7 @@ import type { PropsWithChildren } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState as NativeAppState, Linking } from 'react-native';
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
@@ -36,6 +36,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [personRelationships, setPersonRelationships] = useState<PersonRelationship[]>([]);
+  const [personRelationshipNodes, setPersonRelationshipNodes] = useState<PersonRelationshipNode[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
   const [tagDefinitions, setTagDefinitions] = useState<TagDefinition[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
@@ -106,6 +108,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const storedCheckIns = await repository.listCheckIns();
       const storedPosts = await repository.listPosts();
       const storedPeople = await repository.listPeople();
+      const storedPersonRelationships = await repository.listPersonRelationships();
+      const storedPersonRelationshipNodes = await repository.listPersonRelationshipNodes();
       const storedMedia = await repository.listMedia();
       const memory = await repository.getHomeMemory(today);
       const storedPreferences = await repository.getPreferences();
@@ -131,6 +135,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setCheckIns(storedCheckIns);
         setPosts(storedPosts);
         setPeople(storedPeople);
+        setPersonRelationships(storedPersonRelationships);
+        setPersonRelationshipNodes(storedPersonRelationshipNodes);
         setMedia(storedMedia);
         setTagDefinitions(storedTags);
         setTagGroups(storedTagGroups);
@@ -383,6 +389,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const deletedTrackIds = await repository.deletePerson(personId);
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);
+    setPersonRelationships(await repository.listPersonRelationships());
+    setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
     const deletedMusicAssets = deletedTrackIds
       .map((trackId) => musicTracks.find((track) => track.id === trackId))
       .filter((track): track is MusicTrack => Boolean(track))
@@ -405,6 +413,83 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setMusicCollectionEntries(await repository.listMusicCollectionEntries());
     setMusicTracks(await repository.listMusicTracks());
   }, [albumMedia, albums, cleanupUnreferencedMedia, media, musicTracks, people, repository, syncBirthdayNotifications]);
+
+  const createPersonRelationshipNode = useCallback(async (personId: string | null = null, label: string | null = null) => {
+    const storedPeople = personId ? await repository.listPeople() : people;
+    if (personId && !storedPeople.some((person) => person.id === personId)) throw new Error('人物不存在或已删除');
+    const storedNodes = await repository.listPersonRelationshipNodes();
+    const existing = personId ? storedNodes.find((node) => node.personId === personId) : null;
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const node: PersonRelationshipNode = {
+      id: `relationship_node_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      kind: personId ? 'person' : 'placeholder',
+      personId,
+      label: label?.trim() || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await repository.savePersonRelationshipNode(node);
+    setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
+    return node;
+  }, [people, repository]);
+
+  const bindPersonRelationshipNode = useCallback(async (nodeId: string, personId: string | null) => {
+    const storedNodes = await repository.listPersonRelationshipNodes();
+    const storedPeople = personId ? await repository.listPeople() : people;
+    const node = storedNodes.find((item) => item.id === nodeId);
+    if (!node || node.kind === 'self') throw new Error('关系节点不存在或无法绑定');
+    if (personId && !storedPeople.some((person) => person.id === personId)) throw new Error('人物不存在或已删除');
+    if (personId && storedNodes.some((item) => item.id !== nodeId && item.personId === personId)) throw new Error('该人物已经绑定到关系树');
+    const previousPerson = node.personId ? storedPeople.find((person) => person.id === node.personId) : null;
+    await repository.savePersonRelationshipNode({
+      ...node,
+      kind: personId ? 'person' : 'placeholder',
+      personId,
+      label: personId ? null : node.label ?? previousPerson?.name ?? null,
+      updatedAt: new Date().toISOString(),
+    });
+    setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
+  }, [people, repository]);
+
+  const deletePersonRelationshipNode = useCallback(async (nodeId: string) => {
+    await repository.deletePersonRelationshipNode(nodeId);
+    setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
+    setPersonRelationships(await repository.listPersonRelationships());
+  }, [repository]);
+
+  const savePersonRelationship = useCallback(async (sourceNodeId: string, targetNodeId: string, kind: PersonRelationshipKind, relationshipId: string | null = null) => {
+    const storedNodes = await repository.listPersonRelationshipNodes();
+    const nodeIds = new Set(storedNodes.map((node) => node.id));
+    if (!nodeIds.has(sourceNodeId)) throw new Error('起点关系节点不存在');
+    if (!nodeIds.has(targetNodeId)) throw new Error('目标关系节点不存在');
+    if (sourceNodeId === targetNodeId) throw new Error('不能把节点关联到自己');
+    if (!['parent', 'child', 'partner', 'sibling', 'other'].includes(kind)) throw new Error('关系类型无效');
+    const storedRelationships = await repository.listPersonRelationships();
+    const existing = storedRelationships.find((item) => item.id === relationshipId) ?? storedRelationships.find((item) => (item.sourceNodeId === sourceNodeId && item.targetNodeId === targetNodeId) || (item.sourceNodeId === targetNodeId && item.targetNodeId === sourceNodeId));
+    const now = new Date().toISOString();
+    const relationship: PersonRelationship = {
+      id: existing?.id ?? `relationship_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      sourceNodeId,
+      targetNodeId,
+      kind,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    await repository.savePersonRelationship(relationship);
+    const effectiveRelationships = storedRelationships.filter((item) => item.id !== existing?.id).concat(relationship);
+    const implicitParentRelationships = deriveImplicitParentRelationships(effectiveRelationships);
+    for (const implicitRelationship of implicitParentRelationships) await repository.savePersonRelationship(implicitRelationship);
+    const updatedRelationships = await repository.listPersonRelationships();
+    setPersonRelationships(updatedRelationships);
+    return relationship;
+  }, [repository]);
+
+  const deletePersonRelationship = useCallback(async (relationshipId: string) => {
+    await repository.deletePersonRelationship(relationshipId);
+    setPersonRelationships(await repository.listPersonRelationships());
+    setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
+  }, [repository]);
 
   const createTag = useCallback(async (name: string, groupId: string | null = null) => {
     const normalizedName = normalizeTagName(name);
@@ -970,11 +1055,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       void syncMemoryNotifications(oldPosts, oldPreferences).catch((syncCause) => writePersistentError('notifications.memory.restore-rollback.failed', syncCause));
       throw cause;
     }
-    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
+    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedPersonRelationshipNodes, storedPersonRelationships, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
       repository.getCheckIn(today),
       repository.listCheckIns(),
       repository.listPosts(),
       repository.listPeople(),
+      repository.listPersonRelationshipNodes(),
+      repository.listPersonRelationships(),
       repository.listMedia(),
       repository.getHomeMemory(today),
       repository.getPreferences(),
@@ -999,6 +1086,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setCheckIns(storedCheckIns);
     setPosts(storedPosts);
     setPeople(storedPeople);
+    setPersonRelationshipNodes(storedPersonRelationshipNodes);
+    setPersonRelationships(storedPersonRelationships);
     setMedia(storedMedia);
     setHomeMemory(memory);
     setPreferences(storedPreferences);
@@ -1063,6 +1152,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setCheckIns([]);
     setPosts([]);
     setPeople([]);
+    setPersonRelationships([]);
+    setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
     setMedia([]);
     setMusicTracks([]);
     setMusicCollectionEntries([]);
@@ -1117,6 +1208,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     checkIns,
     posts,
     people,
+    personRelationships,
+    personRelationshipNodes,
     media,
     tagDefinitions,
     tagGroups,
@@ -1155,6 +1248,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     createPerson,
     updatePerson,
     deletePerson,
+    createPersonRelationshipNode,
+    deletePersonRelationshipNode,
+    bindPersonRelationshipNode,
+    savePersonRelationship,
+    deletePersonRelationship,
     setPersonMemoryEnabled,
     setPersonBooks,
     createTag,
@@ -1217,9 +1315,46 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     getReadingNoteSource,
     saveReadingNoteSource,
     deleteReadingNoteSource,
-  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
+  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonRelationship, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+}
+
+function deriveImplicitParentRelationships(relationships: PersonRelationship[]): PersonRelationship[] {
+  const existingPairs = new Set(relationships.map((relationship) => relationshipPairKey(relationship.sourceNodeId, relationship.targetNodeId)));
+  const parentChildPairs = relationships.flatMap((relationship) => relationship.kind === 'parent'
+    ? [{ parentId: relationship.targetNodeId, childId: relationship.sourceNodeId }]
+    : relationship.kind === 'child'
+      ? [{ parentId: relationship.sourceNodeId, childId: relationship.targetNodeId }]
+      : []);
+  const result: PersonRelationship[] = [];
+  for (const partnerRelationship of relationships.filter((relationship) => relationship.kind === 'partner')) {
+    for (const { childId, parentId } of parentChildPairs) {
+      const partnerId = partnerRelationship.sourceNodeId === parentId
+        ? partnerRelationship.targetNodeId
+        : partnerRelationship.targetNodeId === parentId
+          ? partnerRelationship.sourceNodeId
+          : null;
+      if (!partnerId || partnerId === childId) continue;
+      const pairKey = relationshipPairKey(childId, partnerId);
+      if (existingPairs.has(pairKey)) continue;
+      const now = new Date().toISOString();
+      result.push({
+        id: `relationship_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+        sourceNodeId: childId,
+        targetNodeId: partnerId,
+        kind: 'parent',
+        createdAt: now,
+        updatedAt: now,
+      });
+      existingPairs.add(pairKey);
+    }
+  }
+  return result;
+}
+
+function relationshipPairKey(leftNodeId: string, rightNodeId: string): string {
+  return [leftNodeId, rightNodeId].sort().join(':');
 }
 
 export function useAppState(): AppStateValue {

@@ -458,6 +458,73 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'persons', 'bio', 'TEXT');
     await db.execAsync('PRAGMA user_version = 29;');
   }
+  if (currentVersion < 30) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS person_relationships (
+      id TEXT PRIMARY KEY NOT NULL,
+      source_person_id TEXT REFERENCES persons(id) ON DELETE CASCADE,
+      target_person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('parent', 'child', 'partner', 'sibling', 'other')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK(source_person_id IS NULL OR source_person_id != target_person_id)
+    );
+    CREATE INDEX IF NOT EXISTS person_relationships_source_idx ON person_relationships(source_person_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS person_relationships_target_idx ON person_relationships(target_person_id, updated_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS person_relationships_pair_idx ON person_relationships(IFNULL(source_person_id, ''), target_person_id);
+    PRAGMA user_version = 30;
+  `);
+  if (currentVersion < 31) await db.execAsync(`
+    DROP INDEX IF EXISTS person_relationships_source_idx;
+    DROP INDEX IF EXISTS person_relationships_target_idx;
+    DROP INDEX IF EXISTS person_relationships_pair_idx;
+    ALTER TABLE person_relationships RENAME TO person_relationships_v30;
+
+    CREATE TABLE person_relationship_nodes (
+      id TEXT PRIMARY KEY NOT NULL,
+      node_type TEXT NOT NULL CHECK(node_type IN ('self', 'person', 'placeholder')),
+      person_id TEXT UNIQUE REFERENCES persons(id) ON DELETE SET NULL,
+      label TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK((node_type = 'self' AND person_id IS NULL) OR node_type != 'self'),
+      CHECK((node_type = 'person' AND person_id IS NOT NULL) OR node_type != 'person')
+    );
+    INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at)
+    VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));
+    INSERT OR IGNORE INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at)
+    SELECT 'person_node_' || source_person_id, 'person', source_person_id, NULL, MIN(created_at), MAX(updated_at)
+    FROM person_relationships_v30 WHERE source_person_id IS NOT NULL GROUP BY source_person_id;
+    INSERT OR IGNORE INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at)
+    SELECT 'person_node_' || target_person_id, 'person', target_person_id, NULL, MIN(created_at), MAX(updated_at)
+    FROM person_relationships_v30 GROUP BY target_person_id;
+
+    CREATE TABLE person_relationships (
+      id TEXT PRIMARY KEY NOT NULL,
+      source_node_id TEXT NOT NULL REFERENCES person_relationship_nodes(id) ON DELETE CASCADE,
+      target_node_id TEXT NOT NULL REFERENCES person_relationship_nodes(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('parent', 'child', 'partner', 'sibling', 'other')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK(source_node_id != target_node_id),
+      UNIQUE(source_node_id, target_node_id)
+    );
+    INSERT INTO person_relationships (id, source_node_id, target_node_id, kind, created_at, updated_at)
+    SELECT id, CASE WHEN source_person_id IS NULL THEN 'self' ELSE 'person_node_' || source_person_id END, 'person_node_' || target_person_id, kind, created_at, updated_at
+    FROM person_relationships_v30;
+    DROP TABLE person_relationships_v30;
+    CREATE INDEX person_relationships_source_idx ON person_relationships(source_node_id, updated_at DESC);
+    CREATE INDEX person_relationships_target_idx ON person_relationships(target_node_id, updated_at DESC);
+    CREATE INDEX person_relationship_nodes_person_idx ON person_relationship_nodes(person_id);
+
+    CREATE TRIGGER preserve_relationship_node_before_person_delete
+    BEFORE DELETE ON persons
+    BEGIN
+      UPDATE person_relationship_nodes
+      SET node_type = 'placeholder', label = COALESCE(NULLIF(label, ''), OLD.name), person_id = NULL, updated_at = datetime('now')
+      WHERE person_id = OLD.id;
+    END;
+    PRAGMA user_version = 31;
+  `);
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

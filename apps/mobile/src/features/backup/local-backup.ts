@@ -5,7 +5,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { BACKUP_SCHEMA_VERSION } from './backup-contract';
 import type { BackupManifest } from './backup-contract';
-import type { MusicTrack } from '@still-alive/types';
+import type { MusicTrack, PersonRelationship, PersonRelationshipNode } from '@still-alive/types';
 import type { BackupSnapshot } from '../../infrastructure/database/database-models';
 import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../journal/embedded-media';
 import { unlockPasswordVault } from '../vault/password-vault-crypto';
@@ -321,6 +321,11 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
   });
   const tagDefinitions = mergeUpdatedEntities(current.tagDefinitions ?? [], incomingTags, (item) => item.normalizedName);
   const people = mergeUpdatedById(current.people, incoming.people);
+  const relationshipNodes = mergeUpdatedEntities(
+    current.personRelationshipNodes ?? [],
+    incoming.personRelationshipNodes ?? [],
+    (item) => item.kind === 'self' ? 'self' : item.personId ? `person:${item.personId}` : `placeholder:${item.id}`,
+  );
   const posts = mergeUpdatedById(current.posts, incoming.posts);
   const albums = mergeUpdatedById(current.albums ?? [], incoming.albums ?? []);
   const musicTracks = mergeUpdatedEntities(current.musicTracks ?? [], incoming.musicTracks ?? [], (item) => item.mediaId);
@@ -338,6 +343,13 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
   const bookListIds = new Set(bookLists.map((item) => item.id));
   const excerptIds = new Set(bookExcerpts.map((item) => item.id));
   const customTagIds = new Set(tagDefinitions.items.map((item) => item.id));
+  const validRelationshipNodes = relationshipNodes.items.filter((item) => item.kind !== 'person' || Boolean(item.personId && personIds.has(item.personId)));
+  const relationshipNodeIds = new Set(validRelationshipNodes.map((item) => item.id));
+  const incomingRelationships = (incoming.personRelationships ?? []).map((item) => ({
+    ...item,
+    sourceNodeId: relationshipNodes.incomingIds.get(item.sourceNodeId) ?? item.sourceNodeId,
+    targetNodeId: relationshipNodes.incomingIds.get(item.targetNodeId) ?? item.targetNodeId,
+  }));
 
   const albumMedia = mergeAlbumMedia(
     current.albumMedia ?? [],
@@ -365,6 +377,12 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
       (incoming.personTags ?? []).map((item) => item.kind === 'custom' ? { ...item, value: tagDefinitions.incomingIds.get(item.value) ?? item.value } : item)
         .filter((item) => personIds.has(item.personId) && (item.kind !== 'custom' || customTagIds.has(item.value))),
       (item) => `${item.personId}:${item.kind}:${item.value}`,
+    ),
+    personRelationshipNodes: validRelationshipNodes,
+    personRelationships: mergeRelations(
+      current.personRelationships ?? [],
+      incomingRelationships.filter((item) => relationshipNodeIds.has(item.sourceNodeId) && relationshipNodeIds.has(item.targetNodeId)),
+      (item) => [item.sourceNodeId, item.targetNodeId].sort().join(':'),
     ),
     albums: albums.map((album) => album.coverMediaId && albumByMedia.get(album.coverMediaId) !== album.id ? { ...album, coverMediaId: null } : album),
     albumMedia,
@@ -520,7 +538,7 @@ function filesEqual(left: File, right: File): boolean {
 
 function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = false): void {
   if (!value || typeof value !== 'object') throw new Error('备份数据格式无效');
-  const collections = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'albums', 'albumMedia', 'personBooks'] as const;
+  const collections = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'personRelationshipNodes', 'personRelationships', 'albums', 'albumMedia', 'personBooks'] as const;
   for (const key of collections) if (!Array.isArray(value[key])) throw new Error(`备份数据缺少 ${key}`);
 
   assertUniqueIds(value.posts, '记录');
@@ -530,6 +548,8 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   const tagGroups = value.tagGroups ?? [];
   const tagSystemSettings = value.tagSystemSettings ?? [];
   const personTags = value.personTags ?? [];
+  const personRelationshipNodes = value.personRelationshipNodes ?? [];
+  const personRelationships = value.personRelationships ?? [];
   const albums = value.albums ?? [];
   const albumMedia = value.albumMedia ?? [];
   const personBooks = value.personBooks ?? [];
@@ -629,6 +649,29 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
     if (person.birthday && !['solar', 'lunar', 'both'].includes(person.birthday.reminderMode)) throw new Error('备份中的生日提醒方式无效');
     if (person.birthday && (typeof person.birthday.reminderEnabled !== 'boolean' || !validReminderTime(person.birthday.reminderHour, person.birthday.reminderMinute))) throw new Error('备份中的生日提醒设置无效');
   }
+  const relationshipIds = new Set<string>();
+  const relationshipNodeIds = new Set<string>();
+  const relationshipPersonIds = new Set<string>();
+  let selfNodeCount = 0;
+  for (const node of personRelationshipNodes) {
+    if (!node.id || relationshipNodeIds.has(node.id) || !['self', 'person', 'placeholder'].includes(node.kind) || (node.label !== null && (typeof node.label !== 'string' || node.label.length > 40)) || !isValidDate(node.createdAt) || !isValidDate(node.updatedAt)) throw new Error('备份中的关系节点无效');
+    if (node.kind === 'self') {
+      if (node.id !== 'self' || node.personId !== null) throw new Error('备份中的关系树根节点无效');
+      selfNodeCount += 1;
+    } else if (node.kind === 'person') {
+      if (!node.personId || !personIds.has(node.personId) || relationshipPersonIds.has(node.personId)) throw new Error('备份中的关系节点人物绑定无效');
+      relationshipPersonIds.add(node.personId);
+    } else if (node.personId !== null) throw new Error('备份中的未绑定关系节点无效');
+    relationshipNodeIds.add(node.id);
+  }
+  if (selfNodeCount !== 1) throw new Error('备份中的关系树根节点无效');
+  const relationshipPairs = new Set<string>();
+  for (const relationship of personRelationships) {
+    const pair = [relationship.sourceNodeId, relationship.targetNodeId].sort().join(':');
+    if (!relationship.id || relationshipIds.has(relationship.id) || !relationshipNodeIds.has(relationship.sourceNodeId) || !relationshipNodeIds.has(relationship.targetNodeId) || relationship.sourceNodeId === relationship.targetNodeId || !['parent', 'child', 'partner', 'sibling', 'other'].includes(relationship.kind) || relationshipPairs.has(pair) || !isValidDate(relationship.createdAt) || !isValidDate(relationship.updatedAt)) throw new Error('备份中的人物关系无效');
+    relationshipIds.add(relationship.id);
+    relationshipPairs.add(pair);
+  }
   if (!value.settings || typeof value.settings !== 'object' || Array.isArray(value.settings)) value.settings = {};
   for (const setting of Object.values(value.settings)) if (typeof setting !== 'string') throw new Error('备份中的设置数据无效');
 
@@ -674,6 +717,32 @@ function migrateSnapshot(value: BackupSnapshot): void {
     { system: 'custom', enabled: true, sortOrder: 3 },
   ];
   value.personTags ??= [];
+  const legacyRelationships = (value.personRelationships ?? []) as Array<PersonRelationship & { sourcePersonId?: string | null; targetPersonId?: string }>;
+  const legacyFormat = legacyRelationships.some((item) => typeof item.targetPersonId === 'string');
+  if (legacyFormat) {
+    const nodesById = new Map<string, PersonRelationshipNode>();
+    const timestamps = legacyRelationships.map((item) => item.createdAt).filter(isValidDate).sort();
+    const fallbackTime = timestamps[0] ?? new Date(0).toISOString();
+    nodesById.set('self', { id: 'self', kind: 'self', personId: null, label: null, createdAt: fallbackTime, updatedAt: fallbackTime });
+    for (const relationship of legacyRelationships) {
+      for (const personId of [relationship.sourcePersonId, relationship.targetPersonId]) {
+        if (!personId) continue;
+        const id = `person_node_${personId}`;
+        if (!nodesById.has(id)) nodesById.set(id, { id, kind: 'person', personId, label: null, createdAt: relationship.createdAt, updatedAt: relationship.updatedAt });
+      }
+    }
+    value.personRelationshipNodes = [...nodesById.values()];
+    value.personRelationships = legacyRelationships.map((relationship) => ({
+      id: relationship.id,
+      sourceNodeId: relationship.sourcePersonId ? `person_node_${relationship.sourcePersonId}` : 'self',
+      targetNodeId: `person_node_${relationship.targetPersonId}`,
+      kind: relationship.kind,
+      createdAt: relationship.createdAt,
+      updatedAt: relationship.updatedAt,
+    }));
+  }
+  value.personRelationshipNodes ??= [{ id: 'self', kind: 'self', personId: null, label: null, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString() }];
+  value.personRelationships ??= [];
   value.albums ??= [];
   value.albumMedia ??= [];
   value.personBooks ??= [];

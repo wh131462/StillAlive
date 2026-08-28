@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
+import type { RelativePathString } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -14,7 +15,7 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 
 export default function PeopleScreen() {
   const router = useRouter();
-  const { createPerson, getPostsByPerson, media, people, posts, preferences } = useAppState();
+  const { createPerson, getPostsByPerson, media, people, personRelationships, posts, preferences } = useAppState();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
@@ -85,6 +86,21 @@ export default function PeopleScreen() {
           </Pressable>
         ) : (
           <>
+            <Pressable accessibilityLabel="打开我的关系树" accessibilityRole="button" onPress={() => router.push('/relationship-tree' as RelativePathString)} style={({ pressed }) => [styles.relationshipTreeCard, pressed && styles.relationshipTreeCardPressed]}>
+              <View style={styles.relationshipTreeCopy}>
+                <Text style={styles.relationshipTreeEyebrow}>RELATIONSHIP TREE</Text>
+                <Text style={styles.relationshipTreeTitle}>我的关系树</Text>
+                <Text style={styles.relationshipTreeHint}>{personRelationships.length ? `已经建立 ${personRelationships.length} 条人物关系` : '从自己出发，看见家人与重要的人'}</Text>
+              </View>
+              <View pointerEvents="none" style={styles.relationshipTreeMark}>
+                <View style={[styles.relationshipTreeBranch, styles.relationshipTreeBranchTop]} />
+                <View style={[styles.relationshipTreeBranch, styles.relationshipTreeBranchBottom]} />
+                <View style={[styles.relationshipTreeDot, styles.relationshipTreeDotRoot]}><Text style={styles.relationshipTreeDotText}>我</Text></View>
+                <View style={[styles.relationshipTreeDot, styles.relationshipTreeDotTop]} />
+                <View style={[styles.relationshipTreeDot, styles.relationshipTreeDotBottom]} />
+              </View>
+              <View style={styles.relationshipTreeAction}><Text style={styles.relationshipTreeActionText}>进入关系树</Text><SymbolView name={{ android: 'arrow_forward', ios: 'arrow.right', web: 'arrow_forward' }} pointerEvents="none" size={14} tintColor={colors.onLife} type="hierarchical" /></View>
+            </Pressable>
             <View style={styles.controls}>
               <View style={[styles.searchField, searchFocused && styles.searchFieldFocused]}>
                 <SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} pointerEvents="none" size={18} tintColor={searchFocused ? colors.life : colors.inkFaint} type="hierarchical" />
@@ -170,6 +186,23 @@ const styles = createThemedStyles(() => ({
   addButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 22, backgroundColor: colors.lifeLight },
   addButtonPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
   controls: { marginBottom: spacing.md },
+  relationshipTreeCard: { minHeight: 154, position: 'relative', marginBottom: spacing.md, padding: spacing.lg, overflow: 'hidden', borderTopLeftRadius: radius.sm, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.sm, borderBottomRightRadius: radius.xl, backgroundColor: colors.life },
+  relationshipTreeCardPressed: { opacity: 0.82, transform: [{ scale: 0.992 }] },
+  relationshipTreeCopy: { zIndex: 2, maxWidth: '62%' },
+  relationshipTreeEyebrow: { color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.3 },
+  relationshipTreeTitle: { marginTop: spacing.md, color: colors.onLife, fontFamily: typography.display, fontSize: 24 },
+  relationshipTreeHint: { marginTop: 6, color: colors.onLifeMuted, fontSize: 10, lineHeight: 16 },
+  relationshipTreeMark: { width: 112, height: 118, position: 'absolute', right: 8, top: 12, opacity: 0.34 },
+  relationshipTreeBranch: { width: 48, height: StyleSheet.hairlineWidth, position: 'absolute', left: 34, backgroundColor: colors.onLifeLine },
+  relationshipTreeBranchTop: { top: 37, transform: [{ rotate: '-28deg' }] },
+  relationshipTreeBranchBottom: { top: 78, transform: [{ rotate: '28deg' }] },
+  relationshipTreeDot: { width: 27, height: 27, position: 'absolute', borderWidth: 1, borderColor: colors.onLifeLine, borderRadius: 14, backgroundColor: colors.lifeDeep },
+  relationshipTreeDotRoot: { left: 18, top: 47, alignItems: 'center', justifyContent: 'center', borderColor: colors.onLife },
+  relationshipTreeDotTop: { right: 8, top: 14 },
+  relationshipTreeDotBottom: { right: 8, bottom: 12 },
+  relationshipTreeDotText: { color: colors.onLife, fontFamily: typography.display, fontSize: 10 },
+  relationshipTreeAction: { height: 32, position: 'absolute', left: spacing.lg, bottom: 16, zIndex: 3, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.onLifeLine, borderRadius: 16, backgroundColor: colors.lifeDeep },
+  relationshipTreeActionText: { color: colors.onLife, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
   searchField: { height: 50, paddingLeft: spacing.md, paddingRight: 6, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.sheet },
   searchFieldFocused: { borderColor: colors.life },
   searchInput: { flex: 1, height: '100%', paddingHorizontal: spacing.sm, paddingVertical: 0, color: colors.ink, fontSize: 13 },

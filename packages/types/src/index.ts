@@ -15,6 +15,8 @@ export type BookLocationType = 'epub-cfi' | 'reflow-cfi' | 'pdf-page' | 'manual'
 export type ReaderTheme = 'paper' | 'warm' | 'green' | 'night';
 export type ReaderFontFamily = 'serif' | 'sans';
 export type ReaderFlow = 'paginated' | 'scrolled';
+export type PersonRelationshipKind = 'parent' | 'child' | 'partner' | 'sibling' | 'other';
+export type PersonRelationshipNodeKind = 'self' | 'person' | 'placeholder';
 
 export interface ReaderTocItem {
   href: string;
@@ -75,6 +77,24 @@ export interface Person {
   impression: string | null;
   birthday: Birthday | null;
   memoryEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonRelationship {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  kind: PersonRelationshipKind;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonRelationshipNode {
+  id: string;
+  kind: PersonRelationshipNodeKind;
+  personId: string | null;
+  label: string | null;
   createdAt: string;
   updatedAt: string;
 }

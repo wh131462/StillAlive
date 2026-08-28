@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 
 export interface AppStateValue {
@@ -7,6 +7,8 @@ export interface AppStateValue {
   checkIns: CheckIn[];
   posts: Post[];
   people: Person[];
+  personRelationships: PersonRelationship[];
+  personRelationshipNodes: PersonRelationshipNode[];
   media: Media[];
   tagDefinitions: TagDefinition[];
   tagGroups: TagGroup[];
@@ -45,6 +47,11 @@ export interface AppStateValue {
   createPerson(name: string): Promise<Person>;
   updatePerson(personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
   deletePerson(personId: string): Promise<void>;
+  createPersonRelationshipNode(personId?: string | null, label?: string | null): Promise<PersonRelationshipNode>;
+  deletePersonRelationshipNode(nodeId: string): Promise<void>;
+  bindPersonRelationshipNode(nodeId: string, personId: string | null): Promise<void>;
+  savePersonRelationship(sourceNodeId: string, targetNodeId: string, kind: PersonRelationshipKind, relationshipId?: string | null): Promise<PersonRelationship>;
+  deletePersonRelationship(relationshipId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
   setPersonBooks(personId: string, bookIds: string[]): Promise<void>;
   createTag(name: string, groupId?: string | null): Promise<TagDefinition>;
