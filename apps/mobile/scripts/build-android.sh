@@ -83,6 +83,8 @@ fi
 
 pnpm --dir "$ROOT_DIR" install --frozen-lockfile
 pnpm --dir "$MOBILE_DIR" exec expo prebuild --platform android --no-install --no-clean
+# prebuild 不清理既有原生构建目录；清除自动链接生成物，避免开发包名残留到正式构建。
+rm -rf "$MOBILE_DIR/android/build/generated/autolinking" "$MOBILE_DIR/android/app/build/generated/autolinking"
 
 GRADLE_PROPERTIES="$MOBILE_DIR/android/gradle.properties"
 CONFIGURED_JAVA_HOME="$(sed -n 's/^org\.gradle\.java\.installations\.paths=//p' "$GRADLE_PROPERTIES")"
@@ -152,4 +154,5 @@ else
 fi
 
 mv -f "$OUTPUT_SOURCE" "$OUTPUT_TARGET"
-printf '%s: %s\n' "${BUILD_FORMAT^^}" "$OUTPUT_TARGET"
+BUILD_FORMAT_LABEL="$(printf '%s' "$BUILD_FORMAT" | tr '[:lower:]' '[:upper:]')"
+printf '%s: %s\n' "$BUILD_FORMAT_LABEL" "$OUTPUT_TARGET"
