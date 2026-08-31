@@ -20,6 +20,24 @@ index 125ad1d..51eb2d4 100644
 +import java.io.FileInputStream
 +import java.io.InputStream
  import kotlinx.coroutines.runBlocking
+@@ -44 +52,10 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
+   var nestedScrollEnabled = true
++  var scrollEnabled = true
++    set(value) {
++      field = value
++      if (!value) {
++        webView.isHorizontalScrollBarEnabled = false
++        webView.isVerticalScrollBarEnabled = false
++        webView.scrollTo(0, 0)
++      }
++    }
+@@ -183 +199,6 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
+   override fun onTouch(view: View?, event: MotionEvent?): Boolean {
++    if (!scrollEnabled) {
++      webView.scrollTo(0, 0)
++      requestDisallowInterceptTouchEvent(false)
++      return true
++    }
 @@ -208,2 +216,7 @@ internal class DomWebView(context: Context, appContext: AppContext) : ExpoView(c
    private fun createWebViewClient() = object : WebViewClient() {
 +    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
@@ -150,6 +168,16 @@ index 125ad1d..51eb2d4 100644
 +
 +  override fun close() = input.close()
 +}
+diff --git a/android/src/main/java/expo/modules/webview/DomWebViewModule.kt b/android/src/main/java/expo/modules/webview/DomWebViewModule.kt
+index 19d7f1e..b0337ec 100644
+--- a/android/src/main/java/expo/modules/webview/DomWebViewModule.kt
++++ b/android/src/main/java/expo/modules/webview/DomWebViewModule.kt
+@@ -56 +56,5 @@ class DomWebViewModule : Module() {
++      Prop("scrollEnabled") { view: DomWebView, enabled: Boolean ->
++        view.scrollEnabled = enabled
++      }
++
+       Prop("nestedScrollEnabled") { view: DomWebView, enabled: Boolean ->
 diff --git a/ios/DomWebView.swift b/ios/DomWebView.swift
 index d18e5cb..9180574 100644
 --- a/ios/DomWebView.swift

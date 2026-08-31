@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing } from '@still-alive/tokens';
 import { createThemedStyles } from '../theme/app-theme';
@@ -16,13 +16,14 @@ export function FeedbackDialog({ children, onBackdropPress, onRequestClose }: Fe
 
   return (
     <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible>
-      <Pressable accessible={false} onPress={onBackdropPress} style={styles.backdrop}>
+      <View style={styles.backdrop}>
+        <Pressable accessible={false} onPress={onBackdropPress} style={StyleSheet.absoluteFill} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none" style={styles.keyboardView}>
-          <Pressable accessibilityRole="none" accessibilityViewIsModal onPress={(event) => event.stopPropagation()} style={[styles.surface, { maxHeight: maxSurfaceHeight }]}>
+          <View accessibilityRole="none" accessibilityViewIsModal style={[styles.surface, { maxHeight: maxSurfaceHeight }]}>
             {children}
-          </Pressable>
+          </View>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

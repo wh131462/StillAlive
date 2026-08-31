@@ -3,6 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { useVideoPlayer, type VideoThumbnail } from 'expo-video';
 import { feedback } from '../../shared/feedback';
 import type { Media } from '@still-alive/types';
 import { colors, spacing, typography } from '@still-alive/tokens';
@@ -17,6 +19,8 @@ import { extractMusicShares, withoutMusicShares } from '../../application/music-
 import { withoutReadingSourceQuote } from '../../application/reading-share';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaVideo } from '../../shared/components/media-video';
+import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { PostShareDialog } from './post-share-dialog';
 
 export default function PostDetailScreen() {
   const router = useRouter();
@@ -26,10 +30,14 @@ export default function PostDetailScreen() {
   const readingSource = useMemo(() => readingNoteSources.find((source) => source.postId === id) ?? null, [id, readingNoteSources]);
   const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
   const [readyPostId, setReadyPostId] = useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [shareContentReady, setShareContentReady] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const contentReady = Boolean(post && readyPostId === post.id);
   const handleContentReady = useCallback(() => {
     if (post) setReadyPostId(post.id);
   }, [post]);
+  const handleShareContentReady = useCallback(() => setShareContentReady(true), []);
 
   const confirmDelete = () => {
     if (!post) return;
@@ -46,11 +54,27 @@ export default function PostDetailScreen() {
     ]);
   };
 
+  const editPost = () => {
+    if (!post) return;
+    setMoreOpen(false);
+    router.push({ pathname: '/editor', params: { postId: post.id } });
+  };
+
+  const deleteCurrentPost = () => {
+    setMoreOpen(false);
+    confirmDelete();
+  };
+
+  const openShare = () => {
+    setShareContentReady(false);
+    setShareOpen(true);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ToolPageHeader
         onBack={() => router.back()}
-        right={post ? <><ToolPageHeaderAction accessibilityLabel="编辑记录" onPress={() => router.push({ pathname: '/editor', params: { postId: post.id } })}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="删除记录" onPress={confirmDelete}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></ToolPageHeaderAction></> : undefined}
+        right={post ? <><ToolPageHeaderAction accessibilityLabel="分享记录长图" disabled={!contentReady} onPress={openShare}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="更多记录操作" onPress={() => setMoreOpen(true)}><SymbolView name={{ android: 'more_vert', ios: 'ellipsis', web: 'more_vert' }} size={21} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction></> : undefined}
         title="记录详情"
       />
 
@@ -73,6 +97,23 @@ export default function PostDetailScreen() {
       ) : (
         <Text style={styles.missing}>这条记录不存在或已被删除。</Text>
       )}
+
+      {post && shareOpen ? (
+        <PostShareDialog contentReady={shareContentReady} createdAt={post.createdAt} dayKey={post.dayKey} locationName={post.locationName} onClose={() => setShareOpen(false)}>
+          <PostBody markdown={post.bodyMarkdown} mediaById={mediaById} onImagePress={() => {}} onReady={handleShareContentReady} readingSource={readingSource} sharing />
+        </PostShareDialog>
+      ) : null}
+
+      <DraggableBottomSheet accessibilityLabel="记录更多操作" onClose={() => setMoreOpen(false)} open={moreOpen}>
+        <View style={styles.moreSheet}>
+          <Text style={styles.moreEyebrow}>RECORD ACTIONS</Text>
+          <Text style={styles.moreTitle}>更多</Text>
+          <View style={styles.moreActions}>
+            <Pressable accessibilityRole="button" onPress={editPost} style={({ pressed }) => [styles.moreAction, pressed && styles.pressed]}><View style={styles.moreActionIcon}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></View><View style={styles.moreActionCopy}><Text style={styles.moreActionTitle}>编辑记录</Text><Text style={styles.moreActionHint}>修改正文、媒体、人物或地点</Text></View><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
+            <Pressable accessibilityRole="button" onPress={deleteCurrentPost} style={({ pressed }) => [styles.moreAction, styles.moreActionDanger, pressed && styles.pressed]}><View style={[styles.moreActionIcon, styles.moreActionDangerIcon]}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></View><View style={styles.moreActionCopy}><Text style={styles.moreActionDangerTitle}>删除记录</Text><Text style={styles.moreActionHint}>删除正文和不再使用的本地媒体</Text></View></Pressable>
+          </View>
+        </View>
+      </DraggableBottomSheet>
     </SafeAreaView>
   );
 }
@@ -102,23 +143,25 @@ function DetailLoading() {
   );
 }
 
-function PostBody({ markdown, mediaById, onImagePress, onReady, readingSource }: { markdown: string; mediaById: Map<string, Media>; onImagePress(item: Media): void; onReady(): void; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null }) {
+function PostBody({ markdown, mediaById, onImagePress, onReady, readingSource, sharing = false }: { markdown: string; mediaById: Map<string, Media>; onImagePress(item: Media): void; onReady(): void; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null; sharing?: boolean }) {
   const musicShares = extractMusicShares(markdown);
   const segments = splitPostBody(withoutReadingSourceQuote(withoutMusicShares(markdown), readingSource));
   const markdownSegmentCount = segments.filter((segment) => segment.type === 'markdown' && segment.value.trim()).length;
-  const readinessRef = useRef({ markdown, readyIndexes: new Set<number>() });
-  if (readinessRef.current.markdown !== markdown) readinessRef.current = { markdown, readyIndexes: new Set<number>() };
+  const shareImageSegmentCount = sharing ? segments.filter((segment) => segment.type === 'image' && mediaById.get(segment.id)).length : 0;
+  const requiredReadyCount = markdownSegmentCount + shareImageSegmentCount;
+  const readinessRef = useRef({ markdown, sharing, readyKeys: new Set<string>() });
+  if (readinessRef.current.markdown !== markdown || readinessRef.current.sharing !== sharing) readinessRef.current = { markdown, sharing, readyKeys: new Set<string>() };
 
   useEffect(() => {
-    if (markdownSegmentCount === 0) onReady();
-  }, [markdownSegmentCount, onReady]);
+    if (requiredReadyCount === 0) onReady();
+  }, [onReady, requiredReadyCount]);
 
-  const markMarkdownReady = (index: number) => {
-    readinessRef.current.readyIndexes.add(index);
-    if (readinessRef.current.readyIndexes.size === markdownSegmentCount) onReady();
+  const markReady = (key: string) => {
+    readinessRef.current.readyKeys.add(key);
+    if (readinessRef.current.readyKeys.size === requiredReadyCount) onReady();
   };
 
-  return <>{readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} variant="detail" /></View> : null}{musicShares.map((share, index) => <View key={`music_${share.trackId}_${index}`} style={styles.musicShare}><MusicShareCard share={share} variant="detail" /></View>)}{segments.map((segment, index) => {
+  return <>{readingSource ? <View pointerEvents={sharing ? 'none' : 'auto'} style={styles.readingShare}><ReadingShareCard source={readingSource} variant="detail" /></View> : null}{musicShares.map((share, index) => <View key={`music_${share.trackId}_${index}`} pointerEvents={sharing ? 'none' : 'auto'} style={styles.musicShare}><MusicShareCard share={share} variant="detail" /></View>)}{segments.map((segment, index) => {
     if (segment.type === 'markdown') {
       if (!segment.value.trim()) return null;
       return (
@@ -127,7 +170,7 @@ function PostBody({ markdown, mediaById, onImagePress, onReady, readingSource }:
           dom={{ containerStyle: styles.markdownView, matchContents: true, scrollEnabled: false, style: styles.markdownView }}
           markdown={segment.value.trim()}
           media={[]}
-          onReady={() => markMarkdownReady(index)}
+          onReady={() => markReady(`markdown_${index}`)}
           theme={editorTheme()}
         />
       );
@@ -136,22 +179,28 @@ function PostBody({ markdown, mediaById, onImagePress, onReady, readingSource }:
     if (segment.type === 'audio') {
       const item = mediaById.get(segment.id);
       return item
-        ? <View key={`audio_${segment.id}_${index}`} style={styles.audioSection}><VoicePlayer durationMs={segment.durationMs} uri={item.localPath} /></View>
+        ? sharing
+          ? <ShareAudio key={`audio_${segment.id}_${index}`} durationMs={segment.durationMs} />
+          : <View key={`audio_${segment.id}_${index}`} style={styles.audioSection}><VoicePlayer durationMs={segment.durationMs} uri={item.localPath} /></View>
         : <View key={`audio_missing_${segment.id}_${index}`} style={styles.audioMissing}><Text style={styles.audioMissingText}>本地语音文件暂时无法播放</Text></View>;
     }
 
     const item = mediaById.get(segment.id);
     if (!item) return <ImageFallback key={`missing_${segment.id}_${index}`} />;
-    return <PostMedia alt={segment.alt} item={item} key={`media_${segment.id}_${index}`} onPress={() => onImagePress(item)} />;
+    return <PostMedia alt={segment.alt} item={item} key={`media_${segment.id}_${index}`} onPress={() => onImagePress(item)} onReady={sharing ? () => markReady(`image_${index}`) : undefined} sharing={sharing} />;
   })}</>;
 }
 
-function PostMedia({ alt, item, onPress }: { alt: string; item: Media; onPress(): void }) {
+function ShareAudio({ durationMs }: { durationMs: number }) {
+  return <View style={styles.shareAudio}><View style={styles.shareAudioIcon}><SymbolView name={{ android: 'mic', ios: 'waveform', web: 'mic' }} size={17} tintColor={colors.life} type="hierarchical" /></View><View style={styles.shareAudioWaves}>{[7, 13, 19, 11, 22, 15, 9, 18, 12, 16, 8, 14].map((height, index) => <View key={index} style={[styles.shareAudioWave, { height }]} />)}</View><Text style={styles.shareAudioDuration}>{formatAudioDuration(durationMs)}</Text></View>;
+}
+
+function PostMedia({ alt, item, onPress, onReady, sharing = false }: { alt: string; item: Media; onPress(): void; onReady?(): void; sharing?: boolean }) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const aspectRatio = item.width && item.height ? item.width / item.height : 4 / 3;
 
-  if (item.mimeType.startsWith('video/')) return <MediaVideo style={[styles.postImage, { aspectRatio }]} uri={item.localPath} />;
+  if (item.mimeType.startsWith('video/')) return sharing ? <ShareVideoPlaceholder aspectRatio={aspectRatio} onReady={onReady} uri={item.localPath} /> : <MediaVideo style={[styles.postImage, { aspectRatio }]} uri={item.localPath} />;
 
   if (failed) {
     return <ImageFallback aspectRatio={aspectRatio} onRetry={() => { setAttempt((value) => value + 1); setFailed(false); }} />;
@@ -161,12 +210,40 @@ function PostMedia({ alt, item, onPress }: { alt: string; item: Media; onPress()
     <Image
       key={attempt}
       accessibilityLabel={alt || '记录图片'}
-      onError={() => setFailed(true)}
+      onError={() => { setFailed(true); onReady?.(); }}
+      onLoad={onReady}
       resizeMode="contain"
       source={{ uri: item.localPath }}
       style={[styles.postImage, { aspectRatio }]}
     />
   </Pressable>;
+}
+
+function ShareVideoPlaceholder({ aspectRatio, onReady, uri }: { aspectRatio: number; onReady?(): void; uri: string }) {
+  const [thumbnail, setThumbnail] = useState<VideoThumbnail | null>(null);
+  const [failed, setFailed] = useState(false);
+  const player = useVideoPlayer(uri, (currentPlayer) => { currentPlayer.muted = true; });
+
+  useEffect(() => {
+    let active = true;
+    void player.generateThumbnailsAsync(0.1, { maxWidth: 1200 }).then((thumbnails) => {
+      if (!active) return;
+      setThumbnail(thumbnails[0] ?? null);
+      onReady?.();
+    }, () => {
+      if (!active) return;
+      setFailed(true);
+      onReady?.();
+    });
+    return () => { active = false; };
+  }, [onReady, player, uri]);
+
+  return <View style={[styles.shareVideo, { aspectRatio }]}>{thumbnail && !failed ? <ExpoImage contentFit="cover" source={thumbnail} style={StyleSheet.absoluteFill} /> : null}<View style={styles.shareVideoShade} /><View style={styles.shareVideoIcon}><SymbolView name={{ android: 'play_arrow', ios: 'play.fill', web: 'play_arrow' }} size={21} tintColor={colors.onLife} type="hierarchical" /></View><Text style={styles.shareVideoLabel}>视频记录</Text></View>;
+}
+
+function formatAudioDuration(durationMs: number): string {
+  const seconds = Math.max(0, Math.round(durationMs / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function ImageFallback({ aspectRatio = 4 / 3, onRetry }: { aspectRatio?: number; onRetry?(): void }) {
@@ -247,4 +324,26 @@ const styles = createThemedStyles(() => ({
   skeletonLineShort: { width: '48%', height: 18, marginTop: spacing.md },
   skeletonTime: { width: 126, height: 8, marginTop: spacing.lg, marginLeft: 'auto' },
   missing: { margin: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
+  moreSheet: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl },
+  moreEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 1.1 },
+  moreTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 22 },
+  moreActions: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.paper },
+  moreAction: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  moreActionDanger: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  moreActionIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight },
+  moreActionDangerIcon: { backgroundColor: colors.dangerLight },
+  moreActionCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
+  moreActionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15 },
+  moreActionDangerTitle: { color: colors.danger, fontFamily: typography.display, fontSize: 15 },
+  moreActionHint: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
+  shareAudio: { minHeight: 64, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.lifeLight },
+  shareAudioIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.sheet },
+  shareAudioWaves: { flex: 1, height: 26, marginHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  shareAudioWave: { width: 2, borderRadius: 1, backgroundColor: colors.life },
+  shareAudioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
+  shareVideo: { width: '100%', marginBottom: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: 4, backgroundColor: colors.codeBackground },
+  shareVideoShade: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(10, 16, 12, 0.3)' },
+  shareVideoIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', paddingLeft: 2, borderRadius: 21, backgroundColor: colors.life },
+  shareVideoLabel: { marginTop: spacing.sm, color: colors.onLifeMuted, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.7 },
+  pressed: { opacity: 0.62 },
 }));
