@@ -8,10 +8,16 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 
 export interface DateParts { year: number; month: number; day: number }
 
+interface DatePickerFieldProps { calendar?: BirthdayCalendar; isLeapMonth?: boolean; label: string; value: DateParts | null; maximumDate?: Date; onChange(value: DateParts, isLeapMonth: boolean): void; onClear?(): void }
+
 const ITEM_HEIGHT = 44;
 const VISIBLE_ITEMS = 5;
 
-export function DatePickerField({ calendar = 'solar', isLeapMonth = false, label, value, maximumDate = new Date(), onChange, onClear }: { calendar?: BirthdayCalendar; isLeapMonth?: boolean; label: string; value: DateParts | null; maximumDate?: Date; onChange(value: DateParts, isLeapMonth: boolean): void; onClear?(): void }) {
+export function DatePickerField(props: DatePickerFieldProps) {
+  return <CalendarDatePickerField key={props.calendar ?? 'solar'} {...props} />;
+}
+
+function CalendarDatePickerField({ calendar = 'solar', isLeapMonth = false, label, value, maximumDate = new Date(), onChange, onClear }: DatePickerFieldProps) {
   const [open, setOpen] = useState(false);
   const maximum = birthdayForCalendar(toBirthday({ year: maximumDate.getFullYear(), month: maximumDate.getMonth() + 1, day: maximumDate.getDate() }, 'solar', false), calendar);
   const maximumParts = toDateParts(maximum);
