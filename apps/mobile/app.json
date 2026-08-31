@@ -3,7 +3,7 @@
     "name": "仍在",
     "slug": "still-alive",
     "scheme": "stillalive",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -72,7 +72,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "13",
+      "buildNumber": "14",
       "bundleIdentifier": "com.eternalheart.stillalive",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -80,7 +80,7 @@
     },
     "android": {
       "package": "com.eternalheart.stillalive",
-      "versionCode": 13,
+      "versionCode": 14,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
