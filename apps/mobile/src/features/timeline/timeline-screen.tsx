@@ -56,7 +56,7 @@ export default function CalendarScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <TabPageHeader eyebrow="CALENDAR" subtitle="每一个圆点，都是生活的痕迹。" title="日历" />
         <CalendarView

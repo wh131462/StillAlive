@@ -35,7 +35,7 @@ export default function DataScreen() {
 
   useEffect(() => setAvatarFailed(false), [avatarUri]);
 
-  return <SafeAreaView style={styles.safeArea}>
+  return <SafeAreaView edges={['top']} style={styles.safeArea}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <TabPageHeader
         action={<Pressable accessibilityLabel="设置" onPress={() => router.push('/settings')} style={styles.settingsButton}><SymbolView name={{ android: 'settings', ios: 'gearshape', web: 'settings' }} size={23} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>}

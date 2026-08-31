@@ -256,7 +256,7 @@ export default function SpaceScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <SectionList<TimelineItem, TimelineSection>
         contentContainerStyle={styles.container}
         keyExtractor={(item) => item.kind === 'post' ? item.post.id : item.checkIn.id}
