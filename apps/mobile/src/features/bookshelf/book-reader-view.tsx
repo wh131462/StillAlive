@@ -62,7 +62,7 @@ const ReflowBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(functi
 });
 
 const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function EpubBookReader({ book, uri, initialLocator, preferences, contentPadding, excerpts, palette, onLocationChange, onSelection, onTocChange, onReady, onMetadata, onError, onSingleTap, sourceFormat = 'epub' }, ref) {
-  const { addAnnotation, changeFontFamily, changeFontSize, changeTheme, getMeta, goNext, goPrevious, goToLocation, removeSelection, section } = useReader();
+  const { addAnnotation, changeFontFamily, changeFontSize, changeTheme, getMeta, goNext, goPrevious, goToLocation, injectJavascript, removeSelection, section } = useReader();
   const [dimensions, setDimensions] = useState({ width: 1, height: 1 });
   const [readerReady, setReaderReady] = useState(false);
   const initialMetadataRef = useRef(getMeta());
@@ -77,9 +77,24 @@ const EpubBookReader = forwardRef<ReaderSurfaceHandle, BookReaderProps>(function
     previous: goPrevious,
     next: goNext,
     goTo: (locator) => {
-      if (locator.type === 'epub-cfi' || locator.type === 'reflow-cfi') goToLocation(locator.cfi || locator.href || '');
+      if (locator.type !== 'epub-cfi' && locator.type !== 'reflow-cfi') return;
+      if (locator.cfi) {
+        goToLocation(locator.cfi);
+        return;
+      }
+      const href = locator.href;
+      if (!href) return;
+      // In continuous flow epub.js keeps the previous scroll offset when
+      // displaying a chapter href. Reset only plain chapter links; fragment
+      // links already identify an exact anchor and must retain their offset.
+      if (scrolled && !href.includes('#')) {
+        const target = JSON.stringify(href);
+        injectJavascript(`rendition.once('relocated', () => rendition.moveTo(0)); rendition.display(${target}); true`);
+      } else {
+        goToLocation(href);
+      }
     },
-  }), [goNext, goPrevious, goToLocation]);
+  }), [goNext, goPrevious, goToLocation, injectJavascript, scrolled]);
 
   useEffect(() => {
     changeTheme(theme);
