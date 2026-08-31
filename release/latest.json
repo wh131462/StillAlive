@@ -1,6 +1,6 @@
 {
-  "versionCode": 14,
-  "versionName": "1.1.5",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.5.apk",
-  "releaseNotes": "新增人物关系树、记录完整长图分享。\n优化人物资料编辑与关系树视觉体验，修正主要标签页底部留白。\n修复连续滚动阅读器章节跳转定位及 Android 构建兼容性。"
+  "versionCode": 15,
+  "versionName": "1.1.6",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.6.apk",
+  "releaseNotes": "修复生日历法切换崩溃"
 }
