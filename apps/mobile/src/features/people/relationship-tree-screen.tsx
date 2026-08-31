@@ -288,7 +288,6 @@ export default function RelationshipTreeScreen() {
       />
 
       <View onLayout={({ nativeEvent }) => setCanvasViewport((current) => current.width === nativeEvent.layout.width && current.height === nativeEvent.layout.height ? current : { width: nativeEvent.layout.width, height: nativeEvent.layout.height })} style={styles.canvas}>
-        <View pointerEvents="none" style={styles.canvasGlow} />
         <GestureDetector gesture={canvasGesture}>
           <View collapsable={false} style={styles.canvasGestureArea}>
           <Animated.View style={[styles.treeBody, { width: graphLayout.width, height: graphLayout.height, transform: [{ translateX: animatedTranslateX }, { translateY: animatedTranslateY }, { scale: animatedScale }] }]}>
@@ -729,7 +728,6 @@ function isPersonTargetAvailable(sourceNodeId: string, targetPersonId: string, p
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   canvas: { flex: 1, overflow: 'hidden', backgroundColor: colors.paper },
-  canvasGlow: { position: 'absolute', top: '21%', left: '16%', width: '68%', aspectRatio: 1, borderRadius: 999, backgroundColor: colors.lifeLight, opacity: 0.38 },
   canvasGestureArea: { flex: 1, overflow: 'hidden' },
   treeBody: { position: 'relative', transformOrigin: 'top left' },
   graphRow: { width: '100%', height: GRAPH_HEADING_HEIGHT, position: 'absolute', left: 0 },

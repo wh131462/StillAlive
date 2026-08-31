@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
@@ -165,12 +166,14 @@ export default function EditPersonScreen() {
           </View>
 
           <SectionHeader description="记录最常用的信息，之后仍可随时修改。" index="01" title="基本资料" />
-          <Field label="名字 必填" maxLength={40} onChangeText={setName} placeholder="例如：小满" value={name} />
-          <Field label="昵称" maxLength={30} onChangeText={setNickname} placeholder="更常用的称呼，可选" value={nickname} />
-          <Field label="个人简介" maxLength={500} multiline onChangeText={setBio} placeholder="介绍一下这个人，可选" value={bio} />
+          <View style={styles.fieldRow}>
+            <Field label="名字 必填" maxLength={40} onChangeText={setName} placeholder="例如：小满" value={name} wrapperStyle={styles.fieldRowItem} />
+            <Field label="昵称" maxLength={30} onChangeText={setNickname} placeholder="常用称呼，可选" value={nickname} wrapperStyle={styles.fieldRowItem} />
+          </View>
           <GenderPickerField onChange={setGender} value={gender} />
           <RelationshipPicker onChange={setRelation} value={relation} />
           <Field label="一句话印象" maxLength={100} multiline onChangeText={setImpression} placeholder="不必完整，写下此刻最自然的一句话。" value={impression} />
+          <Field label="个人简介" maxLength={500} multiline onChangeText={setBio} placeholder="介绍一下这个人，可选" value={bio} />
 
           <SectionHeader description="选择生日历法和日期，提醒会按该历法计算。" index="02" title="生日与提醒" />
           <View style={styles.field}>
@@ -221,9 +224,9 @@ export default function EditPersonScreen() {
   );
 }
 
-function Field({ label, ...props }: { label: string } & React.ComponentProps<typeof TextInput>) {
+function Field({ label, wrapperStyle, ...props }: { label: string; wrapperStyle?: StyleProp<ViewStyle> } & React.ComponentProps<typeof TextInput>) {
   return (
-    <View style={styles.field}>
+    <View style={[styles.field, wrapperStyle]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput {...props} placeholderTextColor={colors.inkFaint} style={[styles.input, props.multiline && styles.inputMultiline]} textAlignVertical={props.multiline ? 'top' : 'center'} />
     </View>
@@ -250,7 +253,7 @@ const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  avatarCard: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  avatarCard: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },
   avatarButton: { alignItems: 'center' },
   avatarPressed: { opacity: 0.72 },
   avatar: { width: 86, height: 86, alignItems: 'center', justifyContent: 'center', borderRadius: 43, backgroundColor: colors.life },
@@ -269,15 +272,17 @@ const styles = createThemedStyles(() => ({
   sourceOptionText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
   sourceCancel: { minHeight: 54, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
   sourceCancelText: { color: colors.inkSoft, fontSize: 14, fontWeight: '600' },
-  sectionHeader: { marginTop: spacing.xxl, paddingTop: spacing.md, flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  sectionIndex: { width: 36, paddingTop: 3, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1 },
+  sectionHeader: { marginTop: spacing.xl, paddingTop: spacing.lg, flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  sectionIndex: { width: 30, height: 24, marginTop: 1, paddingTop: 5, borderRadius: radius.sm, backgroundColor: colors.lifeLight, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1, textAlign: 'center' },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 20 },
+  sectionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 21, letterSpacing: -0.2 },
   sectionDescription: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   field: { marginTop: spacing.lg },
+  fieldRow: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm },
+  fieldRowItem: { flex: 1, marginTop: 0 },
   fieldLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
-  input: { minHeight: 52, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 15 },
-  inputMultiline: { minHeight: 112, paddingTop: spacing.md, lineHeight: 23 },
+  input: { minHeight: 52, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 15 },
+  inputMultiline: { minHeight: 96, paddingTop: spacing.md, lineHeight: 23 },
   segmented: { flexDirection: 'row', padding: 3, borderRadius: radius.md, backgroundColor: colors.sheet },
   segment: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   segmentActive: { backgroundColor: colors.paper },
