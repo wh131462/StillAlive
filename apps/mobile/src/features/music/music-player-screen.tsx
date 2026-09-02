@@ -14,6 +14,7 @@ import { useAppState } from '../../application/state/app-state';
 import { MusicCover } from './music-cover';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { personDisplayName } from '../people/person-profile';
+import { feedback } from '../../shared/feedback';
 
 type QueueSourceControl = MusicQueueSource | 'people';
 
@@ -72,6 +73,19 @@ export default function MusicPlayerScreen() {
     router.push({ pathname: '/editor', params: { musicTrackId: current.id } });
   };
 
+  const chooseSleepTimer = () => {
+    const buttons = [15, 30, 45, 60].map((minutes) => ({
+      text: `${minutes} 分钟`,
+      onPress: () => player.setSleepTimer(minutes),
+    }));
+    feedback.alert('定时停止播放', player.sleepTimerEndsAt || player.sleepAfterTrack ? '已设置定时，可重新选择或取消。' : '选择播放多久后自动暂停。', [
+      { text: '播放完当前歌曲后停止', onPress: () => player.setSleepAfterTrack(true) },
+      ...buttons,
+      ...((player.sleepTimerEndsAt || player.sleepAfterTrack) ? [{ text: '取消定时', style: 'destructive' as const, onPress: () => { player.setSleepTimer(null); player.setSleepAfterTrack(false); } }] : []),
+      { text: '取消', style: 'cancel' },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
@@ -104,7 +118,13 @@ export default function MusicPlayerScreen() {
               <PlayerIcon accessibilityLabel="下一首" icon={{ android: 'skip_next', ios: 'forward.end.fill', web: 'skip_next' }} large onPress={() => void player.next()} />
               <PlayerIcon accessibilityLabel="播放队列" icon={{ android: 'queue_music', ios: 'list.bullet', web: 'queue_music' }} onPress={() => setQueueOpen(true)} />
             </View>
-            <Text style={styles.modeLabel}>{mode.label}</Text>
+            <View style={styles.statusActions}>
+              <Text style={styles.modeLabel}>{mode.label}</Text>
+              <Pressable accessibilityLabel="定时停止播放" onPress={chooseSleepTimer} style={({ pressed }) => [styles.sleepTimer, pressed && styles.pressed]}>
+                <SymbolView name={{ android: 'timer', ios: 'timer', web: 'timer' }} size={15} tintColor={player.sleepTimerEndsAt ? colors.life : colors.inkFaint} type="hierarchical" />
+                <Text style={[styles.sleepTimerText, Boolean(player.sleepTimerEndsAt || player.sleepAfterTrack) && styles.sleepTimerTextActive]}>{player.sleepAfterTrack ? '播放后停止' : player.sleepTimerEndsAt ? '定时已开启' : '定时停止'}</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       ) : (
@@ -364,7 +384,11 @@ const styles = createThemedStyles(() => ({
   utilityButton: { width: 42, height: 48, alignItems: 'center', justifyContent: 'center' },
   transportButton: { width: 52, height: 56, alignItems: 'center', justifyContent: 'center' },
   playButton: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center', borderRadius: 34, backgroundColor: colors.life },
-  modeLabel: { minHeight: 18, marginTop: spacing.xs, color: colors.inkFaint, fontSize: 10 },
+  statusActions: { minHeight: 30, marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  modeLabel: { color: colors.inkFaint, fontSize: 10 },
+  sleepTimer: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  sleepTimerText: { color: colors.inkFaint, fontSize: 10 },
+  sleepTimerTextActive: { color: colors.life, fontWeight: '700' },
   pressed: { opacity: 0.58 },
   error: { width: '100%', minHeight: 42, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.sm, backgroundColor: colors.dangerLight },
   errorText: { flex: 1, color: colors.danger, fontSize: 10 },

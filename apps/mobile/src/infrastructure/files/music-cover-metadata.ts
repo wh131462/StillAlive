@@ -512,7 +512,7 @@ function decodeId3Text(data: Uint8Array): string | null {
   if (data.length < 2) return null;
   const encoding = data[0];
   const bytes = data.slice(1, MAX_TEXT_BYTES + 1);
-  if (encoding === 0) return decodeLatin1(bytes);
+  if (encoding === 0) return decodeLegacyText(bytes);
   if (encoding === 1) {
     const littleEndian = bytes[0] === 0xff && bytes[1] === 0xfe;
     const start = bytes[0] === 0xff && bytes[1] === 0xfe || bytes[0] === 0xfe && bytes[1] === 0xff ? 2 : 0;
@@ -536,7 +536,31 @@ function decodeUtf8(bytes: Uint8Array): string {
 }
 
 function decodeLatin1(bytes: Uint8Array): string | null {
-  return cleanText(new TextDecoder('latin1').decode(bytes.slice(0, MAX_TEXT_BYTES)));
+  let output = '';
+  for (const byte of bytes.slice(0, MAX_TEXT_BYTES)) output += String.fromCharCode(byte);
+  return cleanText(output);
+}
+
+function decodeLegacyText(bytes: Uint8Array): string | null {
+  const value = bytes.slice(0, MAX_TEXT_BYTES);
+  if (isValidUtf8(value)) return cleanText(decodeUtf8(value));
+  return decodeLatin1(value);
+}
+
+function isValidUtf8(bytes: Uint8Array): boolean {
+  for (let index = 0; index < bytes.length;) {
+    const first = bytes[index];
+    if (first < 0x80) { index += 1; continue; }
+    const length = first >= 0xc2 && first <= 0xdf ? 2 : first >= 0xe0 && first <= 0xef ? 3 : first >= 0xf0 && first <= 0xf4 ? 4 : 0;
+    if (!length || index + length > bytes.length) return false;
+    for (let offset = 1; offset < length; offset += 1) if ((bytes[index + offset] & 0xc0) !== 0x80) return false;
+    if (length === 3 && first === 0xe0 && bytes[index + 1] < 0xa0) return false;
+    if (length === 3 && first === 0xed && bytes[index + 1] >= 0xa0) return false;
+    if (length === 4 && first === 0xf0 && bytes[index + 1] < 0x90) return false;
+    if (length === 4 && first === 0xf4 && bytes[index + 1] >= 0x90) return false;
+    index += length;
+  }
+  return true;
 }
 
 function cleanText(value: string): string | null {

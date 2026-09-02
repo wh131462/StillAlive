@@ -26,6 +26,8 @@ interface MusicPlayerValue {
   duration: number;
   mode: MusicPlaybackMode;
   error: string | null;
+  sleepTimerEndsAt: number | null;
+  sleepAfterTrack: boolean;
   playTrack(trackId: string, queueTrackIds: string[], source: MusicQueueSource, personId?: string | null): Promise<void>;
   setQueueSource(source: MusicQueueSource, sourceId?: string | null): void;
   toggle(): void;
@@ -33,6 +35,8 @@ interface MusicPlayerValue {
   previous(): Promise<void>;
   seekTo(seconds: number): Promise<void>;
   setMode(mode: MusicPlaybackMode): Promise<void>;
+  setSleepTimer(minutes: number | null): void;
+  setSleepAfterTrack(enabled: boolean): void;
   close(): void;
 }
 
@@ -40,7 +44,7 @@ const MusicPlayerContext = createContext<MusicPlayerValue | null>(null);
 
 type MiniPlayerEdge = 'left' | 'right';
 
-const MINI_PLAYER_EXPANDED_WIDTH = 260;
+const MINI_PLAYER_EXPANDED_WIDTH = 320;
 const MINI_PLAYER_EXPANDED_HEIGHT = 44;
 const MINI_PLAYER_COLLAPSED_SIZE = 44;
 const MINI_PLAYER_DRAG_SIZE = 56;
@@ -71,12 +75,29 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
   const [queuePlaylistId, setQueuePlaylistId] = useState<string | null>(null);
   const [mode, setModeState] = useState<MusicPlaybackMode>('list');
   const [error, setError] = useState<string | null>(null);
+  const [sleepTimerEndsAt, setSleepTimerEndsAt] = useState<number | null>(null);
+  const [sleepAfterTrack, setSleepAfterTrack] = useState(false);
   const [miniPlayerCollapsed, setMiniPlayerCollapsed] = useState(true);
   const loadRequestRef = useRef(0);
   const shuffleRemainingRef = useRef<string[]>([]);
   const shuffleHistoryRef = useRef<string[]>([]);
   const playCountSessionRef = useRef<PlayCountSession | null>(null);
   const playing = Boolean(status.playing);
+
+  useEffect(() => {
+    if (sleepTimerEndsAt === null) return;
+    const remaining = sleepTimerEndsAt - Date.now();
+    if (remaining <= 0) {
+      player.pause();
+      setSleepTimerEndsAt(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      player.pause();
+      setSleepTimerEndsAt(null);
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [player, sleepTimerEndsAt]);
 
   const mediaIds = useMemo(() => new Set(media.map((item) => item.id)), [media]);
   const playableTracks = useMemo(() => musicTracks.filter((track) => mediaIds.has(track.mediaId)), [mediaIds, musicTracks]);
@@ -125,11 +146,15 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
         interruptionMode: 'doNotMix',
       });
       if (requestId !== loadRequestRef.current) return;
+      const coverAsset = track.coverMediaId ? media.find((item) => item.id === track.coverMediaId) : null;
+      const artworkUrl = await resolveMusicCoverUri(coverAsset);
+      if (requestId !== loadRequestRef.current) return;
       player.replace(asset.localPath);
       player.setActiveForLockScreen(true, {
         title: track.title,
         artist: track.artist || '未知艺术家',
         albumTitle: track.album || undefined,
+        artworkUrl,
       }, {
         showPrevious: true,
         showNext: true,
@@ -219,6 +244,8 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
     setQueuePersonId(null);
     setQueuePlaylistId(null);
     setError(null);
+    setSleepTimerEndsAt(null);
+    setSleepAfterTrack(false);
     setMiniPlayerCollapsed(true);
     playCountSessionRef.current = null;
     shuffleRemainingRef.current = [];
@@ -281,13 +308,18 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!currentTrackId || !status.didJustFinish) return;
+    if (sleepAfterTrack) {
+      player.pause();
+      setSleepAfterTrack(false);
+      return;
+    }
     if (mode === 'single') {
       playCountSessionRef.current = createPlayCountSession(currentTrackId, 0);
       void player.seekTo(0).then(() => player.play());
       return;
     }
     void next();
-  }, [currentTrackId, mode, next, player, status.didJustFinish]);
+  }, [currentTrackId, mode, next, player, sleepAfterTrack, status.didJustFinish]);
 
   const toggle = useCallback(() => {
     if (!currentTrackId) return;
@@ -301,11 +333,19 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
     shuffleHistoryRef.current = [];
     await updatePreferences({ musicPlaybackMode: value });
   }, [currentTrackId, updatePreferences, validQueueTrackIds]);
+  const setSleepTimer = useCallback((minutes: number | null) => {
+    setSleepTimerEndsAt(minutes === null ? null : Date.now() + minutes * 60_000);
+    if (minutes !== null) setSleepAfterTrack(false);
+  }, []);
+  const setSleepAfterTrackMode = useCallback((enabled: boolean) => {
+    setSleepAfterTrack(enabled);
+    if (enabled) setSleepTimerEndsAt(null);
+  }, []);
   const collapseMiniPlayer = useCallback(() => setMiniPlayerCollapsed(true), []);
   const expandMiniPlayer = useCallback(() => setMiniPlayerCollapsed(false), []);
   const openMusicPlayer = useCallback(() => router.push('/music-player' as never), [router]);
 
-  const value = useMemo(() => ({ currentTrack, queue, queueSource, queuePersonId, queuePlaylistId, playing, currentTime: status.currentTime, duration: status.duration, mode, error, playTrack, setQueueSource, toggle, next, previous, seekTo: seek, setMode, close }), [close, currentTrack, error, mode, next, playTrack, playing, previous, queue, queuePersonId, queuePlaylistId, queueSource, seek, setMode, setQueueSource, status.currentTime, status.duration, toggle]);
+  const value = useMemo(() => ({ currentTrack, queue, queueSource, queuePersonId, queuePlaylistId, playing, currentTime: status.currentTime, duration: status.duration, mode, error, sleepTimerEndsAt, sleepAfterTrack, playTrack, setQueueSource, toggle, next, previous, seekTo: seek, setMode, setSleepTimer, setSleepAfterTrack: setSleepAfterTrackMode, close }), [close, currentTrack, error, mode, next, playTrack, playing, previous, queue, queuePersonId, queuePlaylistId, queueSource, seek, setMode, setQueueSource, setSleepAfterTrackMode, setSleepTimer, sleepAfterTrack, sleepTimerEndsAt, status.currentTime, status.duration, toggle]);
   const showMiniPlayer = Boolean(currentTrackId) && pathname !== '/music-player' && pathname !== '/reader';
   return <MusicPlayerContext.Provider value={value}>{children}{showMiniPlayer ? <MiniPlayer collapsed={miniPlayerCollapsed} onCollapse={collapseMiniPlayer} onExpand={expandMiniPlayer} onOpen={openMusicPlayer} /> : null}</MusicPlayerContext.Provider>;
 }
@@ -321,7 +361,7 @@ export function useMusicPlayer(): MusicPlayerValue {
 }
 
 function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: boolean; onCollapse(): void; onExpand(): void; onOpen(): void }) {
-  const { close, currentTime, currentTrack, duration, playing, toggle } = useMusicPlayer();
+  const { close, currentTime, currentTrack, duration, next, playing, previous, toggle } = useMusicPlayer();
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const { media, preferences, updatePreferences } = useAppState();
@@ -495,8 +535,14 @@ function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: bo
                 <Text numberOfLines={1} style={styles.artist}>{currentTrack.artist || '未知艺术家'}</Text>
               </View>
             </Pressable>
+            <Pressable accessibilityLabel="上一首" hitSlop={5} onPress={() => void previous()} style={({ pressed }) => [styles.skipAction, pressed && styles.pressed]}>
+              <SymbolView name={{ android: 'skip_previous', ios: 'backward.end.fill', web: 'skip_previous' }} size={17} tintColor={colors.inkSoft} type="hierarchical" />
+            </Pressable>
             <Pressable accessibilityLabel={playing ? '暂停音乐' : '播放音乐'} hitSlop={5} onPress={toggle} style={({ pressed }) => [styles.playAction, pressed && styles.pressed]}>
               <SymbolView name={{ android: playing ? 'pause' : 'play_arrow', ios: playing ? 'pause.fill' : 'play.fill', web: playing ? 'pause' : 'play_arrow' }} size={17} tintColor={colors.onLife} type="hierarchical" />
+            </Pressable>
+            <Pressable accessibilityLabel="下一首" hitSlop={5} onPress={() => void next()} style={({ pressed }) => [styles.skipAction, pressed && styles.pressed]}>
+              <SymbolView name={{ android: 'skip_next', ios: 'forward.end.fill', web: 'skip_next' }} size={17} tintColor={colors.inkSoft} type="hierarchical" />
             </Pressable>
             <Pressable accessibilityLabel="关闭音乐播放器" hitSlop={5} onPress={requestClose} style={({ pressed }) => [styles.closeAction, pressed && styles.pressed]}>
               <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={16} tintColor={colors.danger} type="hierarchical" />
@@ -538,6 +584,7 @@ const styles = createThemedStyles(() => ({
   title: { color: colors.ink, fontFamily: typography.display, fontSize: 12 },
   artist: { marginTop: 1, color: colors.inkFaint, fontSize: 9 },
   playAction: { width: 34, height: 34, marginLeft: spacing.xs, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.life },
+  skipAction: { width: 28, height: 34, alignItems: 'center', justifyContent: 'center' },
   closeAction: { width: 34, height: 42, alignItems: 'center', justifyContent: 'center' },
   miniProgressTrack: { position: 'absolute', right: spacing.md, bottom: 0, left: spacing.md, height: 2, backgroundColor: colors.lifeLight },
   miniProgressFill: { height: 2, backgroundColor: colors.life },

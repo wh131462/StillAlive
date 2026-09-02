@@ -29,10 +29,11 @@ type MusicBoxListItem = { kind: 'search' } | { kind: 'track'; track: MusicTrack 
 export default function MusicBoxScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { createMusicPlaylist, deleteMusicTrack, discardMedia, importMusicTrack, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, removeMusicCollectionEntry, setMusicTrackCover, updateMusicTrack } = useAppState();
+  const { addMusicTracksToPlaylist, createMusicPlaylist, deleteMusicTrack, discardMedia, importMusicTrack, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, removeMusicCollectionEntry, setMusicTrackCover, updateMusicTrack } = useAppState();
   const player = useMusicPlayer();
   const [search, setSearch] = useState('');
   const [actionTrack, setActionTrack] = useState<MusicTrack | null>(null);
+  const [playlistPickerTrack, setPlaylistPickerTrack] = useState<MusicTrack | null>(null);
   const [editingTrack, setEditingTrack] = useState<MusicTrack | null>(null);
   const [infoTrack, setInfoTrack] = useState<MusicTrack | null>(null);
   const [audioMetadata, setAudioMetadata] = useState<AudioFileMetadata | null>(null);
@@ -47,10 +48,14 @@ export default function MusicBoxScreen() {
   const [importing, setImporting] = useState(false);
   const [createPlaylistVisible, setCreatePlaylistVisible] = useState(false);
   const [playlistName, setPlaylistName] = useState('');
+  const [showNowPlayingJump, setShowNowPlayingJump] = useState(false);
+  const [pendingNowPlayingJump, setPendingNowPlayingJump] = useState(false);
   const importingRef = useRef(false);
+  const listRef = useRef<FlatList<MusicBoxListItem>>(null);
   const metadataRequestRef = useRef(0);
   const editMetadataRequestRef = useRef(0);
   const pendingMetadataCoverRef = useRef<Media | null>(null);
+  const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discardMediaRef = useRef(discardMedia);
   discardMediaRef.current = discardMedia;
 
@@ -59,6 +64,7 @@ export default function MusicBoxScreen() {
     const cover = pendingMetadataCoverRef.current;
     pendingMetadataCoverRef.current = null;
     if (cover) void discardMediaRef.current(cover).catch(() => undefined);
+    if (jumpTimerRef.current) clearTimeout(jumpTimerRef.current);
   }, []);
   const selfTracks = useMemo(() => orderMusicTracksByCollectionEntries(musicTracks, musicCollectionEntries.filter((entry) => entry.targetType === 'self')), [musicCollectionEntries, musicTracks]);
   const visibleTracks = useMemo(() => {
@@ -71,6 +77,15 @@ export default function MusicBoxScreen() {
     ...visibleTracks.map((track) => ({ kind: 'track' as const, track })),
   ], [visibleTracks]);
   const miniPlayerClearance = Math.max(84, insets.bottom + spacing.md) + 44 + spacing.md;
+
+  useEffect(() => {
+    if (!pendingNowPlayingJump || !player.currentTrack) return;
+    const index = visibleTracks.findIndex((track) => track.id === player.currentTrack?.id);
+    if (index < 0) return;
+    requestAnimationFrame(() => listRef.current?.scrollToIndex({ animated: true, index: index + 1, viewPosition: 0.45 }));
+    setPendingNowPlayingJump(false);
+    setShowNowPlayingJump(false);
+  }, [pendingNowPlayingJump, player.currentTrack, visibleTracks]);
 
   const importMusic = async () => {
     if (importingRef.current) return;
@@ -313,6 +328,56 @@ export default function MusicBoxScreen() {
     }
   };
 
+  const createPlaylistWithTrack = (track: MusicTrack) => {
+    setActionTrack(null);
+    setPlaylistPickerTrack(null);
+    feedback.prompt('新建歌单', '输入歌单名称。', (value) => {
+      const name = value.trim();
+      if (!name) return;
+      void createMusicPlaylist(name).then(async (playlist) => {
+        await addMusicTracksToPlaylist(playlist.id, [track.id]);
+        feedback.alert('已添加到歌单', `已将“${track.title}”添加到“${playlist.name}”。`);
+      }).catch((cause: unknown) => feedback.alert('添加失败', cause instanceof Error ? cause.message : '请稍后重试。'));
+    });
+  };
+
+  const addTrackToPlaylist = (track: MusicTrack) => {
+    setActionTrack(null);
+    setPlaylistPickerTrack(track);
+  };
+
+  const addTrackToExistingPlaylist = async (playlist: MusicPlaylist) => {
+    if (!playlistPickerTrack) return;
+    try {
+      await addMusicTracksToPlaylist(playlist.id, [playlistPickerTrack.id]);
+      setPlaylistPickerTrack(null);
+    } catch (cause) {
+      feedback.alert('添加失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    }
+  };
+
+  const handleListScroll = (offsetY: number) => {
+    if (!player.currentTrack || offsetY < 180) {
+      setShowNowPlayingJump(false);
+      return;
+    }
+    setShowNowPlayingJump(true);
+    if (jumpTimerRef.current) clearTimeout(jumpTimerRef.current);
+    jumpTimerRef.current = setTimeout(() => setShowNowPlayingJump(false), 2_800);
+  };
+
+  const jumpToNowPlaying = () => {
+    if (!player.currentTrack) return;
+    const index = visibleTracks.findIndex((track) => track.id === player.currentTrack?.id);
+    if (index >= 0) {
+      listRef.current?.scrollToIndex({ animated: true, index: index + 1, viewPosition: 0.45 });
+      setShowNowPlayingJump(false);
+      return;
+    }
+    setPendingNowPlayingJump(true);
+    setSearch('');
+  };
+
   const openPlaylist = (playlist: MusicPlaylist) => {
     router.push({ pathname: '/music-playlist', params: { id: playlist.id } } as never);
   };
@@ -326,6 +391,7 @@ export default function MusicBoxScreen() {
       />
 
       <FlatList
+        ref={listRef}
         contentContainerStyle={[styles.content, player.currentTrack && { paddingBottom: miniPlayerClearance }]}
         data={listItems}
         extraData={player.currentTrack?.id}
@@ -377,16 +443,25 @@ export default function MusicBoxScreen() {
             <View style={styles.listHeader}><Text style={styles.listTitle}>{search ? '搜索结果' : '全部歌曲'}</Text><Text style={styles.listCount}>{visibleTracks.length} 首</Text></View>
           </View>
         ) : <TrackRow media={media} selected={player.currentTrack?.id === item.track.id} track={item.track} onMore={() => setActionTrack(item.track)} onPlay={() => void playTrack(item.track)} />}
+        onScroll={(event) => handleListScroll(event.nativeEvent.contentOffset.y)}
+        onScrollToIndexFailed={({ averageItemLength, index }) => {
+          listRef.current?.scrollToOffset({ animated: true, offset: Math.max(0, averageItemLength * index) });
+          requestAnimationFrame(() => listRef.current?.scrollToIndex({ animated: true, index, viewPosition: 0.45 }));
+        }}
+        scrollEventThrottle={100}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
         windowSize={7}
       />
+
+      {showNowPlayingJump && player.currentTrack ? <Pressable accessibilityLabel="滚动到正在播放的歌曲" onPress={jumpToNowPlaying} style={({ pressed }) => [styles.nowPlayingJump, { bottom: Math.max(96, insets.bottom + 68) }, pressed && styles.pressed]}><SymbolView name={{ android: 'graphic_eq', ios: 'waveform', web: 'graphic_eq' }} size={17} tintColor={colors.onLife} type="hierarchical" /><Text numberOfLines={1} style={styles.nowPlayingJumpText}>{player.currentTrack.title}</Text></Pressable> : null}
 
       <DraggableBottomSheet accessibilityLabel="向下拖动关闭菜单" accessibilityRole="menu" backdropStyle={styles.backdrop} onClose={() => setActionTrack(null)} open={Boolean(actionTrack)} sheetStyle={styles.actionSheet}>
               <View style={styles.actionPreview}><Pressable accessibilityHint="打开封面选项" accessibilityLabel="管理歌曲封面" accessibilityRole="button" onPress={() => actionTrack && showTrackCoverActions(actionTrack)} style={({ pressed }) => [styles.previewCoverButton, pressed && styles.previewCoverPressed]}><MusicCover media={media.find((item) => item.id === actionTrack?.coverMediaId)} size={56} style={styles.previewCover} /><View pointerEvents="none" style={styles.previewCoverEdit}><SymbolView name={{ android: 'image', ios: 'photo', web: 'image' }} size={12} tintColor={colors.life} type="hierarchical" /></View></Pressable><View style={styles.previewCopy}><Text numberOfLines={1} style={styles.previewTitle}>{actionTrack?.title}</Text><Text numberOfLines={1} style={styles.previewMeta}>{actionTrack?.artist || '未知艺术家'}{actionTrack?.album ? ` / ${actionTrack.album}` : ''}</Text></View></View>
               <ActionOption icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑歌曲信息" onPress={() => actionTrack && edit(actionTrack)} />
               <ActionOption icon={{ android: 'info', ios: 'info.circle', web: 'info' }} label="文件信息" onPress={() => actionTrack && showTrackInfo(actionTrack)} />
               <ActionOption icon={{ android: 'download', ios: 'arrow.down.to.line', web: 'download' }} label="下载" onPress={() => actionTrack && void downloadTrack(actionTrack)} />
+              <ActionOption icon={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} label="添加到歌单" onPress={() => actionTrack && addTrackToPlaylist(actionTrack)} />
               <ActionOption icon={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} label="移出音乐盒" onPress={() => actionTrack && removeFromBox(actionTrack)} />
               <ActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="永久删除曲目" onPress={() => actionTrack && deleteEverywhere(actionTrack)} />
               <Pressable onPress={() => setActionTrack(null)} style={styles.cancelAction}><Text style={styles.cancelText}>取消</Text></Pressable>
@@ -401,6 +476,15 @@ export default function MusicBoxScreen() {
         open={Boolean(infoTrack)}
         track={infoTrack}
       />
+
+      <DraggableBottomSheet accessibilityLabel="选择歌单" backdropStyle={styles.backdrop} onClose={() => setPlaylistPickerTrack(null)} open={Boolean(playlistPickerTrack)} sheetStyle={styles.playlistPickerSheet}>
+        <Text style={styles.editTitle}>添加到歌单</Text>
+        <Text numberOfLines={1} style={styles.playlistPickerTrack}>{playlistPickerTrack?.title}</Text>
+        <ScrollView contentContainerStyle={styles.playlistPickerContent} showsVerticalScrollIndicator={false} style={styles.playlistPickerList}>
+          {musicPlaylists.map((playlist) => <Pressable key={playlist.id} accessibilityRole="button" onPress={() => void addTrackToExistingPlaylist(playlist)} style={({ pressed }) => [styles.playlistPickerRow, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === playlist.coverMediaId)} size={42} /><View style={styles.playlistPickerCopy}><Text numberOfLines={1} style={styles.playlistPickerName}>{playlist.name}</Text><Text style={styles.playlistPickerMeta}>{musicPlaylistEntries.filter((entry) => entry.playlistId === playlist.id).length} 首歌曲</Text></View><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={17} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>)}
+          <Pressable accessibilityRole="button" onPress={() => playlistPickerTrack && createPlaylistWithTrack(playlistPickerTrack)} style={({ pressed }) => [styles.playlistPickerRow, pressed && styles.pressed]}><View style={styles.newPlaylistIcon}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={21} tintColor={colors.life} type="hierarchical" /></View><Text style={styles.newPlaylistText}>新建歌单</Text></Pressable>
+        </ScrollView>
+      </DraggableBottomSheet>
 
       <DraggableBottomSheet backdropStyle={styles.backdrop} keyboardAvoiding onClose={closeEditor} open={Boolean(editingTrack)} sheetStyle={styles.editSheet}>
               <Text style={styles.editTitle}>编辑歌曲信息</Text>
@@ -582,6 +666,18 @@ const styles = createThemedStyles(() => ({
   playlistEmptyAction: { color: colors.life, fontSize: 12, fontWeight: '700' },
   disabled: { opacity: 0.38 },
   pressed: { opacity: 0.62 },
+  nowPlayingJump: { position: 'absolute', right: spacing.lg, zIndex: 4, maxWidth: 210, minHeight: 40, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: 20, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
+  nowPlayingJumpText: { maxWidth: 150, color: colors.onLife, fontSize: 11, fontWeight: '700' },
+  playlistPickerSheet: { maxHeight: '72%', paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  playlistPickerTrack: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 11 },
+  playlistPickerList: { minHeight: 0, marginTop: spacing.md },
+  playlistPickerContent: { paddingBottom: spacing.sm },
+  playlistPickerRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  playlistPickerCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
+  playlistPickerName: { color: colors.ink, fontSize: 13, fontWeight: '600' },
+  playlistPickerMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 9 },
+  newPlaylistIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  newPlaylistText: { marginLeft: spacing.md, color: colors.life, fontSize: 13, fontWeight: '700' },
   searchDock: { paddingTop: spacing.sm, paddingHorizontal: spacing.lg, backgroundColor: colors.paper },
   searchBar: { minHeight: 46, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.sheet },
   searchInput: { flex: 1, minHeight: 46, paddingHorizontal: spacing.sm, color: colors.ink, fontSize: 12 },
