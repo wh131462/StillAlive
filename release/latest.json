@@ -1,6 +1,6 @@
 {
-  "versionCode": 15,
-  "versionName": "1.1.6",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.6.apk",
-  "releaseNotes": "修复生日历法切换崩溃"
+  "versionCode": 16,
+  "versionName": "1.1.7",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.7.apk",
+  "releaseNotes": "新增人物联系方式，可记录多种联系方式并在详情页查看。\n增强音乐播放控制，支持定时停止播放、添加歌曲到歌单及快速定位当前播放。\n优化记录预览与分享操作，支持按原顺序展示媒体、复制正文或全文，并改善编辑器列表输入体验。"
 }
