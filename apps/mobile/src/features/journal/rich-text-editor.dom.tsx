@@ -147,6 +147,7 @@ export default function RichTextEditor({
     saveSelection(editor, savedRangeRef);
     commitEditorChange(editor);
     if (nativeEvent.inputType === 'insertText' && nativeEvent.data === '@') onMention();
+    if (nativeEvent.inputType === 'insertParagraph' || nativeEvent.inputType === 'insertLineBreak') requestAnimationFrame(scrollSelectionIntoView);
   };
 
   const handleCheckboxChange = () => {
@@ -223,12 +224,29 @@ export default function RichTextEditor({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (event.nativeEvent.isComposing) return;
     const editor = editorRef.current;
     const selection = window.getSelection();
     if (!editor || !selection?.rangeCount || !selection.isCollapsed) return;
     const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
     if (!anchor || !editor.contains(anchor)) return;
+
+    if (event.key === 'Backspace') {
+      const listItem = anchor.closest('li') as HTMLLIElement | null;
+      if (!listItem || !caretAtStart(listItem, selection)) return;
+      event.preventDefault();
+      const previousItem = listItem.previousElementSibling as HTMLLIElement | null;
+      if (previousItem) mergeListItemIntoPrevious(listItem, previousItem);
+      else if (listItem.classList.contains('task-list-item')) convertTaskItemToParagraph(listItem);
+      else convertListItemToParagraph(listItem);
+      decorateEditor(editor, mediaRef.current);
+      saveSelection(editor, savedRangeRef);
+      commitEditorChange(editor);
+      requestAnimationFrame(scrollSelectionIntoView);
+      return;
+    }
+
+    if (event.key !== 'Enter' || event.shiftKey) return;
 
     const taskItem = anchor.closest('li.task-list-item') as HTMLLIElement | null;
     if (taskItem) {
@@ -241,6 +259,7 @@ export default function RichTextEditor({
       decorateEditor(editor, mediaRef.current);
       saveSelection(editor, savedRangeRef);
       commitEditorChange(editor);
+      requestAnimationFrame(scrollSelectionIntoView);
       return;
     }
 
@@ -270,6 +289,7 @@ export default function RichTextEditor({
       event.preventDefault();
       exitBlock(quote, quoteLine && quoteLine !== editor ? quoteLine : null);
       commitEditorChange(editor);
+      requestAnimationFrame(scrollSelectionIntoView);
       return;
     }
 
@@ -288,6 +308,7 @@ export default function RichTextEditor({
       pre.textContent = pre.textContent?.replace(/\n+$/, '') ?? '';
       exitBlock(pre);
       commitEditorChange(editor);
+      requestAnimationFrame(scrollSelectionIntoView);
     }
   };
 
@@ -877,6 +898,35 @@ function convertListItemToParagraph(listItem: HTMLLIElement) {
     list.replaceWith(paragraph, ...(trailingList ? [trailingList] : []));
   }
   placeCursorAtStart(paragraph);
+}
+
+function caretAtStart(listItem: HTMLLIElement, selection: Selection): boolean {
+  if (!selection.rangeCount) return false;
+  const caret = selection.getRangeAt(0);
+  const before = caret.cloneRange();
+  before.selectNodeContents(listItem);
+  before.setEnd(caret.startContainer, caret.startOffset);
+  return !before.toString();
+}
+
+function mergeListItemIntoPrevious(listItem: HTMLLIElement, previousItem: HTMLLIElement) {
+  const checkbox = listItem.firstElementChild?.matches('input[type="checkbox"]') ? listItem.firstElementChild : null;
+  checkbox?.remove();
+  const marker = document.createTextNode('');
+  previousItem.append(marker, ...listItem.childNodes);
+  listItem.remove();
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.setStartAfter(marker);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function scrollSelectionIntoView() {
+  const selection = window.getSelection();
+  const element = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement;
+  element?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
 }
 
 function convertTaskItemToParagraph(taskItem: HTMLLIElement) {

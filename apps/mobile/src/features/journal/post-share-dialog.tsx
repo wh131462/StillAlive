@@ -12,6 +12,7 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 
 interface PostShareDialogProps {
   children: ReactNode;
+  centerContent?: boolean;
   contentReady: boolean;
   createdAt: string;
   dayKey: DayKey;
@@ -19,7 +20,9 @@ interface PostShareDialogProps {
   onClose(): void;
 }
 
-export function PostShareDialog({ children, contentReady, createdAt, dayKey, locationName, onClose }: PostShareDialogProps) {
+const SHARE_CARD_MIN_HEIGHT = 480;
+
+export function PostShareDialog({ centerContent = false, children, contentReady, createdAt, dayKey, locationName, onClose }: PostShareDialogProps) {
   const scrollRef = useRef<ScrollView>(null);
   const [contentHeight, setContentHeight] = useState(0);
   const [sharing, setSharing] = useState(false);
@@ -57,8 +60,6 @@ export function PostShareDialog({ children, contentReady, createdAt, dayKey, loc
     }
   };
 
-  const date = formatCardDate(dayKey);
-
   return (
     <FeedbackDialog onRequestClose={() => { if (!sharing) onClose(); }}>
       <View style={styles.dialogHeader}>
@@ -77,7 +78,7 @@ export function PostShareDialog({ children, contentReady, createdAt, dayKey, loc
           alwaysBounceVertical
           bounces={false}
           canCancelContentTouches
-          contentContainerStyle={[styles.shareCanvas, { minHeight: previewHeight }]}
+          contentContainerStyle={[styles.shareCanvas, { minHeight: SHARE_CARD_MIN_HEIGHT }]}
           contentInsetAdjustmentBehavior="never"
           keyboardShouldPersistTaps="handled"
           nestedScrollEnabled
@@ -87,13 +88,7 @@ export function PostShareDialog({ children, contentReady, createdAt, dayKey, loc
           showsVerticalScrollIndicator
           style={styles.preview}
         >
-          <View style={styles.cardHeader}>
-            <View style={styles.cardRule} />
-            <Text style={styles.cardEyebrow}>STILL ALIVE / RECORD</Text>
-            <Text style={styles.cardDate}>{date.date}</Text>
-            <Text style={styles.cardDay}>{date.day}</Text>
-          </View>
-          <View collapsable={false} pointerEvents="none" style={styles.cardBody}>{children}</View>
+          <View collapsable={false} pointerEvents="none" style={[styles.cardBody, centerContent && styles.cardBodyCentered]}>{children}</View>
           <View style={styles.cardFooter}>
             <Text style={styles.cardMeta}>{locationName ? `${locationName} / ` : ''}记录于 {formatDate(dayKey)} {formatTime(createdAt)}</Text>
             <View style={styles.brandRow}><View style={styles.brandMark} /><Text style={styles.brand}>仍在 STILL ALIVE</Text></View>
@@ -120,15 +115,6 @@ function toFileUri(uri: string): string {
   return uri.startsWith('file://') ? uri : `file://${uri}`;
 }
 
-function formatCardDate(dayKey: string): { date: string; day: string } {
-  const [year, month, day] = dayKey.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  return {
-    date: `${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`,
-    day: `${year} / 周${['日', '一', '二', '三', '四', '五', '六'][date.getDay()]}`,
-  };
-}
-
 function formatDate(dayKey: string): string {
   const [year, month, day] = dayKey.split('-');
   return `${year} 年 ${Number(month)} 月 ${Number(day)} 日`;
@@ -148,12 +134,8 @@ const styles = createThemedStyles(() => ({
   previewFrame: { height: 430, marginTop: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
   preview: { flex: 1, minHeight: 0, backgroundColor: colors.sheet },
   shareCanvas: { padding: spacing.lg, backgroundColor: colors.sheet },
-  cardHeader: { marginBottom: spacing.xl },
-  cardRule: { width: 34, height: 3, marginBottom: spacing.md, backgroundColor: colors.life },
-  cardEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 1.1 },
-  cardDate: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 37, lineHeight: 42 },
-  cardDay: { marginTop: 2, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.7 },
-  cardBody: { width: '100%' },
+  cardBody: { width: '100%', flexGrow: 1 },
+  cardBodyCentered: { justifyContent: 'center' },
   cardFooter: { marginTop: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   cardMeta: { color: colors.inkFaint, fontSize: 8, lineHeight: 14 },
   brandRow: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center' },

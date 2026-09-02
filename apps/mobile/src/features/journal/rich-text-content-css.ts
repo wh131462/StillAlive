@@ -2,7 +2,7 @@ import type { EditorTheme } from './rich-text-editor.types';
 
 export function richTextSurfaceCss(theme: EditorTheme): string {
   return `
-    .rich-text-surface { --rich-text-line-height: 1.85em; width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 19px; line-height: 1.85; }
+    .rich-text-surface { --rich-text-line-height: 1.68em; width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 17px; line-height: 1.68; }
     ${richTextContentCss(theme)}
     img, video { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
   `;
@@ -10,7 +10,7 @@ export function richTextSurfaceCss(theme: EditorTheme): string {
 
 export function richTextContentCss(theme: EditorTheme): string {
   return `
-    p { margin: 0 0 0.85em; }
+    p { margin: 0 0 0.58em; }
     h1, h2, h3, h4, h5, h6 { margin: 1.15em 0 0.55em; line-height: 1.3; letter-spacing: -0.02em; }
     h1:first-child, h2:first-child, h3:first-child { margin-top: 0; }
     h1 { font-size: 2em; } h2 { font-size: 1.62em; } h3 { font-size: 1.34em; }
@@ -19,9 +19,9 @@ export function richTextContentCss(theme: EditorTheme): string {
     a { color: ${theme.life}; text-decoration-color: ${theme.lifeLine}; text-underline-offset: 3px; }
     blockquote { margin: 1.2em 0; padding: 0.15em 0 0.15em 16px; border-left: 3px solid ${theme.sun}; color: ${theme.inkSoft}; }
     blockquote p:last-child { margin-bottom: 0; }
-    ul, ol { margin: 0.7em 0 1em; padding-left: 1.45em; list-style-position: outside; }
+    ul, ol { margin: 0.5em 0 0.7em; padding-left: 1.45em; list-style-position: outside; }
     ul { list-style-type: disc; } ol { list-style-type: decimal; }
-    li { margin: 0.34em 0; padding-left: 0.2em; }
+    li { margin: 0.2em 0; padding-left: 0.2em; }
     .task-list { padding-left: 0.25em; list-style: none; }
     .task-list-item { position: relative; min-height: var(--rich-text-line-height); padding-left: 1.9em; list-style: none; }
     .task-list-item::marker { content: ""; }

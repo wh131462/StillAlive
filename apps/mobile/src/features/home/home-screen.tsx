@@ -16,7 +16,7 @@ import { StyledName } from '../people/styled-name';
 import { personDisplayName } from '../people/person-profile';
 import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview.types';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
-import { extractAudioEmbeds, formatAudioDuration, withoutEmbeddedAttachments } from '../journal/embedded-media';
+import { extractAudioEmbeds, formatAudioDuration } from '../journal/embedded-media';
 import { birthdayForCalendar, birthdayFromDateString, nextBirthday } from '../people/person-profile';
 import { resolveDeviceLocation } from '../../infrastructure/platform/device-location';
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
@@ -24,7 +24,7 @@ import { writePersistentError } from '../../infrastructure/platform/persistent-l
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
 import { MusicShareCard } from '../../application/components/music-share-card';
 import { ReadingShareCard } from '../../application/components/reading-share-card';
-import { extractMusicShares } from '../../application/music-share';
+import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
 import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 import { MediaThumbnail } from '../../shared/components/media-thumbnail';
 
@@ -329,7 +329,7 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
   const [bodyOverflowed, setBodyOverflowed] = useState(false);
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
-  const displayMarkdown = withoutReadingSourceQuote(withoutEmbeddedAttachments(post.bodyMarkdown), readingSource);
+  const orderedMarkdown = withoutReadingSourceQuote(withoutMusicShares(post.bodyMarkdown), readingSource);
   const audioEmbeds = extractAudioEmbeds(post.bodyMarkdown);
   const musicShare = extractMusicShares(post.bodyMarkdown)[0] ?? null;
   const hasHiddenContent = bodyOverflowed || images.length > 9 || audioEmbeds.length > 2;
@@ -342,30 +342,53 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
           <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
           {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
-        {displayMarkdown.trim() ? (
-          <View pointerEvents="none" style={styles.postMarkdownFrame}>
-            <MarkdownView
-              dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }}
-              markdown={displayMarkdown}
-              maxHeight={POST_PREVIEW_MAX_HEIGHT}
-              media={[]}
-              onOverflowChange={setBodyOverflowed}
-              preview
-              theme={editorTheme()}
-            />
-          </View>
-        ) : null}
+        {renderPostPreviewSegments({ displayMarkdown: orderedMarkdown, mediaById, onImagePress, onOverflowChange: setBodyOverflowed })}
         {readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} /></View> : null}
         {musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} /></View> : null}
-        {images.length ? <PostImageGrid images={images} onPressImage={(imageIndex) => onImagePress(imageIndex, images)} totalCount={mediaIds.length} /> : null}
-        {audioEmbeds.length ? <AudioPreviews audioEmbeds={audioEmbeds} mediaById={mediaById} /> : null}
-        {hasHiddenContent ? <Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>更多</Text></Pressable> : null}
+        {hasHiddenContent ? <><Text style={styles.postOverflowMark}>…</Text><Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>查看更多</Text></Pressable></> : null}
         <View style={[styles.postFooter, hasHiddenContent && styles.postFooterAfterMore]}>
           <Text numberOfLines={1} style={styles.postTime}>{post.locationName ? `${post.locationName} / ` : ''}{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' / 修改过' : ''}</Text>
         </View>
       </View>
     </Pressable>
   );
+}
+
+function renderPostPreviewSegments({ displayMarkdown, mediaById, onImagePress, onOverflowChange }: { displayMarkdown: string; mediaById: Map<string, Media>; onImagePress(index: number, images: Media[]): void; onOverflowChange(overflowed: boolean): void }) {
+  const segments = splitPreviewSegments(displayMarkdown);
+  const images = [...segments].filter((segment): segment is { type: 'image'; id: string; alt: string } => segment.type === 'image').map((segment) => mediaById.get(segment.id)).filter((item): item is Media => Boolean(item));
+  const imageIndexes = new Map(images.map((item, index) => [item.id, index]));
+  return <>{segments.map((segment, index) => {
+    if (segment.type === 'markdown') {
+      if (!segment.value.trim()) return null;
+      return <View key={`markdown_${index}`} pointerEvents="none" style={styles.postMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.postMarkdown, matchContents: true, scrollEnabled: false, style: styles.postMarkdown }} markdown={segment.value.trim()} maxHeight={POST_PREVIEW_MAX_HEIGHT} media={[]} onOverflowChange={onOverflowChange} preview theme={editorTheme()} /></View>;
+    }
+    if (segment.type === 'image') {
+      const item = mediaById.get(segment.id);
+      if (!item) return null;
+      const imageIndex = imageIndexes.get(item.id) ?? 0;
+      return <Pressable key={`image_${index}`} accessibilityLabel={segment.alt || '预览记录媒体'} accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onImagePress(imageIndex, images); }}><MediaThumbnail accessibilityLabel={segment.alt || '记录图片'} item={item} style={[styles.postSingleImage, { aspectRatio: previewAspectRatio(item) }]} /></Pressable>;
+    }
+    const audio = extractAudioEmbeds(`![语音](audio://${segment.id}?duration=${segment.durationMs})`)[0];
+    return audio ? <AudioPreviews key={`audio_${index}`} audioEmbeds={[audio]} mediaById={mediaById} /> : null;
+  })}</>;
+}
+
+type PreviewSegment = { type: 'markdown'; value: string } | { type: 'image'; id: string; alt: string } | { type: 'audio'; id: string; durationMs: number };
+
+function splitPreviewSegments(markdown: string): PreviewSegment[] {
+  const segments: PreviewSegment[] = [];
+  const pattern = /!\[([^\]]*)\]\(media:\/\/([^)]+)\)|!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g;
+  let offset = 0;
+  for (const match of markdown.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > offset) segments.push({ type: 'markdown', value: markdown.slice(offset, index) });
+    if (match[3]) segments.push({ type: 'audio', durationMs: Number(match[4] ?? 0), id: match[3] });
+    else segments.push({ type: 'image', alt: match[1] ?? '', id: match[2] });
+    offset = index + match[0].length;
+  }
+  if (offset < markdown.length) segments.push({ type: 'markdown', value: markdown.slice(offset) });
+  return segments;
 }
 
 function ProfileAvatar({ name, uri }: { name: string; uri: string | null }) {
@@ -645,7 +668,8 @@ const styles = createThemedStyles(() => ({
   audioMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   audioLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.7 },
   audioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
-  postMoreButton: { minWidth: 64, minHeight: 44, marginTop: spacing.xs, alignSelf: 'flex-end', alignItems: 'flex-end', justifyContent: 'center' },
+  postMoreButton: { minWidth: 64, minHeight: 44, marginTop: spacing.xs, alignSelf: 'flex-start', alignItems: 'flex-start', justifyContent: 'center' },
+  postOverflowMark: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 14 },
   postMoreText: { color: colors.life, fontFamily: typography.mono, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
   postFooter: { marginTop: spacing.md },
   postFooterAfterMore: { marginTop: 0 },

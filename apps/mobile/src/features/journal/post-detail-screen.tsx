@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useVideoPlayer, type VideoThumbnail } from 'expo-video';
 import { feedback } from '../../shared/feedback';
@@ -16,14 +17,15 @@ import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
 import { MusicShareCard } from '../../application/components/music-share-card';
 import { ReadingShareCard } from '../../application/components/reading-share-card';
 import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
-import { withoutReadingSourceQuote } from '../../application/reading-share';
+import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaVideo } from '../../shared/components/media-video';
-import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { PostShareDialog } from './post-share-dialog';
+import * as Clipboard from 'expo-clipboard';
 
 export default function PostDetailScreen() {
   const router = useRouter();
+  const window = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { deletePost, media, posts, readingNoteSources, ready } = useAppState();
   const post = useMemo(() => posts.find((item) => item.id === id), [id, posts]);
@@ -31,9 +33,12 @@ export default function PostDetailScreen() {
   const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
   const [readyPostId, setReadyPostId] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenuPosition, setMoreMenuPosition] = useState<{ right: number; top: number }>({ right: spacing.md, top: 60 });
+  const moreButtonRef = useRef<View>(null);
   const [shareContentReady, setShareContentReady] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const contentReady = Boolean(post && readyPostId === post.id);
+  const centerShareContent = Boolean(post && !readingSource && extractMusicShares(post.bodyMarkdown).length === 0 && !/!\[[^\]]*\]\((?:media|audio):\/\//.test(post.bodyMarkdown) && postMarkdownToPlainText(post.bodyMarkdown).length <= 180);
   const handleContentReady = useCallback(() => {
     if (post) setReadyPostId(post.id);
   }, [post]);
@@ -65,16 +70,42 @@ export default function PostDetailScreen() {
     confirmDelete();
   };
 
+  const copyPost = async (includeMeta: boolean) => {
+    if (!post) return;
+    setMoreOpen(false);
+    const music = extractMusicShares(post.bodyMarkdown).map((share) => `音乐：${share.title}${share.artist ? ` / ${share.artist}` : ''}`);
+    const sources = [readingSource ? `阅读：${readingSourceTitle(readingSource)}` : null, ...music].filter((item): item is string => Boolean(item));
+    const visibleBody = postMarkdownToPlainText(withoutReadingSourceQuote(withoutMusicShares(post.bodyMarkdown), readingSource));
+    const body = [...sources, visibleBody].filter(Boolean).join('\n\n');
+    const meta = `${post.locationName ? `${post.locationName} / ` : ''}记录于 ${formatDate(post.dayKey)} ${formatTime(post.createdAt)}`;
+    try {
+      await Clipboard.setStringAsync(includeMeta ? `${body}\n\n${meta}` : body);
+      feedback.alert(includeMeta ? '已复制全文' : '已复制正文');
+    } catch (cause) {
+      feedback.alert('复制失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    }
+  };
+
   const openShare = () => {
     setShareContentReady(false);
     setShareOpen(true);
+  };
+
+  const openMore = () => {
+    moreButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setMoreMenuPosition({
+        right: Math.max(spacing.md, window.width - x - width),
+        top: y + height + 4,
+      });
+      setMoreOpen(true);
+    });
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ToolPageHeader
         onBack={() => router.back()}
-        right={post ? <><ToolPageHeaderAction accessibilityLabel="分享记录长图" disabled={!contentReady} onPress={openShare}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="更多记录操作" onPress={() => setMoreOpen(true)}><SymbolView name={{ android: 'more_vert', ios: 'ellipsis', web: 'more_vert' }} size={21} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction></> : undefined}
+        right={post ? <><ToolPageHeaderAction accessibilityLabel="分享记录长图" disabled={!contentReady} onPress={openShare}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction><View collapsable={false} ref={moreButtonRef}><ToolPageHeaderAction accessibilityLabel="更多记录操作" onPress={openMore}><SymbolView name={{ android: 'more_vert', ios: 'ellipsis', web: 'more_vert' }} size={21} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction></View></> : undefined}
         title="记录详情"
       />
 
@@ -99,23 +130,24 @@ export default function PostDetailScreen() {
       )}
 
       {post && shareOpen ? (
-        <PostShareDialog contentReady={shareContentReady} createdAt={post.createdAt} dayKey={post.dayKey} locationName={post.locationName} onClose={() => setShareOpen(false)}>
+        <PostShareDialog centerContent={centerShareContent} contentReady={shareContentReady} createdAt={post.createdAt} dayKey={post.dayKey} locationName={post.locationName} onClose={() => setShareOpen(false)}>
           <PostBody markdown={post.bodyMarkdown} mediaById={mediaById} onImagePress={() => {}} onReady={handleShareContentReady} readingSource={readingSource} sharing />
         </PostShareDialog>
       ) : null}
 
-      <DraggableBottomSheet accessibilityLabel="记录更多操作" onClose={() => setMoreOpen(false)} open={moreOpen}>
-        <View style={styles.moreSheet}>
-          <Text style={styles.moreEyebrow}>RECORD ACTIONS</Text>
-          <Text style={styles.moreTitle}>更多</Text>
-          <View style={styles.moreActions}>
-            <Pressable accessibilityRole="button" onPress={editPost} style={({ pressed }) => [styles.moreAction, pressed && styles.pressed]}><View style={styles.moreActionIcon}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></View><View style={styles.moreActionCopy}><Text style={styles.moreActionTitle}>编辑记录</Text><Text style={styles.moreActionHint}>修改正文、媒体、人物或地点</Text></View><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
-            <Pressable accessibilityRole="button" onPress={deleteCurrentPost} style={({ pressed }) => [styles.moreAction, styles.moreActionDanger, pressed && styles.pressed]}><View style={[styles.moreActionIcon, styles.moreActionDangerIcon]}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></View><View style={styles.moreActionCopy}><Text style={styles.moreActionDangerTitle}>删除记录</Text><Text style={styles.moreActionHint}>删除正文和不再使用的本地媒体</Text></View></Pressable>
-          </View>
-        </View>
-      </DraggableBottomSheet>
+      {moreOpen ? <><Pressable accessibilityLabel="关闭记录菜单" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} /><View accessibilityLabel="记录更多操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}>
+        <MoreMenuItem icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑记录" onPress={editPost} />
+        <MoreMenuItem icon={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} label="复制正文" onPress={() => void copyPost(false)} />
+        <MoreMenuItem icon={{ android: 'copy_all', ios: 'doc.on.clipboard', web: 'copy_all' }} label="复制全文" onPress={() => void copyPost(true)} />
+        <MoreMenuItem destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除记录" onPress={deleteCurrentPost} />
+      </View></> : null}
     </SafeAreaView>
   );
+}
+
+function MoreMenuItem({ destructive = false, icon, label, onPress }: { destructive?: boolean; icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void }) {
+  const tint = destructive ? colors.danger : colors.ink;
+  return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}><SymbolView name={icon} size={18} tintColor={tint} type="hierarchical" /><Text style={[styles.menuItemText, destructive && styles.menuItemDanger]}>{label}</Text></Pressable>;
 }
 
 function DetailLoading() {
@@ -297,6 +329,19 @@ function formatTime(iso: string): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function postMarkdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/!\[([^]]*)\]\(media:\/\/[^)]+\)/g, (_match, alt: string) => alt ? `[图片：${alt}]` : '[图片]')
+    .replace(/!\[语音\]\(audio:\/\/[^)]+\)/g, '[语音]')
+    .replace(/\[([^]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*(?:[-+*]|\d+\.)\s+(?:\[[ xX]\]\s*)?/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/(?:\*\*|__|~~|`)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.sheet },
   detailContainer: { flex: 1 },
@@ -324,18 +369,11 @@ const styles = createThemedStyles(() => ({
   skeletonLineShort: { width: '48%', height: 18, marginTop: spacing.md },
   skeletonTime: { width: 126, height: 8, marginTop: spacing.lg, marginLeft: 'auto' },
   missing: { margin: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
-  moreSheet: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl },
-  moreEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 1.1 },
-  moreTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 22 },
-  moreActions: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.paper },
-  moreAction: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
-  moreActionDanger: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  moreActionIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight },
-  moreActionDangerIcon: { backgroundColor: colors.dangerLight },
-  moreActionCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
-  moreActionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15 },
-  moreActionDangerTitle: { color: colors.danger, fontFamily: typography.display, fontSize: 15 },
-  moreActionHint: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
+  menuBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 5 },
+  moreMenu: { position: 'absolute', zIndex: 6, width: 188, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 8, backgroundColor: colors.sheet, shadowColor: colors.ink, shadowOpacity: 0.16, shadowRadius: 12, elevation: 8 },
+  menuItem: { minHeight: 48, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  menuItemText: { color: colors.ink, fontSize: 13, fontWeight: '600' },
+  menuItemDanger: { color: colors.danger },
   shareAudio: { minHeight: 64, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.lifeLight },
   shareAudioIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.sheet },
   shareAudioWaves: { flex: 1, height: 26, marginHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 3 },
