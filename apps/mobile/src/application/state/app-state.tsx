@@ -294,6 +294,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       relationToMe: null,
       impression: null,
       birthday: null,
+      contacts: [],
       memoryEnabled: true,
       createdAt: now,
       updatedAt: now,
@@ -317,10 +318,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPersonBooksState(await repository.listPersonBooks());
   }, [books, people, repository]);
 
-  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday'>, mbti?: string | null, customTagIds?: string[]) => {
+  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday' | 'contacts'>, mbti?: string | null, customTagIds?: string[]) => {
     if (!changes.name.trim()) throw new Error('人物名字不能为空');
     if ((changes.impression?.length ?? 0) > 100) throw new Error('一句话印象最多 100 字');
     if ((changes.bio?.length ?? 0) > 500) throw new Error('个人简介最多 500 字');
+    if (changes.contacts.some((contact) => !contact.type.trim() || !contact.value.trim())) throw new Error('联系方式类型和内容不能为空');
     const existing = people.find((person) => person.id === personId);
     if (!existing) throw new Error('要编辑的人物不存在');
     if (changes.birthday) validateBirthday(changes.birthday);

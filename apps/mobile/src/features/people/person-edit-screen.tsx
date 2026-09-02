@@ -11,7 +11,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { useAppState } from '../../application/state/app-state';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
-import type { Birthday, BirthdayCalendar, Media } from '@still-alive/types';
+import type { Birthday, BirthdayCalendar, Media, PersonContact } from '@still-alive/types';
 import { DatePickerField, TimePickerField } from './date-time-picker';
 import { GenderPickerField } from './gender-picker';
 import { MbtiPickerField } from './mbti-picker';
@@ -35,6 +35,7 @@ export default function EditPersonScreen() {
   const [gender, setGender] = useState(person?.gender ?? null);
   const [relation, setRelation] = useState(person?.relationToMe ?? '');
   const [impression, setImpression] = useState(person?.impression ?? '');
+  const [contacts, setContacts] = useState<PersonContact[]>(person?.contacts.length ? person.contacts : [createEmptyContact()]);
   const [birthdayCalendar, setBirthdayCalendar] = useState<BirthdayCalendar>(person?.birthday?.calendar ?? 'solar');
   const [birthdayDate, setBirthdayDate] = useState<DateParts | null>(person?.birthday ? { year: person.birthday.year, month: person.birthday.month, day: person.birthday.day } : null);
   const [birthdayIsLeapMonth, setBirthdayIsLeapMonth] = useState(person?.birthday?.isLeapMonth ?? false);
@@ -116,6 +117,7 @@ export default function EditPersonScreen() {
         gender,
         relationToMe: relation.trim() || null,
         impression: impression.trim() || null,
+        contacts: contacts.filter((contact) => contact.type.trim() || contact.value.trim()).map((contact) => ({ ...contact, type: contact.type.trim(), value: contact.value.trim() })),
         birthday: birthdayDate ? { calendar: birthdayCalendar, ...birthdayDate, isLeapMonth: birthdayCalendar === 'lunar' && birthdayIsLeapMonth, reminderEnabled: birthdayReminderEnabled, reminderHour: birthdayReminderHour, reminderMinute: birthdayReminderMinute, reminderMode: birthdayCalendar } satisfies Birthday : null,
       }, mbti || null, customTagIds);
       router.back();
@@ -175,7 +177,15 @@ export default function EditPersonScreen() {
           <Field label="一句话印象" maxLength={100} multiline onChangeText={setImpression} placeholder="不必完整，写下此刻最自然的一句话。" value={impression} />
           <Field label="个人简介" maxLength={500} multiline onChangeText={setBio} placeholder="介绍一下这个人，可选" value={bio} />
 
-          <SectionHeader description="选择生日历法和日期，提醒会按该历法计算。" index="02" title="生日与提醒" />
+          <SectionHeader description="可以记录手机号、微信、QQ 或其他联系方式。" index="02" title="联系方式" />
+          {contacts.map((contact, index) => <View key={contact.id} style={styles.contactRow}>
+            <TextInput accessibilityLabel={`第 ${index + 1} 个联系方式类型`} maxLength={16} onChangeText={(value) => setContacts((current) => current.map((item) => item.id === contact.id ? { ...item, type: value } : item))} placeholder="手机 / 微信 / QQ" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.contactType]} value={contact.type} />
+            <TextInput accessibilityLabel={`第 ${index + 1} 个联系方式内容`} maxLength={100} onChangeText={(value) => setContacts((current) => current.map((item) => item.id === contact.id ? { ...item, value } : item))} placeholder="输入联系方式" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.contactValue]} value={contact.value} />
+            {contacts.length > 1 ? <Pressable accessibilityLabel="删除这个联系方式" onPress={() => setContacts((current) => current.filter((item) => item.id !== contact.id))} style={styles.contactRemove}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></Pressable> : null}
+          </View>)}
+          <Pressable accessibilityRole="button" onPress={() => setContacts((current) => [...current, createEmptyContact()])} style={styles.addContact}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.addContactText}>添加联系方式</Text></Pressable>
+
+          <SectionHeader description="选择生日历法和日期，提醒会按该历法计算。" index="03" title="生日与提醒" />
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>生日历法</Text>
             <View style={styles.segmented}>{(['solar', 'lunar'] as const).map((calendar) => <Pressable key={calendar} accessibilityRole="button" accessibilityState={{ selected: birthdayCalendar === calendar }} onPress={() => changeBirthdayCalendar(calendar)} style={[styles.segment, birthdayCalendar === calendar && styles.segmentActive]}><Text style={[styles.segmentText, birthdayCalendar === calendar && styles.segmentTextActive]}>{calendar === 'solar' ? '公历' : '农历'}</Text></Pressable>)}</View>
@@ -202,7 +212,7 @@ export default function EditPersonScreen() {
             </> : null}
           </> : null}
 
-          <SectionHeader description="用 MBTI 和自定义标签，更快找到关于 ta 的记录。" index="03" title="人物标签" />
+          <SectionHeader description="用 MBTI 和自定义标签，更快找到关于 ta 的记录。" index="04" title="人物标签" />
           {tagSystemSettings.find((item) => item.system === 'mbti')?.enabled !== false ? <MbtiPickerField onChange={setMbti} value={mbti} /> : null}
           {tagSystemSettings.find((item) => item.system === 'custom')?.enabled !== false ? <><View style={styles.field}><Text style={styles.fieldLabel}>单条标签 / 可多选</Text><View style={styles.chips}>{tagDefinitions.filter((tag) => !tag.groupId).map((tag) => <Pressable key={tag.id} onPress={() => setCustomTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} style={[styles.chip, customTagIds.includes(tag.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(tag.id) && styles.chipTextActive]}>{tag.name}</Text></Pressable>)}</View><View style={styles.inlineCreate}><TextInput maxLength={24} onChangeText={setNewTagName} placeholder="输入新标签" placeholderTextColor={colors.inkFaint} style={styles.inlineInput} value={newTagName} /><Pressable onPress={() => void createTag(newTagName).then((tag) => { setCustomTagIds((current) => [...current, tag.id]); setNewTagName(''); }, (cause: unknown) => feedback.alert('创建失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>添加</Text></Pressable></View></View>{tagGroups.map((group) => { const options = tagDefinitions.filter((tag) => tag.groupId === group.id); if (!options.length) return null; return <View key={group.id} style={styles.field}><Text style={styles.fieldLabel}>{group.name} / 单选</Text><View style={styles.chips}>{options.map((option) => <Pressable key={option.id} onPress={() => setCustomTagIds((current) => { const groupOptionIds = options.map((item) => item.id); const withoutGroup = current.filter((id) => !groupOptionIds.includes(id)); return current.includes(option.id) ? withoutGroup : [...withoutGroup, option.id]; })} style={[styles.chip, customTagIds.includes(option.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(option.id) && styles.chipTextActive]}>{option.name}</Text></Pressable>)}</View></View>; })}</> : null}
           <View style={styles.note}><Text style={styles.noteText}>资料只用于整理你的本地记忆，不会上传。</Text></View>
@@ -222,6 +232,10 @@ export default function EditPersonScreen() {
       </AppKeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function createEmptyContact(): PersonContact {
+  return { id: `contact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, type: '手机', value: '' };
 }
 
 function Field({ label, wrapperStyle, ...props }: { label: string; wrapperStyle?: StyleProp<ViewStyle> } & React.ComponentProps<typeof TextInput>) {
@@ -282,6 +296,12 @@ const styles = createThemedStyles(() => ({
   fieldRowItem: { flex: 1, marginTop: 0 },
   fieldLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
   input: { minHeight: 52, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink, fontSize: 15 },
+  contactRow: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  contactType: { width: 112 },
+  contactValue: { minWidth: 0, flex: 1 },
+  contactRemove: { width: 34, height: 52, alignItems: 'center', justifyContent: 'center' },
+  addContact: { minHeight: 44, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  addContactText: { color: colors.life, fontSize: 13, fontWeight: '700' },
   inputMultiline: { minHeight: 96, paddingTop: spacing.md, lineHeight: 23 },
   segmented: { flexDirection: 'row', padding: 3, borderRadius: radius.md, backgroundColor: colors.sheet },
   segment: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },

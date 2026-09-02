@@ -272,7 +272,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       `SELECT id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression,
               birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode,
               birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute,
-              memory_enabled, created_at, updated_at
+              contacts_json, memory_enabled, created_at, updated_at
        FROM persons ORDER BY updated_at DESC`,
     );
     return rows.map(mapPerson);
@@ -280,8 +280,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async createPerson(person: Person): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync(
-      `INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, memory_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, contacts_json, memory_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       person.id,
       person.name,
       person.nickname,
@@ -299,6 +299,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.reminderEnabled === false ? 0 : 1,
       person.birthday?.reminderHour ?? null,
       person.birthday?.reminderMinute ?? null,
+      JSON.stringify(person.contacts),
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
@@ -311,7 +312,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
        SET name = ?, nickname = ?, bio = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?,
            birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?,
            birthday_reminder_enabled = ?, birthday_reminder_hour = ?, birthday_reminder_minute = ?,
-           memory_enabled = ?, updated_at = ?
+           contacts_json = ?, memory_enabled = ?, updated_at = ?
        WHERE id = ?`,
       person.name,
       person.nickname,
@@ -329,6 +330,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.reminderEnabled === false ? 0 : 1,
       person.birthday?.reminderHour ?? null,
       person.birthday?.reminderMinute ?? null,
+      JSON.stringify(person.contacts),
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
@@ -1042,8 +1044,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(
-          'INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          person.id, person.name, person.nickname, person.bio, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.reminderMode ?? null, person.birthday?.reminderEnabled === false ? 0 : 1, person.birthday?.reminderHour ?? null, person.birthday?.reminderMinute ?? null, person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
+          'INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, contacts_json, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          person.id, person.name, person.nickname, person.bio, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.reminderMode ?? null, person.birthday?.reminderEnabled === false ? 0 : 1, person.birthday?.reminderHour ?? null, person.birthday?.reminderMinute ?? null, JSON.stringify(person.contacts ?? []), person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
         );
       }
       for (const item of snapshot.media) {

@@ -76,9 +76,16 @@ export interface Person {
   relationToMe: string | null;
   impression: string | null;
   birthday: Birthday | null;
+  contacts: PersonContact[];
   memoryEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PersonContact {
+  id: string;
+  type: string;
+  value: string;
 }
 
 export interface PersonRelationship {

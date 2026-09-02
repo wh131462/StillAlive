@@ -68,10 +68,22 @@ export function mapPerson(row: PersonRow): Person {
       reminderMinute: row.birthday_reminder_minute,
       reminderMode: row.birthday_reminder_mode ?? row.birthday_calendar,
     } : null,
+    contacts: parsePersonContacts(row.contacts_json),
     memoryEnabled: row.memory_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function parsePersonContacts(value: string | null): Person['contacts'] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is Person['contacts'][number] => Boolean(item && typeof item === 'object' && typeof (item as Record<string, unknown>).id === 'string' && typeof (item as Record<string, unknown>).type === 'string' && typeof (item as Record<string, unknown>).value === 'string'));
+  } catch {
+    return [];
+  }
 }
 
 export function mapMedia(row: MediaRow): Media {

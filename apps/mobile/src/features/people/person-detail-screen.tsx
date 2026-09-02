@@ -85,6 +85,13 @@ export default function PersonScreen() {
               </View>
               <View style={styles.profileDivider} />
               <View style={[styles.profileRow, styles.tagRow]}>
+                <Text style={styles.profileLabel}>联系</Text>
+                <View style={styles.profileValue}>
+                  {person.contacts.length ? person.contacts.map((contact) => <View key={contact.id} style={styles.contactLine}><Text numberOfLines={1} style={styles.contactType}>{contact.type}</Text><Text selectable style={styles.contactValue}>{contact.value}</Text></View>) : <Text style={styles.profileEmpty}>还没有联系方式</Text>}
+                </View>
+              </View>
+              <View style={styles.profileDivider} />
+              <View style={[styles.profileRow, styles.tagRow]}>
                 <Text style={styles.profileLabel}>标签</Text>
                 <View style={styles.profileValue}>
                   {labels.length ? <View style={styles.tags}>{labels.map((label) => <View key={label} style={styles.tag}><Text style={styles.tagText}>{label}</Text></View>)}</View> : <Text style={styles.profileEmpty}>还没有人物标签</Text>}
@@ -187,6 +194,9 @@ const styles = createThemedStyles(() => ({
   profileMetaTitle: { color: colors.ink, fontSize: 12 },
   profileMetaHint: { marginTop: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   profileEmpty: { color: colors.inkFaint, fontSize: 10 },
+  contactLine: { minHeight: 28, flexDirection: 'row', alignItems: 'flex-start' },
+  contactType: { width: 72, color: colors.inkFaint, fontSize: 10 },
+  contactValue: { minWidth: 0, flex: 1, color: colors.ink, fontSize: 12 },
   profileDivider: { marginLeft: 58, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   collectionButton: { minHeight: 76, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet },
   collectionIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight },

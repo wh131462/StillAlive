@@ -8,7 +8,7 @@ export interface PersonRow {
   id: string; name: string; nickname: string | null; bio: string | null; avatar_media_id: string | null; gender: Gender | null; relation_to_me: string | null; impression: string | null;
   birthday_calendar: 'solar' | 'lunar' | null; birthday_year: number | null; birthday_month: number | null; birthday_day: number | null;
   birthday_is_leap_month: number; birthday_reminder_mode: BirthdayReminderMode | null; birthday_reminder_enabled: number;
-  birthday_reminder_hour: number | null; birthday_reminder_minute: number | null; memory_enabled: number; created_at: string; updated_at: string;
+  birthday_reminder_hour: number | null; birthday_reminder_minute: number | null; contacts_json: string | null; memory_enabled: number; created_at: string; updated_at: string;
 }
 export interface MediaRow { id: string; local_path: string; mime_type: string; width: number | null; height: number | null; checksum: string; created_at: string; kind?: 'image' | 'video' | 'audio' | 'book' | null; original_name?: string | null; size_bytes?: number | null; }
 export interface MusicTrackRow { id: string; media_id: string; cover_media_id: string | null; title: string; artist: string | null; album: string | null; duration_ms: number | null; play_count: number; created_at: string; updated_at: string; }

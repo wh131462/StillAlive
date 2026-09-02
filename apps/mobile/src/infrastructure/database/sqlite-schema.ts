@@ -525,6 +525,10 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     END;
     PRAGMA user_version = 31;
   `);
+  if (currentVersion < 32) {
+    await addColumnIfMissing(db, 'persons', 'contacts_json', "TEXT NOT NULL DEFAULT '[]'");
+    await db.execAsync('PRAGMA user_version = 32;');
+  }
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

@@ -646,6 +646,7 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
     if (person.avatarMediaId && !mediaIds.has(person.avatarMediaId)) throw new Error('备份中的人物头像关联无效');
     if (person.bio != null && (typeof person.bio !== 'string' || person.bio.length > 500)) throw new Error('备份中的人物简介无效');
     if (person.gender && !['female', 'male', 'other'].includes(person.gender)) throw new Error('备份中的人物性别无效');
+    if (!Array.isArray(person.contacts) || person.contacts.some((contact) => !contact || typeof contact.id !== 'string' || typeof contact.type !== 'string' || typeof contact.value !== 'string')) throw new Error('备份中的人物联系方式无效');
     if (person.birthday && !['solar', 'lunar', 'both'].includes(person.birthday.reminderMode)) throw new Error('备份中的生日提醒方式无效');
     if (person.birthday && (typeof person.birthday.reminderEnabled !== 'boolean' || !validReminderTime(person.birthday.reminderHour, person.birthday.reminderMinute))) throw new Error('备份中的生日提醒设置无效');
   }
@@ -792,6 +793,7 @@ function migrateSnapshot(value: BackupSnapshot): void {
   if (Array.isArray(value.people)) for (const person of value.people) {
     person.gender ??= null;
     person.birthday ??= null;
+    person.contacts ??= [];
     if (person.birthday) {
       person.birthday.reminderMode ??= person.birthday.calendar;
       person.birthday.reminderEnabled ??= true;
