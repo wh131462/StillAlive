@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Linking } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import type { PersonEvent, Post } from '@still-alive/types';
@@ -21,14 +22,18 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 
 export default function PersonScreen() {
   const router = useRouter();
+  const window = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { albums, deletePersonEvent, getPostsByPerson, media, mergePersons, musicCollectionEntries, people, personBooks, personTags, personEvents, posts: allPosts, preferences, readingNoteSources, ready, savePersonEvent, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const [timelineFilter, setTimelineFilter] = useState<'all' | 'posts' | 'events'>('all');
   const [timelineGroup, setTimelineGroup] = useState<'date' | 'time'>('date');
   const [showPrivate, setShowPrivate] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenuPosition, setMoreMenuPosition] = useState<{ right: number; top: number }>({ right: spacing.md, top: 60 });
   const [mergePickerOpen, setMergePickerOpen] = useState(false);
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
+  const moreButtonRef = useRef<View>(null);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const displayName = person ? personDisplayName(person) : '';
   const avatar = person?.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
@@ -75,11 +80,31 @@ export default function PersonScreen() {
     feedback.alert('确认合并人物', `目标：${displayName}\n来源：${sourceNames}\n来源人物的记录、相册、音乐、书籍和资料将归入目标人物。`, [{ text: '取消', style: 'cancel' }, { text: '确认合并', style: 'destructive', onPress: () => void mergePersons(person.id, mergeSelection).then(() => feedback.alert('合并完成', '重复人物及其关联记录已归入当前人物。'), (cause: unknown) => feedback.alert('合并失败', cause instanceof Error ? cause.message : '请稍后重试。')) }]);
   };
 
+  const openMore = () => {
+    if (!person) return;
+    moreButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setMoreMenuPosition({ right: Math.max(spacing.md, window.width - x - width), top: y + height + 4 });
+      setMoreOpen(true);
+    });
+  };
+
+  const editPerson = () => {
+    if (!person) return;
+    setMoreOpen(false);
+    router.push({ pathname: '/person/edit', params: { id: person.id } });
+  };
+
+  const invitePerson = () => {
+    if (!person || privateHidden) return;
+    setMoreOpen(false);
+    router.push({ pathname: '/profile-collection/invite', params: { personId: person.id } });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ToolPageHeader
         onBack={() => router.back()}
-        right={person ? <ToolPageHeaderAction accessibilityLabel="编辑人物" onPress={() => router.push({ pathname: '/person/edit', params: { id: person.id } })}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction> : undefined}
+        right={person ? <View collapsable={false} ref={moreButtonRef}><ToolPageHeaderAction accessibilityLabel="人物更多操作" onPress={openMore}><SymbolView name={{ android: 'more_vert', ios: 'ellipsis', web: 'more_vert' }} size={21} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction></View> : undefined}
         title="人物详情"
       />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -129,14 +154,32 @@ export default function PersonScreen() {
                 </View>
               </View>
               {!privateHidden && Object.entries(person.customFields).map(([key, value]) => <View key={key}><View style={styles.profileDivider} /><View style={[styles.profileRow, styles.tagRow]}><Text style={styles.profileLabel}>{key}</Text><View style={styles.profileValue}><Text selectable style={styles.profileMetaTitle}>{value}</Text></View></View></View>)}
-              {!privateHidden && person.importantDates.map((item) => <View key={item.id}><View style={styles.profileDivider} /><View style={[styles.profileRow, styles.tagRow]}><Text style={styles.profileLabel}>{item.name}</Text><View style={styles.profileValue}><Text style={styles.profileMetaTitle}>{item.date}</Text>{item.note ? <Text style={styles.profileMetaHint}>{item.note}</Text> : null}</View></View></View>)}
             </View>
+            {!privateHidden && person.importantDates.length ? <>
+              <View style={[styles.sectionHeading, styles.importantDateHeading]}><Text style={styles.sectionEyebrow}>重要日期</Text><Text style={styles.sectionHeadingMeta}>{person.importantDates.length} 个</Text></View>
+              <View style={styles.importantDateCard}>
+                {person.importantDates.map((item, index) => {
+                  const parts = importantDateParts(item.date);
+                  return <View key={item.id}>
+                    {index > 0 ? <View style={styles.importantDateDivider} /> : null}
+                    <View style={styles.importantDateRow}>
+                      <View style={styles.importantDateMarker}>
+                        {parts ? <><Text style={styles.importantDateMonth}>{parts.month}月</Text><Text style={styles.importantDateDay}>{parts.day}</Text></> : <SymbolView name={{ android: 'event', ios: 'calendar', web: 'event' }} size={18} tintColor={colors.life} type="hierarchical" />}
+                      </View>
+                      <View style={styles.importantDateCopy}>
+                        <Text numberOfLines={2} style={styles.importantDateName}>{item.name}</Text>
+                        <View style={styles.importantDateValueRow}>
+                          <Text style={styles.importantDateValue}>{formatImportantDate(item.date)}</Text>
+                          <Text style={[styles.importantDateReminder, !item.reminderEnabled && styles.importantDateReminderOff]}>{item.reminderEnabled ? '年度提醒' : '不提醒'}</Text>
+                        </View>
+                        {item.note ? <Text style={styles.importantDateNote}>{item.note}</Text> : null}
+                      </View>
+                    </View>
+                  </View>;
+                })}
+              </View>
+            </> : null}
             {person.privacyMode === 'private' ? <Pressable accessibilityRole="button" onPress={() => setShowPrivate((value) => !value)} style={styles.privateToggle}><Text style={styles.privateToggleText}>{privateHidden ? '查看隐私资料' : '隐藏隐私资料'}</Text></Pressable> : null}
-            {privateHidden ? null : <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/profile-collection/invite', params: { personId: person.id } })} style={({ pressed }) => [styles.collectionButton, pressed && styles.featureRowPressed]}>
-              <View style={styles.collectionIcon}><SymbolView name={{ android: 'send', ios: 'paperplane.fill', web: 'send' }} size={18} tintColor={colors.life} type="hierarchical" /></View>
-              <View style={styles.featureCopy}><Text style={styles.featureTitle}>邀请本人填写</Text><Text style={styles.featureHint}>请对方亲自回答，再由你逐项确认</Text></View>
-              <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={16} tintColor={colors.inkFaint} type="hierarchical" />
-            </Pressable>}
 
             <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>收藏与回忆</Text></View>
             <View style={styles.featureCard}>
@@ -195,6 +238,10 @@ export default function PersonScreen() {
           <Text style={styles.missing}>这个人物不存在或已被删除。</Text>
         ) : null}
       </ScrollView>
+      {moreOpen ? <><Pressable accessibilityLabel="关闭人物菜单" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} /><View accessibilityLabel="人物更多操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}>
+        <MoreMenuItem icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑人物详情" onPress={editPerson} />
+        {!privateHidden ? <MoreMenuItem icon={{ android: 'send', ios: 'paperplane.fill', web: 'send' }} label="邀请本人填写" onPress={invitePerson} /> : null}
+      </View></> : null}
       <DraggableBottomSheet accessibilityLabel="选择要合并的人物，向下拖动关闭" onClose={() => setMergePickerOpen(false)} open={mergePickerOpen} sheetStyle={styles.mergeSheet}>
         <Text style={styles.mergeTitle}>选择重复人物</Text>
         <Text style={styles.mergeHint}>勾选一个或多个重复记录，它们的资料和关联内容会归入“{displayName}”。</Text>
@@ -223,6 +270,18 @@ function firstMediaId(markdown: string): string | null {
   return markdown.match(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/)?.[1] ?? null;
 }
 
+function importantDateParts(value: string): { month: string; day: string } | null {
+  const match = value.match(/^(?:\d{4}-)?(\d{2})-(\d{2})$/);
+  return match ? { month: match[1], day: match[2] } : null;
+}
+
+function formatImportantDate(value: string): string {
+  const match = value.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  const [, year, month, day] = match;
+  return year ? `${year}年${Number(month)}月${Number(day)}日` : `${Number(month)}月${Number(day)}日`;
+}
+
 function EventCard({ event, onPress }: { event: PersonEvent; onPress(): void }) {
   return <Pressable accessibilityLabel={`打开经历：${event.title}`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.eventCard, pressed && styles.memoryPressed]}>
     <View style={styles.eventCardHead}><View style={styles.eventMarker}><SymbolView name={{ android: 'auto_awesome', ios: 'sparkles', web: 'auto_awesome' }} size={16} tintColor={colors.life} type="hierarchical" /></View><View style={styles.eventCardMeta}><Text style={styles.eventEyebrow}>经历{event.pinned ? ' / 已置顶' : ''}</Text><Text numberOfLines={1} style={styles.eventTime}>{event.timeText || '时间待补充'}</Text></View><SymbolView name={{ android: 'more_vert', ios: 'ellipsis', web: 'more_vert' }} size={18} tintColor={colors.inkFaint} type="hierarchical" /></View>
@@ -230,6 +289,10 @@ function EventCard({ event, onPress }: { event: PersonEvent; onPress(): void }) 
     {event.description ? <Text numberOfLines={4} style={styles.eventBody}>{event.description}</Text> : <Text style={styles.eventEmpty}>还没有补充更多细节</Text>}
     <Text style={styles.eventOpenHint}>进入详情查看</Text>
   </Pressable>;
+}
+
+function MoreMenuItem({ icon, label, onPress }: { icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void }) {
+  return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}><SymbolView name={icon} size={18} tintColor={colors.ink} type="hierarchical" /><Text style={styles.menuItemText}>{label}</Text></Pressable>;
 }
 
 const styles = createThemedStyles(() => ({
@@ -250,7 +313,9 @@ const styles = createThemedStyles(() => ({
   impression: { marginTop: spacing.sm, color: colors.inkSoft, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
   impressionEmpty: { color: colors.inkFaint, fontFamily: typography.body, fontSize: 11 },
   sectionHeading: { marginTop: spacing.xl, marginBottom: spacing.sm },
+  importantDateHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   sectionEyebrow: { color: colors.inkFaint, fontSize: typography.size.meta, letterSpacing: 1.1 },
+  sectionHeadingMeta: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   profileCard: { paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: colors.sheet },
   profileRow: { minHeight: 70, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center' },
   tagRow: { alignItems: 'flex-start' },
@@ -265,10 +330,21 @@ const styles = createThemedStyles(() => ({
   contactType: { width: 72, color: colors.inkFaint, fontSize: 10 },
   contactValue: { minWidth: 0, flex: 1, color: colors.ink, fontSize: 12 },
   profileDivider: { marginLeft: 58, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  importantDateCard: { paddingHorizontal: spacing.md, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  importantDateRow: { minHeight: 82, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  importantDateMarker: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: colors.lifeLight },
+  importantDateMonth: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.6 },
+  importantDateDay: { marginTop: 1, color: colors.life, fontFamily: typography.display, fontSize: 18, lineHeight: 20 },
+  importantDateCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
+  importantDateName: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 20 },
+  importantDateValueRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  importantDateValue: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: 10 },
+  importantDateReminder: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.lifeLight, color: colors.life, fontSize: 8 },
+  importantDateReminderOff: { backgroundColor: colors.paper, color: colors.inkFaint },
+  importantDateNote: { marginTop: 5, color: colors.inkFaint, fontSize: 10, lineHeight: 16 },
+  importantDateDivider: { marginLeft: 46 + spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   privateToggle: { minHeight: 44, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.lifeLight },
   privateToggleText: { color: colors.life, fontSize: 11, fontWeight: '700' },
-  collectionButton: { minHeight: 76, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.sheet },
-  collectionIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   tag: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 15, backgroundColor: colors.lifeLight },
   tagText: { color: colors.life, fontSize: 9 },
@@ -333,6 +409,11 @@ const styles = createThemedStyles(() => ({
   mergeConfirmText: { color: colors.onLife, fontSize: 11, fontWeight: '800' },
   mergeCancel: { minHeight: 42, alignItems: 'center', justifyContent: 'center' },
   mergeCancelText: { color: colors.inkSoft, fontSize: 11, fontWeight: '700' },
+  menuBackdrop: { position: 'absolute', inset: 0 },
+  moreMenu: { position: 'absolute', minWidth: 180, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
+  menuItem: { minHeight: 48, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  menuItemText: { color: colors.ink, fontSize: 11, fontWeight: '700' },
+  menuItemPressed: { opacity: 0.62 },
   date: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
   memoryImage: { width: '100%', height: 190, marginTop: spacing.md, backgroundColor: colors.lifeLight },
   body: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 28 },

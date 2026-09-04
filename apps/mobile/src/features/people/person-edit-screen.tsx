@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,13 +25,45 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 
 const CONTACT_TYPE_OPTIONS = ['手机', '微信', 'QQ', '邮箱'] as const;
+type CustomFieldDraft = { key: string; value: string };
+
+type PersonEditSnapshotInput = {
+  name: string;
+  nickname: string;
+  bio: string;
+  gender: unknown;
+  relation: string;
+  impression: string;
+  contacts: PersonContact[];
+  customFields: Array<{ key: string; value: string }>;
+  importantDates: PersonImportantDate[];
+  privacyMode: unknown;
+  birthdayCalendar: BirthdayCalendar;
+  birthdayDate: DateParts | null;
+  birthdayIsLeapMonth: boolean;
+  birthdayReminderEnabled: boolean;
+  birthdayReminderHour: number | null;
+  birthdayReminderMinute: number | null;
+  mbti: string;
+  customTagIds: string[];
+  pickedAssetUri: string | null;
+};
+
+function serializePersonEditSnapshot(value: PersonEditSnapshotInput): string {
+  return JSON.stringify({
+    ...value,
+    contacts: value.contacts.filter(({ type, value: contactValue }) => type || contactValue).map(({ type, value: contactValue }) => ({ type, value: contactValue })),
+    customFields: value.customFields.map(({ key, value: fieldValue }) => ({ key, value: fieldValue })),
+    customTagIds: [...value.customTagIds].sort(),
+  });
+}
 
 function ImportantDatePickerField({ value, onChange }: { value: string; onChange(value: string): void }) {
   const hasYear = /^\d{4}-/.test(value);
   const parts = parseImportantDate(value);
   const today = new Date();
   const pickerValue = parts ?? { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() };
-  return <View style={styles.importantDatePicker}><DatePickerField defaultValue={pickerValue} formatValue={(next) => formatImportantDate(next, hasYear)} label="日期" maximumDate={new Date(2100, 11, 31)} onChange={(next) => onChange(formatImportantDate(next, hasYear))} value={parts} /></View>;
+  return <DatePickerField defaultValue={pickerValue} fieldStyle={styles.importantDateField} formatValue={(next) => formatImportantDate(next, hasYear)} label="日期" maximumDate={new Date(2100, 11, 31)} onChange={(next) => onChange(formatImportantDate(next, hasYear))} value={parts} />;
 }
 
 function parseImportantDate(value: string): DateParts | null {
@@ -46,8 +78,15 @@ function formatImportantDate(value: DateParts, includeYear: boolean): string {
   return includeYear ? `${value.year}-${month}-${day}` : `${month}-${day}`;
 }
 
+function formatImportantDateDisplay(value: string): string {
+  const parts = parseImportantDate(value);
+  if (!parts) return '待选择日期';
+  return /^\d{4}-/.test(value) ? `${parts.year}年${parts.month}月${parts.day}日` : `${parts.month}月${parts.day}日`;
+}
+
 export default function EditPersonScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
  const { id } = useLocalSearchParams<{ id: string }>();
   const { albums, createTag, deletePerson, discardMedia, media, notificationPermission, openNotificationSettings, people, personTags, preferences, saveMedia, setBirthdayNotificationsEnabled, tagDefinitions, tagGroups, tagSystemSettings, updatePerson } = useAppState();
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
@@ -61,6 +100,8 @@ export default function EditPersonScreen() {
   const [contacts, setContacts] = useState<PersonContact[]>(person?.contacts.length ? person.contacts : [createEmptyContact()]);
   const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(() => Object.entries(person?.customFields ?? {}).map(([key, value]) => ({ key, value })));
   const [importantDates, setImportantDates] = useState<PersonImportantDate[]>(person?.importantDates ?? []);
+  const [editingImportantDate, setEditingImportantDate] = useState<PersonImportantDate | null>(null);
+  const [editingCustomField, setEditingCustomField] = useState<{ index: number | null; draft: CustomFieldDraft } | null>(null);
   const [privacyMode, setPrivacyMode] = useState(person?.privacyMode ?? 'normal');
   const [birthdayCalendar, setBirthdayCalendar] = useState<BirthdayCalendar>(person?.birthday?.calendar ?? 'solar');
   const [birthdayDate, setBirthdayDate] = useState<DateParts | null>(person?.birthday ? { year: person.birthday.year, month: person.birthday.month, day: person.birthday.day } : null);
@@ -77,11 +118,39 @@ export default function EditPersonScreen() {
   const [contactTypePickerId, setContactTypePickerId] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const allowExitRef = useRef(false);
  const avatarUri = pickedAsset?.uri ?? currentAvatar?.localPath;
   const globalReminderEnabled = preferences.birthdayNotificationsEnabled;
   const hasCustomReminderTime = birthdayReminderHour !== null && birthdayReminderMinute !== null;
   const effectiveReminderHour = birthdayReminderHour ?? preferences.birthdayReminderHour;
   const effectiveReminderMinute = birthdayReminderMinute ?? preferences.birthdayReminderMinute;
+  const currentSnapshot = serializePersonEditSnapshot({ name, nickname, bio, gender, relation, impression, contacts, customFields, importantDates, privacyMode, birthdayCalendar: birthdayDate ? birthdayCalendar : 'solar', birthdayDate, birthdayIsLeapMonth: birthdayDate ? birthdayIsLeapMonth : false, birthdayReminderEnabled: birthdayDate ? birthdayReminderEnabled : true, birthdayReminderHour: birthdayDate ? birthdayReminderHour : null, birthdayReminderMinute: birthdayDate ? birthdayReminderMinute : null, mbti, customTagIds, pickedAssetUri: pickedAsset?.uri ?? null });
+  const initialSnapshot = useMemo(() => {
+    if (!person) return null;
+    const assignments = personTags.filter((item) => item.personId === person.id);
+    return serializePersonEditSnapshot({
+      name: person.name,
+      nickname: person.nickname,
+      bio: person.bio ?? '',
+      gender: person.gender,
+      relation: person.relationToMe ?? '',
+      impression: person.impression ?? '',
+      contacts: person.contacts.length ? person.contacts : [{ id: '', type: '', value: '' }],
+      customFields: Object.entries(person.customFields ?? {}).map(([key, value]) => ({ key, value })),
+      importantDates: person.importantDates,
+      privacyMode: person.privacyMode,
+      birthdayCalendar: person.birthday?.calendar ?? 'solar',
+      birthdayDate: person.birthday ? { year: person.birthday.year, month: person.birthday.month, day: person.birthday.day } : null,
+      birthdayIsLeapMonth: person.birthday?.isLeapMonth ?? false,
+      birthdayReminderEnabled: person.birthday?.reminderEnabled ?? true,
+      birthdayReminderHour: person.birthday?.reminderHour ?? null,
+      birthdayReminderMinute: person.birthday?.reminderMinute ?? null,
+      mbti: assignments.find((item) => item.kind === 'mbti')?.value ?? '',
+      customTagIds: assignments.filter((item) => item.kind === 'custom').map((item) => item.value),
+      pickedAssetUri: null,
+    });
+  }, [person, personTags]);
+  const dirty = Boolean(initialSnapshot && currentSnapshot !== initialSnapshot);
 
   const changeBirthdayCalendar = (calendar: BirthdayCalendar) => {
     if (calendar === birthdayCalendar) return;
@@ -153,6 +222,7 @@ export default function EditPersonScreen() {
         privacyMode,
         birthday: birthdayDate ? { calendar: birthdayCalendar, ...birthdayDate, isLeapMonth: birthdayCalendar === 'lunar' && birthdayIsLeapMonth, reminderEnabled: birthdayReminderEnabled, reminderHour: birthdayReminderHour, reminderMinute: birthdayReminderMinute, reminderMode: birthdayCalendar } satisfies Birthday : null,
       }, mbti || null, customTagIds);
+      allowExitRef.current = true;
       router.back();
     } catch (cause: unknown) {
       if (importedMedia) {
@@ -164,6 +234,22 @@ export default function EditPersonScreen() {
    }
  };
 
+  useEffect(() => navigation.addListener('beforeRemove', (event) => {
+    if (allowExitRef.current) return;
+    if (saving) {
+      event.preventDefault();
+      feedback.alert('正在保存', '请等待保存完成后再离开。');
+      return;
+    }
+    if (!dirty) return;
+    event.preventDefault();
+    feedback.alert('保存对人物的修改？', '当前页面有尚未保存的填写或删除变更。', [
+      { text: '继续编辑', style: 'cancel' },
+      { text: '放弃修改', style: 'destructive', onPress: () => { allowExitRef.current = true; navigation.dispatch(event.data.action); } },
+      { text: '保存并退出', onPress: () => void handleSave() },
+    ]);
+  }), [dirty, handleSave, navigation, saving]);
+
   const handleReminderAction = async () => {
     if (globalReminderEnabled && notificationPermission === 'denied') {
       await openNotificationSettings();
@@ -174,6 +260,50 @@ export default function EditPersonScreen() {
 
   const updateContactType = (contactId: string, type: string) => {
     setContacts((current) => current.map((item) => item.id === contactId ? { ...item, type } : item));
+  };
+
+  const openImportantDateEditor = (item?: PersonImportantDate) => {
+    setEditingImportantDate(item ? { ...item } : { id: `important_date_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name: '', date: '', note: null, reminderEnabled: true });
+  };
+
+  const saveImportantDateDraft = () => {
+    if (!editingImportantDate || !editingImportantDate.name.trim() || !editingImportantDate.date.trim()) return;
+    setImportantDates((current) => current.some((item) => item.id === editingImportantDate.id) ? current.map((item) => item.id === editingImportantDate.id ? editingImportantDate : item) : [...current, editingImportantDate]);
+    setEditingImportantDate(null);
+  };
+
+  const updateImportantDateDraft = (patch: Partial<PersonImportantDate>) => {
+    setEditingImportantDate((current) => current ? { ...current, ...patch } : current);
+  };
+
+  const openCustomFieldEditor = (index?: number) => {
+    setEditingCustomField({ index: index ?? null, draft: index === undefined ? { key: '', value: '' } : { ...customFields[index] } });
+  };
+
+  const updateCustomFieldDraft = (patch: Partial<CustomFieldDraft>) => {
+    setEditingCustomField((current) => current ? { ...current, draft: { ...current.draft, ...patch } } : current);
+  };
+
+  const saveCustomFieldDraft = () => {
+    if (!editingCustomField || (!editingCustomField.draft.key.trim() && !editingCustomField.draft.value.trim())) return;
+    const draft = { ...editingCustomField.draft };
+    setCustomFields((current) => editingCustomField.index === null ? [...current, draft] : current.map((item, index) => index === editingCustomField.index ? draft : item));
+    setEditingCustomField(null);
+  };
+
+  const confirmDeleteCustomField = (index: number) => {
+    const label = customFields[index]?.key.trim() || '这条自定义资料';
+    feedback.alert(`删除${label}？`, '删除后需要点击保存才会生效。', [
+      { text: '取消', style: 'cancel' },
+      { text: '删除资料', style: 'destructive', onPress: () => setCustomFields((current) => current.filter((_, row) => row !== index)) },
+    ]);
+  };
+
+  const confirmDeleteImportantDate = (item: PersonImportantDate) => {
+    feedback.alert(`删除${item.name.trim() || '这条重要日期'}？`, '删除后需要点击保存才会生效。', [
+      { text: '取消', style: 'cancel' },
+      { text: '删除日期', style: 'destructive', onPress: () => setImportantDates((current) => current.filter((entry) => entry.id !== item.id)) },
+    ]);
   };
 
   const confirmDelete = () => {
@@ -193,7 +323,7 @@ export default function EditPersonScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <AppKeyboardAvoidingView style={styles.flex}>
-        <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderTextAction disabled={saving} label={saving ? '保存中' : '保存'} onPress={() => void handleSave()} />} title="编辑人物" />
+        <ToolPageHeader backDisabled={saving} onBack={() => router.back()} right={<ToolPageHeaderTextAction disabled={saving} label={saving ? '保存中' : '保存'} onPress={() => void handleSave()} />} title="编辑人物" />
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.avatarCard}>
             <Pressable accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(true)} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="人物头像预览" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{name.trim().slice(0, 1) || '人'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={14} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
@@ -243,12 +373,43 @@ export default function EditPersonScreen() {
           <Pressable accessibilityRole="button" onPress={() => { const contact = createEmptyContact(); setContacts((current) => [...current, contact]); setContactTypePickerId(contact.id); }} style={styles.addContact}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.addContactText}>添加联系方式</Text></Pressable>
 
           <SectionHeader description="补充固定资料之外的内容，内容支持长文本。" index="03" title="自定义资料" />
-          {customFields.map((item, index) => <View key={`custom-${index}`} style={styles.customFieldRow}><TextInput maxLength={20} onChangeText={(value) => setCustomFields((current) => current.map((entry, row) => row === index ? { ...entry, key: value } : entry))} placeholder="字段名称" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.customKey]} value={item.key} /><AutoGrowingTextInput maxLength={PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH} onChangeText={(value) => setCustomFields((current) => current.map((entry, row) => row === index ? { ...entry, value } : entry))} placeholder="字段内容" value={item.value} /><Pressable accessibilityLabel="删除自定义资料" onPress={() => setCustomFields((current) => current.filter((_, row) => row !== index))} style={styles.contactRemove}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></Pressable></View>)}
-          <Pressable accessibilityRole="button" onPress={() => setCustomFields((current) => [...current, { key: '', value: '' }])} style={styles.addContact}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.addContactText}>添加资料字段</Text></Pressable>
+          {customFields.length ? <View style={styles.customFieldList}>
+            {customFields.map((item, index) => <View key={`custom-${index}`}>
+              {index > 0 ? <View style={styles.customFieldListDivider} /> : null}
+              <View style={styles.customFieldListRow}>
+                <View style={styles.customFieldListCopy}>
+                  <Text numberOfLines={1} style={styles.customFieldListKey}>{item.key || '未命名资料'}</Text>
+                  <Text numberOfLines={2} style={styles.customFieldListValue}>{item.value || '未填写内容'}</Text>
+                </View>
+                <Pressable accessibilityLabel={`编辑第 ${index + 1} 个自定义资料`} accessibilityRole="button" onPress={() => openCustomFieldEditor(index)} style={({ pressed }) => [styles.importantDateListAction, styles.importantDateListEdit, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={17} tintColor={colors.life} type="hierarchical" /></Pressable>
+                <Pressable accessibilityLabel={`删除第 ${index + 1} 个自定义资料`} accessibilityRole="button" onPress={() => confirmDeleteCustomField(index)} style={({ pressed }) => [styles.importantDateListAction, styles.importantDateListDelete, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={17} tintColor={colors.danger} type="hierarchical" /></Pressable>
+              </View>
+            </View>)}
+          </View> : <Text style={styles.customFieldEmpty}>还没有添加自定义资料</Text>}
+          <Pressable accessibilityRole="button" onPress={() => openCustomFieldEditor()} style={({ pressed }) => [styles.dateAddButton, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.dateAddButtonText}>添加资料字段</Text></Pressable>
 
-          <SectionHeader description="支持 MM-DD 或 YYYY-MM-DD，可单独关闭年度提醒。" index="04" title="重要日期" />
-          {importantDates.map((item, index) => <View key={item.id} style={styles.dateEditor}><View style={styles.customRow}><TextInput maxLength={30} onChangeText={(value) => setImportantDates((current) => current.map((entry, row) => row === index ? { ...entry, name: value } : entry))} placeholder="日期名称，例如：认识日" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.customValue]} value={item.name} /><Pressable onPress={() => setImportantDates((current) => current.filter((_, row) => row !== index))} style={styles.contactRemove}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={20} tintColor={colors.danger} type="hierarchical" /></Pressable></View><View style={styles.customRow}><ImportantDatePickerField value={item.date} onChange={(value) => setImportantDates((current) => current.map((entry, row) => row === index ? { ...entry, date: value } : entry))} /><Pressable accessibilityRole="switch" accessibilityState={{ checked: item.reminderEnabled }} onPress={() => setImportantDates((current) => current.map((entry, row) => row === index ? { ...entry, reminderEnabled: !entry.reminderEnabled } : entry))} style={[styles.dateReminder, item.reminderEnabled && styles.dateReminderOn]}><Text style={[styles.dateReminderText, item.reminderEnabled && styles.dateReminderTextOn]}>{item.reminderEnabled ? '年度提醒' : '不提醒'}</Text></Pressable></View><TextInput maxLength={100} onChangeText={(value) => setImportantDates((current) => current.map((entry, row) => row === index ? { ...entry, note: value } : entry))} placeholder="备注（可选）" placeholderTextColor={colors.inkFaint} style={styles.input} value={item.note ?? ''} /></View>)}
-          <Pressable accessibilityRole="button" onPress={() => setImportantDates((current) => [...current, { id: `important_date_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name: '', date: '', note: null, reminderEnabled: true }])} style={styles.addContact}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.addContactText}>添加重要日期</Text></Pressable>
+          <SectionHeader description="记录值得记住的日子，便于日后回顾和提醒。" index="04" title="重要日期" />
+          {importantDates.length ? <View style={styles.importantDateList}>
+            {importantDates.map((item, index) => {
+              const parts = parseImportantDate(item.date);
+              return <View key={item.id}>
+                {index > 0 ? <View style={styles.importantDateListDivider} /> : null}
+                <View style={styles.importantDateListRow}>
+                  <View style={styles.importantDateListMarker}>
+                    {parts ? <><Text style={styles.importantDateListMonth}>{parts.month}月</Text><Text style={styles.importantDateListDay}>{parts.day}</Text></> : <SymbolView name={{ android: 'event', ios: 'calendar', web: 'event' }} size={18} tintColor={colors.life} type="hierarchical" />}
+                  </View>
+                  <View style={styles.importantDateListCopy}>
+                    <Text numberOfLines={1} style={styles.importantDateListName}>{item.name || '未命名日期'}</Text>
+                    <View style={styles.importantDateListMeta}><Text style={styles.importantDateListValue}>{formatImportantDateDisplay(item.date)}</Text><Text style={[styles.importantDateListReminder, !item.reminderEnabled && styles.importantDateListReminderOff]}>{item.reminderEnabled ? '年度提醒' : '不提醒'}</Text></View>
+                    {item.note ? <Text numberOfLines={1} style={styles.importantDateListNote}>{item.note}</Text> : null}
+                  </View>
+                  <Pressable accessibilityLabel={`编辑第 ${index + 1} 个重要日期`} accessibilityRole="button" onPress={() => openImportantDateEditor(item)} style={({ pressed }) => [styles.importantDateListAction, styles.importantDateListEdit, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={17} tintColor={colors.life} type="hierarchical" /></Pressable>
+                  <Pressable accessibilityLabel={`删除第 ${index + 1} 个重要日期`} accessibilityRole="button" onPress={() => confirmDeleteImportantDate(item)} style={({ pressed }) => [styles.importantDateListAction, styles.importantDateListDelete, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={17} tintColor={colors.danger} type="hierarchical" /></Pressable>
+                </View>
+              </View>;
+            })}
+          </View> : <Text style={styles.importantDateEmpty}>还没有添加重要日期</Text>}
+          <Pressable accessibilityRole="button" onPress={() => openImportantDateEditor()} style={({ pressed }) => [styles.dateAddButton, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.dateAddButtonText}>添加重要日期</Text></Pressable>
 
           <SectionHeader description="选择生日历法和日期，提醒会按该历法计算。" index="03" title="生日与提醒" />
           <View style={styles.field}>
@@ -280,16 +441,54 @@ export default function EditPersonScreen() {
           <SectionHeader description="用 MBTI 和自定义标签，更快找到关于 ta 的记录。" index="05" title="人物标签" />
           {tagSystemSettings.find((item) => item.system === 'mbti')?.enabled !== false ? <MbtiPickerField onChange={setMbti} value={mbti} /> : null}
           {tagSystemSettings.find((item) => item.system === 'custom')?.enabled !== false ? <><View style={styles.field}><Text style={styles.fieldLabel}>单条标签 / 可多选</Text><View style={styles.chips}>{tagDefinitions.filter((tag) => !tag.groupId).map((tag) => <Pressable key={tag.id} onPress={() => setCustomTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} style={[styles.chip, customTagIds.includes(tag.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(tag.id) && styles.chipTextActive]}>{tag.name}</Text></Pressable>)}</View><View style={styles.inlineCreate}><TextInput maxLength={24} onChangeText={setNewTagName} placeholder="输入新标签" placeholderTextColor={colors.inkFaint} style={styles.inlineInput} value={newTagName} /><Pressable onPress={() => void createTag(newTagName).then((tag) => { setCustomTagIds((current) => [...current, tag.id]); setNewTagName(''); }, (cause: unknown) => feedback.alert('创建失败', cause instanceof Error ? cause.message : '请稍后重试。'))} style={styles.inlineButton}><Text style={styles.inlineButtonText}>添加</Text></Pressable></View></View>{tagGroups.map((group) => { const options = tagDefinitions.filter((tag) => tag.groupId === group.id); if (!options.length) return null; return <View key={group.id} style={styles.field}><Text style={styles.fieldLabel}>{group.name} / 单选</Text><View style={styles.chips}>{options.map((option) => <Pressable key={option.id} onPress={() => setCustomTagIds((current) => { const groupOptionIds = options.map((item) => item.id); const withoutGroup = current.filter((id) => !groupOptionIds.includes(id)); return current.includes(option.id) ? withoutGroup : [...withoutGroup, option.id]; })} style={[styles.chip, customTagIds.includes(option.id) && styles.chipActive]}><Text style={[styles.chipText, customTagIds.includes(option.id) && styles.chipTextActive]}>{option.name}</Text></Pressable>)}</View></View>; })}</> : null}
-          <View style={styles.note}><Text style={styles.noteText}>资料只用于整理你的本地记忆，不会上传。</Text></View>
-          <View style={styles.privacyCard}><View style={styles.reminderCopy}><Text style={styles.reminderTitle}>人物隐私</Text><Text style={styles.reminderStatus}>{privacyMode === 'private' ? '详情页默认隐藏联系方式、自定义资料和重要日期' : '资料正常展示'}</Text></View><Pressable accessibilityRole="switch" accessibilityState={{ checked: privacyMode === 'private' }} onPress={() => setPrivacyMode((value) => value === 'private' ? 'normal' : 'private')} style={[styles.switchTrack, privacyMode === 'private' && styles.switchTrackOn]}><View style={[styles.switchThumb, privacyMode === 'private' && styles.switchThumbOn]} /></Pressable></View>
+          <View style={styles.privacyCard}>
+            <View style={styles.privacyCardHeader}>
+              <View style={styles.reminderCopy}><Text style={styles.reminderTitle}>人物隐私</Text><Text style={styles.reminderStatus}>{privacyMode === 'private' ? '详情页默认隐藏联系方式、自定义资料和重要日期' : '资料正常展示'}</Text></View>
+              <Pressable accessibilityRole="switch" accessibilityState={{ checked: privacyMode === 'private' }} onPress={() => setPrivacyMode((value) => value === 'private' ? 'normal' : 'private')} style={[styles.switchTrack, privacyMode === 'private' && styles.switchTrackOn]}><View style={[styles.switchThumb, privacyMode === 'private' && styles.switchThumbOn]} /></Pressable>
+            </View>
+          </View>
           <View style={styles.dangerZone}>
-            <Text style={styles.dangerTitle}>危险操作</Text>
-            <Text style={styles.dangerHint}>删除人物不会删除历史记录，但会永久删除其相册及其中媒体。</Text>
+            <View style={styles.dangerHeader}>
+              <View style={styles.dangerIcon}><SymbolView name={{ android: 'warning', ios: 'exclamationmark.triangle', web: 'warning' }} size={17} tintColor={colors.danger} type="hierarchical" /></View>
+              <View style={styles.dangerCopy}><Text style={styles.dangerTitle}>危险操作</Text><Text style={styles.dangerHint}>删除人物不会删除历史记录，但会永久删除其相册及其中媒体。</Text></View>
+            </View>
             <Pressable accessibilityRole="button" onPress={confirmDelete} style={({ pressed }) => [styles.deleteButton, pressed && styles.deletePressed]}>
+              <SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={17} tintColor={colors.danger} type="hierarchical" />
               <Text style={styles.deleteText}>删除这个人物</Text>
             </Pressable>
           </View>
         </ScrollView>
+        <DraggableBottomSheet accessibilityLabel="编辑重要日期，向下拖动关闭" keyboardAvoiding onClose={() => setEditingImportantDate(null)} open={Boolean(editingImportantDate)} sheetStyle={styles.importantDateSheet}>
+          {editingImportantDate ? <>
+            <View style={styles.importantDateSheetHeader}>
+              <View><Text style={styles.importantDateSheetEyebrow}>重要日期</Text><Text style={styles.importantDateSheetTitle}>{importantDates.some((item) => item.id === editingImportantDate.id) ? '编辑日期' : '新增日期'}</Text></View>
+              <Pressable accessibilityLabel="关闭重要日期编辑" accessibilityRole="button" onPress={() => setEditingImportantDate(null)} style={({ pressed }) => [styles.importantDateSheetClose, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
+            </View>
+            <Text style={styles.importantDateModalLabel}>日期名称</Text>
+            <TextInput autoFocus={!importantDates.some((item) => item.id === editingImportantDate.id)} maxLength={30} onChangeText={(value) => updateImportantDateDraft({ name: value })} placeholder="例如：认识日" placeholderTextColor={colors.inkFaint} style={styles.input} value={editingImportantDate.name} />
+            <ImportantDatePickerField value={editingImportantDate.date} onChange={(value) => updateImportantDateDraft({ date: value })} />
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: editingImportantDate.reminderEnabled }} onPress={() => updateImportantDateDraft({ reminderEnabled: !editingImportantDate.reminderEnabled })} style={({ pressed }) => [styles.dateReminderRow, pressed && styles.importantDateListActionPressed]}>
+              <View style={styles.dateReminderCopy}><Text style={styles.dateReminderLabel}>年度提醒</Text><Text style={styles.dateReminderHint}>{editingImportantDate.reminderEnabled ? '每年自动提醒一次' : '已关闭年度提醒'}</Text></View>
+              <View style={[styles.switchTrack, editingImportantDate.reminderEnabled && styles.switchTrackOn]}><View style={[styles.switchThumb, editingImportantDate.reminderEnabled && styles.switchThumbOn]} /></View>
+            </Pressable>
+            <Text style={styles.importantDateModalLabel}>备注</Text>
+            <TextInput maxLength={100} multiline onChangeText={(value) => updateImportantDateDraft({ note: value || null })} placeholder="补充一点说明（可选）" placeholderTextColor={colors.inkFaint} style={[styles.input, styles.importantDateModalNote]} textAlignVertical="top" value={editingImportantDate.note ?? ''} />
+            <Pressable accessibilityRole="button" disabled={!editingImportantDate.name.trim() || !editingImportantDate.date.trim()} onPress={saveImportantDateDraft} style={[styles.importantDateSaveButton, (!editingImportantDate.name.trim() || !editingImportantDate.date.trim()) && styles.importantDateSaveDisabled]}><Text style={styles.importantDateSaveButtonText}>保存日期</Text></Pressable>
+          </> : null}
+        </DraggableBottomSheet>
+        <DraggableBottomSheet accessibilityLabel="编辑自定义资料，向下拖动关闭" keyboardAvoiding onClose={() => setEditingCustomField(null)} open={Boolean(editingCustomField)} sheetStyle={styles.importantDateSheet}>
+          {editingCustomField ? <>
+            <View style={styles.importantDateSheetHeader}>
+              <View><Text style={styles.importantDateSheetEyebrow}>自定义资料</Text><Text style={styles.importantDateSheetTitle}>{editingCustomField.index === null ? '新增资料' : '编辑资料'}</Text></View>
+              <Pressable accessibilityLabel="关闭自定义资料编辑" accessibilityRole="button" onPress={() => setEditingCustomField(null)} style={({ pressed }) => [styles.importantDateSheetClose, pressed && styles.importantDateListActionPressed]}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor={colors.inkSoft} type="hierarchical" /></Pressable>
+            </View>
+            <Text style={styles.importantDateModalLabel}>资料名称</Text>
+            <TextInput autoFocus={editingCustomField.index === null} maxLength={20} onChangeText={(value) => updateCustomFieldDraft({ key: value })} placeholder="例如：外号" placeholderTextColor={colors.inkFaint} style={styles.input} value={editingCustomField.draft.key} />
+            <Text style={styles.importantDateModalLabel}>资料内容</Text>
+            <TextInput accessibilityLabel="自定义资料内容" maxLength={PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH} multiline onChangeText={(value) => updateCustomFieldDraft({ value })} placeholder="例如：小笨蛋 / 喜欢拿铁" placeholderTextColor={colors.inkFaint} scrollEnabled style={[styles.input, styles.customFieldModalValue]} textAlignVertical="top" value={editingCustomField.draft.value} />
+            <Pressable accessibilityRole="button" disabled={!editingCustomField.draft.key.trim() && !editingCustomField.draft.value.trim()} onPress={saveCustomFieldDraft} style={[styles.importantDateSaveButton, (!editingCustomField.draft.key.trim() && !editingCustomField.draft.value.trim()) && styles.importantDateSaveDisabled]}><Text style={styles.importantDateSaveButtonText}>保存资料</Text></Pressable>
+          </> : null}
+        </DraggableBottomSheet>
         <DraggableBottomSheet accessibilityLabel="选择头像来源，向下拖动关闭" accessibilityRole="menu" onClose={() => setAvatarSourcePickerOpen(false)} open={avatarSourcePickerOpen} sheetStyle={styles.sourceSheet}>
               <AvatarSourceOption label="拍摄" onPress={() => void takeAvatarPhoto()} />
               <AvatarSourceOption label="从手机相册选择" onPress={() => void pickAvatarPhoto()} />
@@ -311,14 +510,6 @@ function Field({ label, wrapperStyle, ...props }: { label: string; wrapperStyle?
       <TextInput {...props} placeholderTextColor={colors.inkFaint} style={[styles.input, props.multiline && styles.inputMultiline]} textAlignVertical={props.multiline ? 'top' : 'center'} />
     </View>
   );
-}
-
-const CUSTOM_FIELD_MIN_HEIGHT = 52;
-const CUSTOM_FIELD_MAX_HEIGHT = 240;
-
-function AutoGrowingTextInput({ maxLength, onChangeText, placeholder, value }: { maxLength: number; onChangeText(value: string): void; placeholder: string; value: string }) {
-  const [height, setHeight] = useState(CUSTOM_FIELD_MIN_HEIGHT);
-  return <TextInput accessibilityLabel={placeholder} maxLength={maxLength} multiline onChangeText={onChangeText} onContentSizeChange={(event) => setHeight(Math.min(CUSTOM_FIELD_MAX_HEIGHT, Math.max(CUSTOM_FIELD_MIN_HEIGHT, event.nativeEvent.contentSize.height + spacing.sm)))} placeholder={placeholder} placeholderTextColor={colors.inkFaint} scrollEnabled={height >= CUSTOM_FIELD_MAX_HEIGHT} style={[styles.input, styles.customValue, styles.customValueInput, { height }]} textAlignVertical="top" value={value} />;
 }
 
 function AvatarSourceOption({ label, onPress }: { label: string; onPress(): void }) {
@@ -360,8 +551,8 @@ const styles = createThemedStyles(() => ({
   sourceOptionText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
   sourceCancel: { minHeight: 54, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
   sourceCancelText: { color: colors.inkSoft, fontSize: 14, fontWeight: '600' },
-  sectionHeader: { marginTop: spacing.xl, paddingTop: spacing.lg, flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  sectionIndex: { width: 30, height: 24, marginTop: 1, paddingTop: 5, borderRadius: radius.sm, backgroundColor: colors.lifeLight, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1, textAlign: 'center' },
+  sectionHeader: { marginTop: spacing.xl, paddingTop: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  sectionIndex: { width: 30, height: 24, paddingTop: 0, borderRadius: radius.sm, backgroundColor: colors.lifeLight, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1, lineHeight: 24, textAlign: 'center', textAlignVertical: 'center' },
   sectionCopy: { flex: 1 },
   sectionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 21, letterSpacing: -0.2 },
   sectionDescription: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
@@ -388,17 +579,49 @@ const styles = createThemedStyles(() => ({
   contactTypeOptionText: { color: colors.inkSoft, fontSize: 11 },
   contactTypeOptionTextSelected: { color: colors.onLife, fontWeight: '700' },
   contactTypeCustomInput: { minHeight: 44, marginTop: spacing.md, paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 13 },
-  customRow: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  customFieldRow: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  customKey: { width: 112, flex: 0 },
-  customValue: { flex: 1 },
-  customValueInput: { paddingTop: spacing.md, lineHeight: 23 },
-  dateEditor: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.sheet },
-  importantDatePicker: { flex: 1 },
-  dateReminder: { minHeight: 44, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
-  dateReminderOn: { backgroundColor: colors.life },
-  dateReminderText: { color: colors.inkSoft, fontSize: 10 },
-  dateReminderTextOn: { color: colors.onLife, fontWeight: '700' },
+  customFieldList: { marginTop: spacing.md, overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  customFieldListRow: { minHeight: 68, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center' },
+  customFieldListDivider: { marginLeft: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  customFieldListCopy: { minWidth: 0, flex: 1 },
+  customFieldListKey: { color: colors.ink, fontFamily: typography.display, fontSize: 14, lineHeight: 18 },
+  customFieldListValue: { marginTop: 3, color: colors.inkSoft, fontSize: 11, lineHeight: 16 },
+  customFieldEmpty: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 11 },
+  customFieldModalValue: { minHeight: 112, paddingTop: spacing.md, lineHeight: 22 },
+  importantDateList: { marginTop: spacing.md, overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  importantDateListRow: { minHeight: 74, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center' },
+  importantDateListDivider: { marginLeft: spacing.md + 40 + spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  importantDateListMarker: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: colors.lifeLight },
+  importantDateListMonth: { color: colors.life, fontFamily: typography.mono, fontSize: 7, letterSpacing: 0.5 },
+  importantDateListDay: { marginTop: 1, color: colors.life, fontFamily: typography.display, fontSize: 16, lineHeight: 18 },
+  importantDateListCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
+  importantDateListName: { color: colors.ink, fontFamily: typography.display, fontSize: 14, lineHeight: 18 },
+  importantDateListMeta: { marginTop: 3, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  importantDateListValue: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: 9 },
+  importantDateListReminder: { color: colors.life, fontSize: 8 },
+  importantDateListReminderOff: { color: colors.inkFaint },
+  importantDateListNote: { marginTop: 3, color: colors.inkFaint, fontSize: 9, lineHeight: 14 },
+  importantDateListAction: { width: 36, height: 40, marginLeft: spacing.xs, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  importantDateListEdit: { backgroundColor: colors.lifeLight },
+  importantDateListDelete: { backgroundColor: colors.dangerLight },
+  importantDateListActionPressed: { opacity: 0.62 },
+  importantDateEmpty: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 11 },
+  dateAddButton: { minHeight: 48, marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  dateAddButtonText: { color: colors.life, fontSize: 13, fontWeight: '700' },
+  importantDateField: { marginTop: spacing.md },
+  dateReminderRow: { minHeight: 58, marginTop: spacing.md, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft },
+  dateReminderCopy: { flex: 1, paddingRight: spacing.md },
+  dateReminderLabel: { color: colors.ink, fontSize: 12, fontWeight: '600' },
+  dateReminderHint: { marginTop: 3, color: colors.inkFaint, fontSize: 10 },
+  importantDateSheet: { maxHeight: '92%', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  importantDateSheetHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  importantDateSheetEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
+  importantDateSheetTitle: { marginTop: spacing.xs, color: colors.ink, fontFamily: typography.display, fontSize: 22 },
+  importantDateSheetClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.paper },
+  importantDateModalLabel: { marginTop: spacing.md, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
+  importantDateModalNote: { minHeight: 80, paddingTop: spacing.md, lineHeight: 21 },
+  importantDateSaveButton: { minHeight: 50, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
+  importantDateSaveButtonText: { color: colors.onLife, fontSize: 12, fontWeight: '800' },
+  importantDateSaveDisabled: { opacity: 0.45 },
   addContact: { minHeight: 44, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   addContactText: { color: colors.life, fontSize: 13, fontWeight: '700' },
   inputMultiline: { minHeight: 96, paddingTop: spacing.md, lineHeight: 23 },
@@ -430,13 +653,15 @@ const styles = createThemedStyles(() => ({
   inlineInput: { flex: 1, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.sheet, color: colors.ink },
   inlineButton: { width: 64, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   inlineButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
-  note: { marginTop: spacing.xl, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.lifeLight },
-  noteText: { color: colors.life, fontSize: 9, lineHeight: 17, textAlign: 'center' },
-  privacyCard: { marginTop: spacing.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.sheet },
-  dangerZone: { marginTop: spacing.xxl, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.dangerLine },
+  privacyCard: { marginTop: spacing.xl, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.lg, backgroundColor: colors.sheet },
+  privacyCardHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dangerZone: { marginTop: spacing.lg, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.lg, backgroundColor: colors.dangerLight },
+  dangerHeader: { flexDirection: 'row', alignItems: 'flex-start' },
+  dangerIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.paper },
+  dangerCopy: { minWidth: 0, flex: 1, marginLeft: spacing.sm },
   dangerTitle: { color: colors.danger, fontFamily: typography.display, fontSize: 17 },
   dangerHint: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 10, lineHeight: 17 },
-  deleteButton: { minHeight: 48, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md },
+  deleteButton: { minHeight: 48, marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine, borderRadius: radius.md, backgroundColor: colors.paper },
   deletePressed: { opacity: 0.58 },
   deleteText: { color: colors.danger, fontSize: typography.size.meta, fontWeight: '700' },
   missing: { margin: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
