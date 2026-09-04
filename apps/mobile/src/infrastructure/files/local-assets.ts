@@ -1,10 +1,11 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 import type { BookFormat, Media } from '@still-alive/types';
 import { writePersistentError, writePersistentLog } from '../platform/persistent-log';
 import { unlockMusicFile } from './music-unlocker';
 
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg', '.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg', '.oga', '.opus', '.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
 const ENCRYPTED_AUDIO_EXTENSIONS = new Set(['.ncm', '.qmc0', '.qmc2', '.qmc3', '.qmc4', '.qmc6', '.qmc8', '.qmcflac', '.qmcogg', '.mgg', '.mgg1', '.mggl', '.mflac', '.mflac0', '.mflach', '.kgm', '.kgma']);
 const REJECTED_AUDIO_EXTENSIONS = new Set(['.kgg']);
 const BOOK_EXTENSIONS = new Map<string, BookFormat>([
@@ -25,6 +26,7 @@ interface LocalAssetSource {
   file: File;
   name: string;
   mimeType: string | null;
+  sourceUri?: string | null;
 }
 
 export interface LocalAudioImportFailure {
@@ -144,9 +146,22 @@ async function copyLocalAssets(kind: ImportedAssetKind, sources: LocalAssetSourc
           destinations.push(temporaryOutput);
           const converted = await unlockMusicFile(destination.uri, temporaryOutput.uri);
           if (converted.extension !== '.mp3' || converted.mimeType !== 'audio/mpeg') throw new Error('MP4 音频无法转换为 MP3');
+          // The native conversion API may expose artwork as a sidecar. The
+          // converted MP3 already carries the APIC frame, so this temporary
+          // artifact is not part of the imported asset and must not leak in
+          // the cache after a successful import.
+          const convertedCover = converted.coverPath ? new File(converted.coverPath) : null;
+          if (convertedCover) destinations.push(convertedCover);
           storedDestination = new File(directory, `${id}.mp3`);
           destinations.push(storedDestination);
           await temporaryOutput.move(storedDestination);
+          if (convertedCover?.exists) {
+            try {
+              convertedCover.delete();
+            } catch (cause) {
+              writePersistentError('asset.import.converted-cover.cleanup.failed', cause, { sourceName: source.name });
+            }
+          }
           convertedToMp3 = true;
           if (destination.exists) destination.delete();
         } else {
@@ -159,6 +174,7 @@ async function copyLocalAssets(kind: ImportedAssetKind, sources: LocalAssetSourc
       if (!checksum) throw new Error('无法校验文件内容');
       imported.push({
         id,
+        importSourceUri: kind === 'audio' && Platform.OS === 'android' ? source.sourceUri ?? source.file.uri : undefined,
         localPath: storedDestination.uri,
         mimeType: encrypted ? 'application/octet-stream' : convertedToMp3 ? 'audio/mpeg' : audioFormat?.mimeType ?? source.mimeType ?? 'application/octet-stream',
         width: null,
@@ -184,18 +200,18 @@ async function pickLocalAssets(kind: ImportedAssetKind, multiple: boolean): Prom
   assetPickerInProgress = true;
   try {
     const result = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
       multiple,
+      copyToCacheDirectory: kind === 'audio' ? Platform.OS === 'android' ? false : true : true,
       type: kind === 'audio' ? ['audio/*', 'application/octet-stream'] : ['application/pdf', 'application/epub+zip', 'application/x-mobipocket-ebook', 'text/plain', 'text/html', 'application/xhtml+xml', 'application/xml', 'text/xml', 'application/octet-stream'],
     });
     if (result.canceled) return [];
-    const sources = result.assets.map((asset) => ({ file: new File(asset.uri), name: asset.name, mimeType: asset.mimeType ?? null }));
+    const sources = result.assets.map((asset) => ({ file: new File(asset.uri), name: asset.name, mimeType: asset.mimeType ?? null, sourceUri: kind === 'audio' && Platform.OS === 'android' ? asset.uri : null }));
     try {
       if (kind === 'audio' && result.assets.some((asset) => isRejectedAudioName(asset.name))) {
         throw new Error('酷狗 KGG 需要外部密钥数据库，当前版本不支持');
       }
       const valid = result.assets.every((asset) => kind === 'audio' ? isSupportedAudioName(asset.name) : isSupportedBookName(asset.name));
-      if (!valid) throw new Error(kind === 'audio' ? '只支持 mp3、m4a、aac、wav、flac 或 ogg 音频' : '只支持 PDF、EPUB、无 DRM MOBI、TXT、HTML 或 FB2 书籍');
+      if (!valid) throw new Error(kind === 'audio' ? '只支持 mp3、m4a、aac、wav、flac、ogg、oga 或 opus 音频' : '只支持 PDF、EPUB、无 DRM MOBI、TXT、HTML 或 FB2 书籍');
       return await copyLocalAssets(kind, sources);
     } finally {
       for (const source of sources) {
@@ -237,13 +253,16 @@ export async function pickLocalAudioAssetsWithFailures(): Promise<{ assets: Medi
   assetPickerInProgress = true;
   try {
     const result = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
+      // Keep the original Android content:// URI long enough for the native
+      // MediaStore album-art fallback. The file is copied to our sandbox by
+      // copyLocalAssets before the picker promise is released.
+      copyToCacheDirectory: Platform.OS === 'android' ? false : true,
       multiple: true,
       type: ['audio/*', 'application/octet-stream'],
     });
     if (result.canceled) return { assets: [], failures: [] };
 
-    const sources = result.assets.map((asset) => ({ file: new File(asset.uri), name: asset.name, mimeType: asset.mimeType ?? null }));
+    const sources = result.assets.map((asset) => ({ file: new File(asset.uri), name: asset.name, mimeType: asset.mimeType ?? null, sourceUri: Platform.OS === 'android' ? asset.uri : null }));
     const assets: Media[] = [];
     const failures: LocalAudioImportFailure[] = [];
     try {
@@ -253,7 +272,7 @@ export async function pickLocalAudioAssetsWithFailures(): Promise<{ assets: Medi
           continue;
         }
         if (!isSupportedAudioName(source.name)) {
-          failures.push({ name: source.name, cause: new Error('只支持 mp3、m4a、aac、wav、flac 或 ogg 音频') });
+          failures.push({ name: source.name, cause: new Error('只支持 mp3、m4a、aac、wav、flac、ogg、oga 或 opus 音频') });
           continue;
         }
         try {

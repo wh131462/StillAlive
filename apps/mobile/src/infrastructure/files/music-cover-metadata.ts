@@ -1,10 +1,13 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import type { FileHandle } from 'expo-file-system';
 import type { Media } from '@still-alive/types';
+import { extractMusicCover } from './music-unlocker';
 
 const MAX_TAG_BYTES = 32 * 1024 * 1024;
 const MAX_TEXT_BYTES = 64 * 1024;
 const MAX_TEXT_LENGTH = 4_096;
+const OGG_FLAC_MAPPING_HEADER_SIZE = 9;
+const OGG_FLAC_NATIVE_MARKER_SIZE = 4;
 
 interface EmbeddedImage {
   bytes: Uint8Array;
@@ -28,34 +31,50 @@ export interface EmbeddedMusicMetadata {
 
 const EMPTY_METADATA: ParsedMusicMetadata = { album: null, artist: null, image: null, title: null };
 
-export async function readEmbeddedMusicMetadata(audio: Media): Promise<EmbeddedMusicMetadata> {
+export async function readEmbeddedMusicMetadata(audio: Media, sourceUri?: string | null): Promise<EmbeddedMusicMetadata> {
   const source = new File(audio.localPath);
-  if (!source.exists || source.size <= 0) return { ...EMPTY_METADATA, cover: null };
-  const handle = source.open(FileMode.ReadOnly);
-  try {
-    const header = readAt(handle, source.size, 0, 64);
-    const parsed = isAscii(header, 0, 'fLaC')
-      ? parseFlac(handle, source.size)
-      : isAscii(header, 0, 'OggS')
-        ? parseOgg(handle, source.size)
-        : isAscii(header, 0, 'RIFF') && isAscii(header, 8, 'WAVE')
-          ? parseWav(handle, source.size)
-          : isAscii(header, 4, 'ftyp')
-            ? parseMp4(handle, source.size)
-            : isAscii(header, 0, 'ID3') || isMpegAudioHeader(header)
-              ? parseId3File(handle, source.size, true)
-              : isAdtsHeader(header)
-                ? parseId3File(handle, source.size, false)
-                : EMPTY_METADATA;
-    return {
-      album: parsed.album,
-      artist: parsed.artist,
-      cover: parsed.image ? persistCover(parsed.image) : null,
-      title: parsed.title,
-    };
-  } finally {
-    handle.close();
+  let parsed = EMPTY_METADATA;
+  let handle: FileHandle | null = null;
+  if (source.exists && (source.size ?? 0) > 0) {
+    try {
+      handle = source.open(FileMode.ReadOnly);
+      const fileSize = source.size ?? 0;
+      const header = readAt(handle, fileSize, 0, 64);
+      parsed = isAscii(header, 0, 'fLaC')
+        ? parseFlac(handle, fileSize)
+        : isAscii(header, 0, 'OggS')
+          ? parseOgg(handle, fileSize)
+          : isAscii(header, 0, 'RIFF') && isAscii(header, 8, 'WAVE')
+            ? parseWav(handle, fileSize)
+            : isAscii(header, 4, 'ftyp')
+              ? parseMp4(handle, fileSize)
+              : isAscii(header, 0, 'ID3') || isMpegAudioHeader(header)
+                ? parseId3File(handle, fileSize, true)
+                : isAdtsHeader(header)
+                  ? parseId3File(handle, fileSize, false)
+                  : EMPTY_METADATA;
+    } catch {
+      // A malformed tag should not prevent the platform artwork probe below.
+      parsed = EMPTY_METADATA;
+    } finally {
+      handle?.close();
+    }
   }
+  let cover: Media | null = null;
+  try {
+    if (parsed.image) cover = persistCover(parsed.image);
+  } catch {
+    // Keep metadata import usable when a single cover cannot be persisted.
+  }
+  if (!cover) cover = await extractNativeCover(audio, sourceUri);
+  return { album: parsed.album, artist: parsed.artist, cover, title: parsed.title };
+}
+
+export async function persistMusicCoverFile(file: File, mimeTypeHint?: string | null): Promise<Media | null> {
+  if (!file.exists || file.size <= 0 || file.size > MAX_TAG_BYTES) return null;
+  const bytes = await file.bytes();
+  const mimeType = sniffImageMime(bytes) || normalizeImageMime(mimeTypeHint ?? null);
+  return mimeType ? persistCover({ bytes, mimeType, pictureType: 3 }) : null;
 }
 
 function parseId3File(handle: FileHandle, fileSize: number, includeId3v1: boolean): ParsedMusicMetadata {
@@ -200,6 +219,7 @@ function parseOgg(handle: FileHandle, fileSize: number): ParsedMusicMetadata {
   let packetSize = 0;
   let oggFlac = false;
   let oggFlacMetadataComplete = false;
+  let oggFlacPending: Uint8Array<ArrayBufferLike> = new Uint8Array();
   let parsed = EMPTY_METADATA;
   for (let pageIndex = 0; pageIndex < 4_096 && offset + 27 <= fileSize; pageIndex += 1) {
     const header = readAt(handle, fileSize, offset, 27);
@@ -222,13 +242,26 @@ function parseOgg(handle: FileHandle, fileSize: number): ParsedMusicMetadata {
         const packet = concatBytes(packetChunks, packetSize);
         if (isAscii(packet, 0, '\x7fFLAC')) {
           oggFlac = true;
-          const result = parseOggFlacMetadata(packet, 8);
+          const start = oggFlacMetadataStart(packet);
+          const metadataBytes = packet.slice(start);
+          const result = parseOggFlacMetadata(metadataBytes, 0);
           parsed = mergeFlacMetadata(parsed, result.metadata);
           oggFlacMetadataComplete = result.complete;
+          oggFlacPending = result.complete ? new Uint8Array() : metadataBytes;
         } else if (oggFlac && !oggFlacMetadataComplete) {
-          const result = parseOggFlacMetadata(packet, 0);
+          // A few muxers emit the native marker as the first bytes of a
+          // follow-up metadata packet instead of keeping it in the mapping
+          // packet.
+          const start = isAscii(packet, 0, 'fLaC') ? OGG_FLAC_NATIVE_MARKER_SIZE : 0;
+          const metadataBytes = packet.slice(start);
+          if (oggFlacPending.length + metadataBytes.length > MAX_TAG_BYTES) return EMPTY_METADATA;
+          const combined = oggFlacPending.length
+            ? concatBytes([oggFlacPending, metadataBytes], oggFlacPending.length + metadataBytes.length)
+            : metadataBytes;
+          const result = parseOggFlacMetadata(combined, 0);
           parsed = mergeFlacMetadata(parsed, result.metadata);
           oggFlacMetadataComplete = result.complete;
+          oggFlacPending = result.complete ? new Uint8Array() : combined;
         } else if (!oggFlac && isAscii(packet, 0, '\x03vorbis')) {
           return mergeMetadata(parsed, parseVorbisComments(packet, 7));
         } else if (!oggFlac && isAscii(packet, 0, 'OpusTags')) {
@@ -297,9 +330,9 @@ function parseVorbisComments(bytes: Uint8Array, start: number): ParsedMusicMetad
     if (separator <= 0) continue;
     const key = entry.slice(0, separator).toUpperCase();
     const rawValue = entry.slice(separator + 1).trim();
-    if (key === 'METADATA_BLOCK_PICTURE' && !parsed.image) {
+    if (key === 'METADATA_BLOCK_PICTURE') {
       const image = parsePictureBlock(decodeBase64(rawValue));
-      if (image) parsed = { ...parsed, image };
+      if (image && (!parsed.image || image.pictureType === 3)) parsed = { ...parsed, image };
       continue;
     }
     if (key === 'COVERART' && !coverArt) {
@@ -434,38 +467,57 @@ function parseApic(data: Uint8Array): EmbeddedImage | null {
   const encoding = data[0];
   const mimeEnd = findZero(data, 1, 1);
   if (mimeEnd < 0 || mimeEnd + 1 >= data.length) return null;
+  const declaredMime = decodeLatin1(data.slice(1, mimeEnd));
   const pictureType = data[mimeEnd + 1];
   const descriptionStart = mimeEnd + 2;
   const width = encoding === 1 || encoding === 2 ? 2 : 1;
   const descriptionEnd = findZero(data, descriptionStart, width);
   if (descriptionEnd < 0) return null;
   const bytes = data.slice(descriptionEnd + width);
-  const mimeType = sniffImageMime(bytes);
+  const mimeType = sniffImageMime(bytes) || normalizeImageMime(declaredMime);
   return mimeType ? { bytes, mimeType, pictureType } : null;
 }
 
 function parsePic(data: Uint8Array): EmbeddedImage | null {
+  // ID3v2.2 PIC stores a fixed three-byte image format (JPG/PNG/...) rather
+  // than the NUL-terminated MIME string used by APIC.
   if (data.length < 6) return null;
   const pictureType = data[4];
   const width = data[0] === 1 || data[0] === 2 ? 2 : 1;
   const descriptionEnd = findZero(data, 5, width);
   if (descriptionEnd < 0) return null;
   const bytes = data.slice(descriptionEnd + width);
-  const mimeType = sniffImageMime(bytes);
+  const format = ascii(data, 1, 3).toUpperCase();
+  const declaredMime = format === 'JPG' || format === 'JPEG'
+    ? 'image/jpeg'
+    : format === 'PNG' ? 'image/png'
+      : format === 'GIF' ? 'image/gif'
+        : format === 'WEB' || format === 'WEBP' ? 'image/webp'
+          : format === 'BMP' ? 'image/bmp' : null;
+  const mimeType = sniffImageMime(bytes) || normalizeImageMime(declaredMime);
   return mimeType ? { bytes, mimeType, pictureType } : null;
 }
 
 function persistCover(image: EmbeddedImage): Media | null {
   if (!image.bytes.length || image.bytes.length > MAX_TAG_BYTES) return null;
-  const extension = image.mimeType === 'image/png' ? '.png' : image.mimeType === 'image/webp' ? '.webp' : image.mimeType === 'image/gif' ? '.gif' : '.jpg';
+  const extension = imageExtension(image.mimeType);
   const id = `media_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const directory = new Directory(Paths.document, 'media');
-  directory.create({ idempotent: true, intermediates: true });
   const destination = new File(directory, `${id}${extension}`);
-  destination.create({ intermediates: true });
-  destination.write(image.bytes);
-  if (!destination.exists || destination.size <= 0 || !destination.md5) {
-    if (destination.exists) destination.delete();
+  try {
+    directory.create({ idempotent: true, intermediates: true });
+    destination.create({ intermediates: true });
+    destination.write(image.bytes);
+    if (!destination.exists || destination.size <= 0 || !destination.md5) {
+      if (destination.exists) destination.delete();
+      return null;
+    }
+  } catch {
+    try {
+      if (destination.exists) destination.delete();
+    } catch {
+      // Preserve the original persistence failure.
+    }
     return null;
   }
   return {
@@ -480,6 +532,46 @@ function persistCover(image: EmbeddedImage): Media | null {
     originalName: `embedded-cover${extension}`,
     sizeBytes: destination.size,
   };
+}
+
+async function extractNativeCover(audio: Media, sourceUri?: string | null): Promise<Media | null> {
+  const directory = new Directory(Paths.cache, 'music-cover-probes');
+  const operationId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const output = new File(directory, `${operationId}.image`);
+  const cacheDirectoryPath = fileUriPath(directory.uri);
+  let returned: File | null = null;
+  try {
+    directory.create({ idempotent: true, intermediates: true });
+    const probeUris = [audio.localPath, sourceUri].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+    for (const probeUri of probeUris) {
+      const result = await extractMusicCover(probeUri, output.uri);
+      if (!result?.coverPath && !output.exists) continue;
+      const hinted = result?.coverPath ? new File(result.coverPath) : null;
+      returned = hinted?.exists ? hinted : output.exists ? output : hinted;
+      if (!returned?.exists) continue;
+      const persisted = await persistMusicCoverFile(returned, result?.coverMimeType);
+      if (persisted) return persisted;
+      try { if (returned.exists) returned.delete(); } catch { /* best effort */ }
+      returned = null;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    for (const file of [returned, output]) {
+      try {
+        if (file && fileUriPath(file.uri).startsWith(`${cacheDirectoryPath}/`) && file.exists) file.delete();
+      } catch {
+        // Best-effort cleanup; the cache is reclaimed by the platform.
+      }
+    }
+  }
+}
+
+function fileUriPath(uri: string): string {
+  if (!uri.toLowerCase().startsWith('file:')) return uri;
+  const path = decodeURIComponent(uri.replace(/^file:\/+/i, '/'));
+  return path.length > 1 ? path.replace(/\/+$/, '') : path;
 }
 
 function readMp4Box(handle: FileHandle, fileSize: number, offset: number, parentEnd: number): { end: number; headerSize: number; type: string } | null {
@@ -606,9 +698,14 @@ function concatBytes(chunks: Uint8Array[], size: number): Uint8Array {
 }
 
 function normalizeImageMime(value: string | null): string {
-  const normalized = value?.toLowerCase().trim() ?? '';
-  if (normalized === 'image/jpg') return 'image/jpeg';
-  return new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']).has(normalized) ? normalized : '';
+  const normalized = value?.replace(/\0/g, '').split(';', 1)[0].toLowerCase().trim() ?? '';
+  if (normalized === 'image/jpg' || normalized === 'image/pjpeg') return 'image/jpeg';
+  if (normalized === 'image/x-png') return 'image/png';
+  if (normalized === 'image/x-ms-bmp') return 'image/bmp';
+  if (normalized === 'image/heif') return 'image/heic';
+  if (normalized === 'image/x-tiff') return 'image/tiff';
+  if (normalized === 'image/jpx' || normalized === 'image/jpm' || normalized === 'image/jpeg2000') return 'image/jp2';
+  return new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/heic', 'image/avif', 'image/tiff', 'image/jp2']).has(normalized) ? normalized : '';
 }
 
 function sniffImageMime(bytes: Uint8Array): string {
@@ -616,7 +713,44 @@ function sniffImageMime(bytes: Uint8Array): string {
   if (bytes.length >= 8 && bytes[0] === 0x89 && isAscii(bytes, 1, 'PNG')) return 'image/png';
   if (bytes.length >= 12 && isAscii(bytes, 0, 'RIFF') && isAscii(bytes, 8, 'WEBP')) return 'image/webp';
   if (bytes.length >= 6 && (isAscii(bytes, 0, 'GIF87a') || isAscii(bytes, 0, 'GIF89a'))) return 'image/gif';
+  if (bytes.length >= 2 && isAscii(bytes, 0, 'BM')) return 'image/bmp';
+  if (bytes.length >= 8 && isAscii(bytes, 0, 'II*\x00')) return 'image/tiff';
+  if (bytes.length >= 8 && isAscii(bytes, 0, 'MM\x00*')) return 'image/tiff';
+  if (bytes.length >= 4 && (isAscii(bytes, 0, 'II+\x00') || isAscii(bytes, 0, 'MM\x00+'))) return 'image/tiff';
+  if (bytes.length >= 12 && isAscii(bytes, 0, '\x00\x00\x00\x0cjP  \x0d\x0a\x87\x0a')) return 'image/jp2';
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0x4f && bytes[2] === 0xff && bytes[3] === 0x51) return 'image/jp2';
+  if (bytes.length >= 12 && isAscii(bytes, 4, 'ftyp')) {
+    const brand = ascii(bytes, 8, 4);
+    if (new Set(['heic', 'heix', 'heis', 'hevc', 'hevx', 'hevm', 'hevs', 'heim', 'mif1', 'msf1']).has(brand)) return 'image/heic';
+    if (brand === 'avif' || brand === 'avis') return 'image/avif';
+  }
   return '';
+}
+
+function imageExtension(mimeType: string): string {
+  switch (mimeType) {
+    case 'image/png': return '.png';
+    case 'image/webp': return '.webp';
+    case 'image/gif': return '.gif';
+    case 'image/bmp': return '.bmp';
+    case 'image/heic': return '.heic';
+    case 'image/avif': return '.avif';
+    case 'image/tiff': return '.tiff';
+    case 'image/jp2': return '.jp2';
+    default: return '.jpg';
+  }
+}
+
+/**
+ * Ogg-FLAC has a nine-byte mapping header. Most encoders append the native
+ * `fLaC` marker before the first metadata block; accept both layouts because
+ * older muxers omit that marker.
+ */
+function oggFlacMetadataStart(packet: Uint8Array): number {
+  const markerOffset = OGG_FLAC_MAPPING_HEADER_SIZE;
+  return isAscii(packet, markerOffset, 'fLaC')
+    ? markerOffset + OGG_FLAC_NATIVE_MARKER_SIZE
+    : markerOffset;
 }
 
 function isId3Header(bytes: Uint8Array): boolean {

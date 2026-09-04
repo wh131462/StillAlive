@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import type { Media, MusicPlaylist, MusicTrack } from '@still-alive/types';
+import type { Media, MusicPlaylist, MusicQuality, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
-import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
+import { inferMusicQuality, readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import type { AudioFileFormat, AudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
 import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
@@ -23,6 +23,7 @@ import { MusicCover } from './music-cover';
 import { MusicPlayCount } from './music-play-count';
 import { saveMusicCopy } from './music-downloads';
 import { reportMusicImportFailure, reportMusicImportFailures, type MusicImportFailure } from './music-import-coordinator';
+import { QUALITY_OPTIONS, MusicQualityBadge } from './music-quality';
 
 type MusicBoxListItem = { kind: 'search' } | { kind: 'track'; track: MusicTrack };
 
@@ -42,6 +43,7 @@ export default function MusicBoxScreen() {
   const [editingArtist, setEditingArtist] = useState('');
   const [editingAlbum, setEditingAlbum] = useState('');
   const [editingDurationMs, setEditingDurationMs] = useState<number | null>(null);
+  const [editingQuality, setEditingQuality] = useState<MusicQuality | null>(null);
   const [pendingMetadataCover, setPendingMetadataCover] = useState<Media | null>(null);
   const [readingEditMetadata, setReadingEditMetadata] = useState(false);
   const [editMetadataStatus, setEditMetadataStatus] = useState<string | null>(null);
@@ -50,7 +52,12 @@ export default function MusicBoxScreen() {
   const [playlistName, setPlaylistName] = useState('');
   const [showNowPlayingJump, setShowNowPlayingJump] = useState(false);
   const [pendingNowPlayingJump, setPendingNowPlayingJump] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [hiddenBatchTrackIds, setHiddenBatchTrackIds] = useState<Set<string>>(new Set());
   const importingRef = useRef(false);
+  const openingPlayerRef = useRef(false);
   const listRef = useRef<FlatList<MusicBoxListItem>>(null);
   const metadataRequestRef = useRef(0);
   const editMetadataRequestRef = useRef(0);
@@ -58,6 +65,10 @@ export default function MusicBoxScreen() {
   const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discardMediaRef = useRef(discardMedia);
   discardMediaRef.current = discardMedia;
+
+  useFocusEffect(useCallback(() => {
+    openingPlayerRef.current = false;
+  }, []));
 
   useEffect(() => () => {
     editMetadataRequestRef.current += 1;
@@ -67,11 +78,12 @@ export default function MusicBoxScreen() {
     if (jumpTimerRef.current) clearTimeout(jumpTimerRef.current);
   }, []);
   const selfTracks = useMemo(() => orderMusicTracksByCollectionEntries(musicTracks, musicCollectionEntries.filter((entry) => entry.targetType === 'self')), [musicCollectionEntries, musicTracks]);
+  const displayTracks = useMemo(() => selfTracks.filter((track) => !hiddenBatchTrackIds.has(track.id)), [hiddenBatchTrackIds, selfTracks]);
   const visibleTracks = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!query) return selfTracks;
-    return selfTracks.filter((track) => `${track.title} ${track.artist ?? ''} ${track.album ?? ''}`.toLocaleLowerCase().includes(query));
-  }, [search, selfTracks]);
+    if (!query) return displayTracks;
+    return displayTracks.filter((track) => `${track.title} ${track.artist ?? ''} ${track.album ?? ''}`.toLocaleLowerCase().includes(query));
+  }, [displayTracks, search]);
   const listItems = useMemo<MusicBoxListItem[]>(() => [
     { kind: 'search' },
     ...visibleTracks.map((track) => ({ kind: 'track' as const, track })),
@@ -127,6 +139,7 @@ export default function MusicBoxScreen() {
     setEditingArtist(track.artist ?? '');
     setEditingAlbum(track.album ?? '');
     setEditingDurationMs(track.durationMs);
+    setEditingQuality(track.quality);
     setPendingMetadataCover(null);
     setReadingEditMetadata(false);
     setEditMetadataStatus(null);
@@ -172,6 +185,8 @@ export default function MusicBoxScreen() {
       if (embedded.artist) setEditingArtist(embedded.artist);
       if (embedded.album) setEditingAlbum(embedded.album);
       if (fileMetadata?.durationMs !== null && fileMetadata?.durationMs !== undefined) setEditingDurationMs(fileMetadata.durationMs);
+      const inferredQuality = fileMetadata ? inferMusicQuality(fileMetadata.format, fileMetadata.bitrateKbps) : null;
+      if (inferredQuality) setEditingQuality(inferredQuality);
       if (extractedCover) {
         pendingMetadataCoverRef.current = extractedCover;
         setPendingMetadataCover(extractedCover);
@@ -182,6 +197,7 @@ export default function MusicBoxScreen() {
         embedded.artist ? '艺术家' : null,
         embedded.album ? '专辑' : null,
         fileMetadata?.durationMs ? '时长' : null,
+        inferredQuality ? '音质' : null,
         pendingMetadataCoverRef.current ? '封面' : null,
       ].filter((item): item is string => Boolean(item));
       if (!fields.length) {
@@ -201,7 +217,7 @@ export default function MusicBoxScreen() {
     const title = editingTitle.trim();
     if (!editingTrack || !title || readingEditMetadata) return;
     try {
-      await updateMusicTrack({ ...editingTrack, title, artist: editingArtist.trim() || null, album: editingAlbum.trim() || null, durationMs: editingDurationMs, updatedAt: new Date().toISOString() }, pendingMetadataCover ?? undefined);
+      await updateMusicTrack({ ...editingTrack, title, artist: editingArtist.trim() || null, album: editingAlbum.trim() || null, durationMs: editingDurationMs, quality: editingQuality, updatedAt: new Date().toISOString() }, pendingMetadataCover ?? undefined);
       pendingMetadataCoverRef.current = null;
       setPendingMetadataCover(null);
       setEditingTrack(null);
@@ -297,23 +313,128 @@ export default function MusicBoxScreen() {
     ]);
   };
 
-  const playTrack = async (track: MusicTrack) => {
+  const playTrack = (track: MusicTrack) => {
     if (player.currentTrack?.id !== track.id) {
-      await player.playTrack(track.id, visibleTracks.map((item) => item.id), 'self');
+      void player.playTrack(track.id, visibleTracks.map((item) => item.id), 'self');
     }
+    if (openingPlayerRef.current) return;
+    openingPlayerRef.current = true;
     router.push('/music-player' as never);
   };
 
   const playAll = () => {
-    const first = selfTracks[0];
-    if (first) void player.playTrack(first.id, selfTracks.map((track) => track.id), 'self');
+    const first = displayTracks[0];
+    if (first) void player.playTrack(first.id, displayTracks.map((track) => track.id), 'self');
   };
 
   const shuffleAll = async () => {
-    if (!selfTracks.length) return;
+    if (!displayTracks.length) return;
     await player.setMode('shuffle');
-    const first = selfTracks[Math.floor(Math.random() * selfTracks.length)];
-    await player.playTrack(first.id, selfTracks.map((track) => track.id), 'self');
+    const first = displayTracks[Math.floor(Math.random() * displayTracks.length)];
+    await player.playTrack(first.id, displayTracks.map((track) => track.id), 'self');
+  };
+
+  const toggleBatchMode = () => {
+    setBatchMode((current) => !current);
+    setSelectedTrackIds(new Set());
+  };
+
+  const toggleTrackSelection = (trackId: string) => {
+    setSelectedTrackIds((current) => {
+      const next = new Set(current);
+      if (next.has(trackId)) next.delete(trackId);
+      else next.add(trackId);
+      return next;
+    });
+  };
+
+  const selectAllVisibleTracks = () => {
+    setSelectedTrackIds((current) => current.size === visibleTracks.length ? new Set() : new Set(visibleTracks.map((track) => track.id)));
+  };
+
+  const batchReadMetadata = async () => {
+    const tracks = visibleTracks.filter((track) => selectedTrackIds.has(track.id));
+    if (!tracks.length || batchProcessing) return;
+    setBatchProcessing(true);
+    let updatedCount = 0;
+    const failures: string[] = [];
+    try {
+      for (const track of tracks) {
+        const source = media.find((item) => item.id === track.mediaId);
+        if (!source) {
+          failures.push(track.title);
+          continue;
+        }
+        try {
+          const embedded = await readEmbeddedMusicMetadata(source);
+          const fileMetadata = await readAudioFileMetadata(source.localPath).catch(() => null);
+          await updateMusicTrack({
+            ...track,
+            title: embedded.title || track.title,
+            artist: embedded.artist || track.artist,
+            album: embedded.album || track.album,
+            durationMs: fileMetadata?.durationMs ?? track.durationMs,
+            quality: fileMetadata ? inferMusicQuality(fileMetadata.format, fileMetadata.bitrateKbps) ?? track.quality : track.quality,
+            updatedAt: new Date().toISOString(),
+          }, embedded.cover ?? undefined);
+          updatedCount += 1;
+        } catch {
+          failures.push(track.title);
+        }
+      }
+      setBatchMode(false);
+      setSelectedTrackIds(new Set());
+      if (failures.length) {
+        feedback.alert('批量处理完成', `已更新 ${updatedCount} 首，${failures.length} 首失败：\n${failures.map((title) => `· ${title}`).join('\n')}`);
+      } else {
+        feedback.alert('批量处理完成', `已更新 ${updatedCount} 首歌曲的文件元数据。`);
+      }
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const batchDelete = async () => {
+    const tracks = visibleTracks.filter((track) => selectedTrackIds.has(track.id));
+    if (!tracks.length || batchProcessing) return;
+    const deletingIds = new Set(tracks.map((track) => track.id));
+    setHiddenBatchTrackIds((current) => new Set([...current, ...deletingIds]));
+    setBatchMode(false);
+    setSelectedTrackIds(new Set());
+    setBatchProcessing(true);
+    let deletedCount = 0;
+    const failures: string[] = [];
+    try {
+      for (const track of tracks) {
+        try {
+          await deleteMusicTrack(track.id);
+          deletedCount += 1;
+        } catch {
+          failures.push(track.title);
+        }
+      }
+      setHiddenBatchTrackIds((current) => {
+        const next = new Set(current);
+        for (const trackId of deletingIds) next.delete(trackId);
+        return next;
+      });
+      if (failures.length) {
+        feedback.alert('批量删除完成', `已删除 ${deletedCount} 首，${failures.length} 首失败：\n${failures.map((title) => `· ${title}`).join('\n')}`);
+      } else {
+        feedback.alert('批量删除完成', `已永久删除 ${deletedCount} 首歌曲。`);
+      }
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const confirmBatchDelete = () => {
+    const count = selectedTrackIds.size;
+    if (!count || batchProcessing) return;
+    feedback.alert('永久删除所选歌曲？', `将删除 ${count} 首歌曲的本地文件、人物收藏和歌单记录，此操作不可撤销。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '永久删除', style: 'destructive', onPress: () => void batchDelete() },
+    ]);
   };
 
   const createPlaylist = async () => {
@@ -402,9 +523,9 @@ export default function MusicBoxScreen() {
         ListFooterComponent={visibleTracks.length ? null : (
           <View style={styles.empty}>
             <MusicCover size={88} style={styles.emptyCover} />
-            <Text style={styles.emptyTitle}>{selfTracks.length ? '没有找到匹配歌曲' : '音乐盒还是空的'}</Text>
-            <Text style={styles.emptyText}>{selfTracks.length ? '换一个关键词再试试。' : '导入本机音乐，建立你的本地曲库。'}</Text>
-            {!selfTracks.length ? <Pressable disabled={importing} onPress={() => void importMusic()} style={[styles.emptyAction, importing && styles.disabled]}><Text style={styles.emptyActionText}>{importing ? '正在导入' : '导入音乐'}</Text></Pressable> : null}
+            <Text style={styles.emptyTitle}>{displayTracks.length ? '没有找到匹配歌曲' : '音乐盒还是空的'}</Text>
+            <Text style={styles.emptyText}>{displayTracks.length ? '换一个关键词再试试。' : '导入本机音乐，建立你的本地曲库。'}</Text>
+            {!displayTracks.length ? <Pressable disabled={importing} onPress={() => void importMusic()} style={[styles.emptyAction, importing && styles.disabled]}><Text style={styles.emptyActionText}>{importing ? '正在导入' : '导入音乐'}</Text></Pressable> : null}
           </View>
         )}
         ListHeaderComponent={(
@@ -414,7 +535,7 @@ export default function MusicBoxScreen() {
                 eyebrow="本地曲库"
                 icon={<MusicCover size={56} />}
                 subtitle={musicPlaylists.length ? `${musicPlaylists.length} 个歌单，音乐和封面都保存在本机。` : '收好喜欢的声音，按歌单慢慢整理。'}
-                title={`${selfTracks.length} 首音乐`}
+                title={`${displayTracks.length} 首音乐`}
                 trailing={<View style={styles.libraryActions}>
                   <Pressable accessibilityLabel="随机播放" accessibilityRole="button" disabled={!selfTracks.length} onPress={() => void shuffleAll()} style={({ pressed }) => [styles.shuffleAction, !selfTracks.length && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'shuffle', ios: 'shuffle', web: 'shuffle' }} size={19} tintColor={colors.life} type="hierarchical" /></Pressable>
                   <Pressable accessibilityLabel="播放全部" accessibilityRole="button" disabled={!selfTracks.length} onPress={playAll} style={({ pressed }) => [styles.playAction, !selfTracks.length && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'play_arrow', ios: 'play.fill', web: 'play_arrow' }} size={24} tintColor={colors.onLife} type="hierarchical" /></Pressable>
@@ -440,9 +561,13 @@ export default function MusicBoxScreen() {
         renderItem={({ item }) => item.kind === 'search' ? (
           <View style={styles.searchDock}>
             <View style={styles.searchBar}><SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} size={18} tintColor={colors.inkFaint} type="hierarchical" /><TextInput onChangeText={setSearch} placeholder="搜索歌曲、艺术家或专辑" placeholderTextColor={colors.inkFaint} style={styles.searchInput} value={search} />{search ? <Pressable accessibilityLabel="清除搜索" onPress={() => setSearch('')} style={styles.clearSearch}><SymbolView name={{ android: 'cancel', ios: 'xmark.circle.fill', web: 'cancel' }} size={17} tintColor={colors.inkFaint} type="hierarchical" /></Pressable> : null}</View>
-            <View style={styles.listHeader}><Text style={styles.listTitle}>{search ? '搜索结果' : '全部歌曲'}</Text><Text style={styles.listCount}>{visibleTracks.length} 首</Text></View>
+            <View style={styles.listHeader}>
+              <View style={styles.listHeaderTitle}><Text style={styles.listTitle}>{batchMode ? `已选 ${selectedTrackIds.size} 首` : (search ? '搜索结果' : '全部歌曲')}</Text><Text style={styles.listCount}>{visibleTracks.length} 首</Text></View>
+              {batchMode ? <Pressable accessibilityLabel={selectedTrackIds.size === visibleTracks.length ? '取消全选' : '全选当前列表'} accessibilityRole="button" onPress={selectAllVisibleTracks} style={({ pressed }) => [styles.batchTextAction, pressed && styles.pressed]}><Text style={styles.batchTextActionLabel}>{selectedTrackIds.size === visibleTracks.length ? '取消全选' : '全选'}</Text></Pressable> : <Pressable accessibilityLabel="批量处理" accessibilityRole="button" disabled={!visibleTracks.length} onPress={toggleBatchMode} style={({ pressed }) => [styles.batchTextAction, !visibleTracks.length && styles.disabled, pressed && styles.pressed]}><Text style={styles.batchTextActionLabel}>选择</Text></Pressable>}
+            </View>
+            {batchMode ? <View style={styles.batchToolbar}><Text style={styles.batchToolbarSummary}>{selectedTrackIds.size ? `已选择 ${selectedTrackIds.size} 首` : '点击歌曲左侧进行选择'}</Text><View style={styles.batchToolbarActions}><Pressable accessibilityRole="button" disabled={!selectedTrackIds.size || batchProcessing} onPress={() => void batchReadMetadata()} style={({ pressed }) => [styles.batchToolbarButton, (!selectedTrackIds.size || batchProcessing) && styles.disabled, pressed && styles.pressed]}>{batchProcessing ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'auto_fix_high', ios: 'wand.and.stars', web: 'auto_fix_high' }} size={16} tintColor={colors.life} type="hierarchical" />}<Text style={styles.batchToolbarButtonText}>获取元数据</Text></Pressable><Pressable accessibilityRole="button" disabled={!selectedTrackIds.size || batchProcessing} onPress={confirmBatchDelete} style={({ pressed }) => [styles.batchToolbarButton, styles.batchToolbarDelete, (!selectedTrackIds.size || batchProcessing) && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} size={16} tintColor={colors.danger} type="hierarchical" /><Text style={styles.batchToolbarDeleteText}>删除</Text></Pressable><Pressable accessibilityLabel="退出批量处理" accessibilityRole="button" onPress={toggleBatchMode} style={({ pressed }) => [styles.batchTextAction, pressed && styles.pressed]}><Text style={styles.batchTextActionLabel}>完成</Text></Pressable></View></View> : null}
           </View>
-        ) : <TrackRow media={media} selected={player.currentTrack?.id === item.track.id} track={item.track} onMore={() => setActionTrack(item.track)} onPlay={() => void playTrack(item.track)} />}
+        ) : <TrackRow batchMode={batchMode} media={media} selected={player.currentTrack?.id === item.track.id} selectionSelected={selectedTrackIds.has(item.track.id)} track={item.track} onMore={() => setActionTrack(item.track)} onPlay={() => void playTrack(item.track)} onSelect={() => toggleTrackSelection(item.track.id)} />}
         onScroll={(event) => handleListScroll(event.nativeEvent.contentOffset.y)}
         onScrollToIndexFailed={({ averageItemLength, index }) => {
           listRef.current?.scrollToOffset({ animated: true, offset: Math.max(0, averageItemLength * index) });
@@ -454,7 +579,7 @@ export default function MusicBoxScreen() {
         windowSize={7}
       />
 
-      {showNowPlayingJump && player.currentTrack ? <Pressable accessibilityLabel="滚动到正在播放的歌曲" onPress={jumpToNowPlaying} style={({ pressed }) => [styles.nowPlayingJump, { bottom: Math.max(96, insets.bottom + 68) }, pressed && styles.pressed]}><SymbolView name={{ android: 'graphic_eq', ios: 'waveform', web: 'graphic_eq' }} size={17} tintColor={colors.onLife} type="hierarchical" /><Text numberOfLines={1} style={styles.nowPlayingJumpText}>{player.currentTrack.title}</Text></Pressable> : null}
+      {showNowPlayingJump && player.currentTrack ? <Pressable accessibilityHint="跳转到当前正在播放的歌曲" accessibilityLabel="定位正在播放的歌曲" accessibilityRole="button" onPress={jumpToNowPlaying} style={({ pressed }) => [styles.nowPlayingJump, { bottom: Math.max(96, insets.bottom + 68) }, pressed && styles.pressed]}><SymbolView name={{ android: 'my_location', ios: 'location.fill', web: 'my_location' }} size={17} tintColor={colors.onLife} type="hierarchical" /></Pressable> : null}
 
       <DraggableBottomSheet accessibilityLabel="向下拖动关闭菜单" accessibilityRole="menu" backdropStyle={styles.backdrop} onClose={() => setActionTrack(null)} open={Boolean(actionTrack)} sheetStyle={styles.actionSheet}>
               <View style={styles.actionPreview}><Pressable accessibilityHint="打开封面选项" accessibilityLabel="管理歌曲封面" accessibilityRole="button" onPress={() => actionTrack && showTrackCoverActions(actionTrack)} style={({ pressed }) => [styles.previewCoverButton, pressed && styles.previewCoverPressed]}><MusicCover media={media.find((item) => item.id === actionTrack?.coverMediaId)} size={56} style={styles.previewCover} /><View pointerEvents="none" style={styles.previewCoverEdit}><SymbolView name={{ android: 'image', ios: 'photo', web: 'image' }} size={12} tintColor={colors.life} type="hierarchical" /></View></Pressable><View style={styles.previewCopy}><Text numberOfLines={1} style={styles.previewTitle}>{actionTrack?.title}</Text><Text numberOfLines={1} style={styles.previewMeta}>{actionTrack?.artist || '未知艺术家'}{actionTrack?.album ? ` / ${actionTrack.album}` : ''}</Text></View></View>
@@ -496,6 +621,8 @@ export default function MusicBoxScreen() {
               <TextInput maxLength={80} onChangeText={setEditingArtist} placeholder="未知艺术家" placeholderTextColor={colors.inkFaint} returnKeyType="next" style={styles.editInput} value={editingArtist} />
               <Text style={styles.inputLabel}>专辑</Text>
               <TextInput maxLength={80} onChangeText={setEditingAlbum} onSubmitEditing={() => void saveEdit()} placeholder="未收录专辑" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={styles.editInput} value={editingAlbum} />
+              <Text style={styles.inputLabel}>音质标记</Text>
+              <View style={styles.qualityPicker}>{QUALITY_OPTIONS.map((option) => <Pressable key={option.value ?? 'none'} accessibilityRole="radio" accessibilityState={{ selected: editingQuality === option.value }} onPress={() => setEditingQuality(option.value)} style={[styles.qualityOption, editingQuality === option.value && styles.qualityOptionActive]}><Text style={[styles.qualityOptionText, editingQuality === option.value && styles.qualityOptionTextActive]}>{option.label}</Text></Pressable>)}</View>
               <Pressable accessibilityRole="button" disabled={!editingTitle.trim() || readingEditMetadata} onPress={() => void saveEdit()} style={({ pressed }) => [styles.saveEdit, (!editingTitle.trim() || readingEditMetadata) && styles.disabled, pressed && styles.pressed]}><Text style={styles.saveEditText}>保存</Text></Pressable>
       </DraggableBottomSheet>
 
@@ -509,8 +636,8 @@ export default function MusicBoxScreen() {
   );
 }
 
-function TrackRow({ media, selected, track, onMore, onPlay }: { media: Media[]; selected: boolean; track: MusicTrack; onMore(): void; onPlay(): void }) {
-  return <View style={[styles.trackRow, selected && styles.trackRowActive]}>{selected ? <View style={styles.playingRail} /> : null}<Pressable accessibilityRole="button" onPress={onPlay} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={46} style={styles.trackCover} /><View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable><Pressable accessibilityLabel={`管理 ${track.title}`} onPress={onMore} style={styles.moreButton}><VerticalMoreIcon /></Pressable></View>;
+function TrackRow({ batchMode = false, media, selected, selectionSelected, track, onMore, onPlay, onSelect }: { batchMode?: boolean; media: Media[]; selected: boolean; selectionSelected?: boolean; track: MusicTrack; onMore(): void; onPlay(): void; onSelect?(): void }) {
+  return <View style={[styles.trackRow, selected && styles.trackRowActive, batchMode && selectionSelected && styles.trackRowSelected]}>{selected ? <View style={styles.playingRail} /> : null}{batchMode ? <Pressable accessibilityLabel={`${selectionSelected ? '取消选择' : '选择'} ${track.title}`} accessibilityRole="checkbox" accessibilityState={{ checked: Boolean(selectionSelected) }} onPress={onSelect} style={({ pressed }) => [styles.selectionButton, pressed && styles.pressed]}><View style={[styles.selectionBox, selectionSelected && styles.selectionBoxActive]}>{selectionSelected ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={14} tintColor={colors.onLife} type="hierarchical" /> : null}</View></Pressable> : null}<Pressable accessibilityRole="button" disabled={batchMode} onPress={onPlay} style={({ pressed }) => [styles.trackMain, batchMode && styles.trackMainBatch, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={46} style={styles.trackCover} /><View style={styles.trackCopy}><View style={styles.trackTitleRow}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable>{batchMode ? null : <Pressable accessibilityLabel={`管理 ${track.title}`} onPress={onMore} style={styles.moreButton}><VerticalMoreIcon /></Pressable>}</View>;
 }
 
 function TrackFileInfoSheet({ cover, file, loading, metadata, onClose, open, track }: { cover: Media | undefined; file: Media | undefined; loading: boolean; metadata: AudioFileMetadata | null; onClose(): void; open: boolean; track: MusicTrack | null }) {
@@ -666,8 +793,7 @@ const styles = createThemedStyles(() => ({
   playlistEmptyAction: { color: colors.life, fontSize: 12, fontWeight: '700' },
   disabled: { opacity: 0.38 },
   pressed: { opacity: 0.62 },
-  nowPlayingJump: { position: 'absolute', right: spacing.lg, zIndex: 4, maxWidth: 210, minHeight: 40, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: 20, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
-  nowPlayingJumpText: { maxWidth: 150, color: colors.onLife, fontSize: 11, fontWeight: '700' },
+  nowPlayingJump: { position: 'absolute', right: spacing.lg, zIndex: 4, width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
   playlistPickerSheet: { maxHeight: '72%', paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
   playlistPickerTrack: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 11 },
   playlistPickerList: { minHeight: 0, marginTop: spacing.md },
@@ -683,15 +809,31 @@ const styles = createThemedStyles(() => ({
   searchInput: { flex: 1, minHeight: 46, paddingHorizontal: spacing.sm, color: colors.ink, fontSize: 12 },
   clearSearch: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center' },
   listHeader: { minHeight: 50, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  listHeaderTitle: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline' },
   listTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
   listCount: { marginLeft: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 10 },
+  batchTextAction: { minHeight: 36, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center' },
+  batchTextActionLabel: { color: colors.life, fontSize: 11, fontWeight: '700' },
+  batchToolbar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  batchToolbarSummary: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 10 },
+  batchToolbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  batchToolbarButton: { minHeight: 34, paddingHorizontal: spacing.xs, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  batchToolbarButtonText: { color: colors.life, fontSize: 10, fontWeight: '700' },
+  batchToolbarDelete: { marginLeft: spacing.xs },
+  batchToolbarDeleteText: { color: colors.danger, fontSize: 10, fontWeight: '700' },
   trackRow: { minHeight: 70, paddingLeft: spacing.lg, paddingRight: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   trackRowActive: { backgroundColor: colors.lifeLight },
+  trackRowSelected: { backgroundColor: colors.lifeLight },
   playingRail: { position: 'absolute', top: spacing.md, bottom: spacing.md, left: spacing.sm, width: 3, borderRadius: 2, backgroundColor: colors.life },
+  selectionButton: { width: 36, height: 52, alignItems: 'center', justifyContent: 'center' },
+  selectionBox: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.line, borderRadius: 7, backgroundColor: colors.paper },
+  selectionBoxActive: { borderColor: colors.life, backgroundColor: colors.life },
   trackMain: { flex: 1, minWidth: 0, minHeight: 70, flexDirection: 'row', alignItems: 'center' },
+  trackMainBatch: { opacity: 0.98 },
   trackCover: { borderRadius: radius.sm },
   trackCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   trackTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
+  trackTitleRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   trackTitleActive: { color: colors.life },
   trackMetaRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center' },
   trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 11 },
@@ -751,6 +893,11 @@ const styles = createThemedStyles(() => ({
   metadataButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   metadataStatus: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   inputLabel: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta },
+  qualityPicker: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.sm },
+  qualityOption: { minWidth: 72, minHeight: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper },
+  qualityOptionActive: { borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
+  qualityOptionText: { color: colors.inkFaint, fontSize: 11, fontWeight: '700' },
+  qualityOptionTextActive: { color: colors.life },
   editInput: { minHeight: 52, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 14 },
   saveEdit: { minHeight: 52, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   saveEditText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },

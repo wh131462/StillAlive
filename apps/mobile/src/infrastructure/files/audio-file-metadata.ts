@@ -1,5 +1,6 @@
 import { File, FileMode } from 'expo-file-system';
 import type { FileHandle } from 'expo-file-system';
+import type { MusicQuality } from '@still-alive/types';
 
 export type AudioFileFormat = 'AAC' | 'FLAC' | 'M4A' | 'MP3' | 'OGG' | 'WAV';
 
@@ -10,6 +11,11 @@ export interface AudioFileMetadata {
   fileSizeBytes: number | null;
   format: AudioFileFormat | null;
   sampleRateHz: number | null;
+}
+
+export function inferMusicQuality(format: AudioFileFormat | null, bitrateKbps: number | null): MusicQuality | null {
+  if (format === 'FLAC' || format === 'WAV') return 'SQ';
+  return bitrateKbps !== null && Number.isFinite(bitrateKbps) && bitrateKbps >= 256 ? 'HQ' : null;
 }
 
 type ParsedAudioMetadata = Omit<AudioFileMetadata, 'fileSizeBytes'>;

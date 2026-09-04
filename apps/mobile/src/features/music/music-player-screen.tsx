@@ -15,6 +15,7 @@ import { MusicCover } from './music-cover';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { personDisplayName } from '../people/person-profile';
 import { feedback } from '../../shared/feedback';
+import { MusicQualityBadge } from './music-quality';
 
 type QueueSourceControl = MusicQueueSource | 'people';
 
@@ -36,13 +37,24 @@ export default function MusicPlayerScreen() {
   const window = useWindowDimensions();
   const { queue: queueParam } = useLocalSearchParams<{ queue?: string }>();
   const player = useMusicPlayer();
-  const { media } = useAppState();
+  const { media, ready } = useAppState();
   const [queueOpen, setQueueOpen] = useState(queueParam === '1');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenuPosition, setMoreMenuPosition] = useState<{ right: number; top: number }>({ right: spacing.md, top: 60 });
   const [progressWidth, setProgressWidth] = useState(1);
+  const [timerNow, setTimerNow] = useState(() => Date.now());
+  const moreButtonRef = useRef<View>(null);
+  const queueInitialisedKeyRef = useRef<string | null>(null);
   const current = player.currentTrack;
   const duration = player.duration || (current?.durationMs ?? 0) / 1000;
   const progress = duration ? Math.min(1, player.currentTime / duration) : 0;
   const mode = playbackModePresentation(player.mode);
+  const sleepTimerActive = Boolean(player.sleepTimerEndsAt || player.sleepAfterTrack);
+  const sleepTimerStatus = player.sleepAfterTrack
+    ? '播放完当前歌曲后停止'
+    : player.sleepTimerEndsAt
+      ? formatSleepTimerRemaining(player.sleepTimerEndsAt, timerNow)
+      : null;
   const currentQueueIndex = current ? player.queue.findIndex((track) => track.id === current.id) : -1;
   const recordScale = Math.min(
     1,
@@ -55,8 +67,18 @@ export default function MusicPlayerScreen() {
   }, [queueParam]);
 
   useEffect(() => {
-    if (!current && player.queue.length === 0) player.setQueueSource(player.queueSource);
-  }, [current, player.queue.length, player.queueSource, player.setQueueSource]);
+    if (player.sleepTimerEndsAt === null) return;
+    setTimerNow(Date.now());
+    const interval = setInterval(() => setTimerNow(Date.now()), 1_000);
+    return () => clearInterval(interval);
+  }, [player.sleepTimerEndsAt]);
+
+  useEffect(() => {
+    const sourceKey = `${player.queueSource}:${player.queuePersonId ?? ''}:${player.queuePlaylistId ?? ''}`;
+    if (!ready || current || player.queue.length > 0 || queueInitialisedKeyRef.current === sourceKey) return;
+    queueInitialisedKeyRef.current = sourceKey;
+    player.setQueueSource(player.queueSource);
+  }, [current, player.queue.length, player.queuePersonId, player.queuePlaylistId, player.queueSource, player.setQueueSource, ready]);
 
   const selectTrack = (track: MusicTrack) => {
     const sourceId = player.queueSource === 'person' ? player.queuePersonId : player.queueSource === 'playlist' ? player.queuePlaylistId : null;
@@ -72,6 +94,21 @@ export default function MusicPlayerScreen() {
     if (!current) return;
     router.push({ pathname: '/editor', params: { musicTrackId: current.id } });
   };
+
+  const openShare = () => {
+    setMoreOpen(false);
+    shareCurrentTrack();
+  };
+
+  const openSleepTimer = () => {
+    setMoreOpen(false);
+    chooseSleepTimer();
+  };
+
+  const openMore = () => moreButtonRef.current?.measureInWindow((x, y, width, height) => {
+    setMoreMenuPosition({ right: Math.max(spacing.md, window.width - x - width), top: y + height + 4 });
+    setMoreOpen(true);
+  });
 
   const chooseSleepTimer = () => {
     const buttons = [15, 30, 45, 60].map((minutes) => ({
@@ -91,7 +128,7 @@ export default function MusicPlayerScreen() {
       <View style={styles.header}>
         <View style={styles.headerSide}><Pressable accessibilityLabel="最小化播放器" onPress={minimize} style={styles.headerButton}><SymbolView name={{ android: 'keyboard_arrow_down', ios: 'chevron.down', web: 'keyboard_arrow_down' }} size={24} tintColor={colors.inkSoft} type="hierarchical" /></Pressable></View>
         <View style={styles.headerCopy}><Text style={styles.headerTitle}>播放详情</Text><Text numberOfLines={1} style={styles.headerMeta}>{current ? currentQueueIndex >= 0 ? `${currentQueueIndex + 1} / ${player.queue.length}` : '当前曲目' : '未开始播放'}</Text></View>
-        <View style={[styles.headerSide, styles.headerSideRight]}>{current ? <Pressable accessibilityLabel={`分享到空间：${current.title}`} accessibilityRole="button" onPress={shareCurrentTrack} style={styles.headerButton}><SymbolView name={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} size={21} tintColor={colors.life} type="hierarchical" /></Pressable> : null}</View>
+        <View style={[styles.headerSide, styles.headerSideRight]}>{current ? <View collapsable={false} ref={moreButtonRef}><Pressable accessibilityLabel="更多播放操作" accessibilityRole="button" onPress={openMore} style={styles.headerButton}><VerticalMoreIcon /></Pressable></View> : null}</View>
       </View>
 
       {current ? (
@@ -120,10 +157,7 @@ export default function MusicPlayerScreen() {
             </View>
             <View style={styles.statusActions}>
               <Text style={styles.modeLabel}>{mode.label}</Text>
-              <Pressable accessibilityLabel="定时停止播放" onPress={chooseSleepTimer} style={({ pressed }) => [styles.sleepTimer, pressed && styles.pressed]}>
-                <SymbolView name={{ android: 'timer', ios: 'timer', web: 'timer' }} size={15} tintColor={player.sleepTimerEndsAt ? colors.life : colors.inkFaint} type="hierarchical" />
-                <Text style={[styles.sleepTimerText, Boolean(player.sleepTimerEndsAt || player.sleepAfterTrack) && styles.sleepTimerTextActive]}>{player.sleepAfterTrack ? '播放后停止' : player.sleepTimerEndsAt ? '定时已开启' : '定时停止'}</Text>
-              </Pressable>
+              {sleepTimerActive && sleepTimerStatus ? <Pressable accessibilityLabel={`定时停止：${sleepTimerStatus}`} onPress={chooseSleepTimer} style={({ pressed }) => [styles.sleepTimer, styles.sleepTimerActive, pressed && styles.pressed]}><SymbolView name={{ android: 'timer', ios: 'timer', web: 'timer' }} size={15} tintColor={colors.life} type="hierarchical" /><Text style={styles.sleepTimerTextActive}>{sleepTimerStatus}</Text></Pressable> : null}
             </View>
           </View>
         </View>
@@ -136,6 +170,13 @@ export default function MusicPlayerScreen() {
         </View>
       )}
 
+      {moreOpen ? <>
+        <Pressable accessibilityLabel="关闭更多播放操作" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} />
+        <View accessibilityLabel="更多播放操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}>
+          <MoreMenuItem icon={{ android: 'share', ios: 'square.and.arrow.up', web: 'share' }} label="分享到空间" onPress={openShare} />
+          <MoreMenuItem icon={{ android: 'timer', ios: 'timer', web: 'timer' }} label={sleepTimerActive && sleepTimerStatus ? sleepTimerStatus : '定时停止播放'} onPress={openSleepTimer} />
+        </View>
+      </> : null}
       <QueueSheet currentTrackId={current?.id ?? null} onClose={() => setQueueOpen(false)} onSelect={selectTrack} open={queueOpen} />
     </SafeAreaView>
   );
@@ -232,7 +273,7 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
                   const selected = source.id === 'people' ? player.queueSource === 'person' : player.queueSource === source.id;
                   return <Pressable key={source.id} accessibilityState={{ selected }} onPress={() => selectSource(source.id)} style={[styles.source, selected && styles.sourceActive]}><Text style={[styles.sourceText, selected && styles.sourceTextActive]}>{source.label}</Text></Pressable>;
                 })}</View>
-                <ScrollView contentContainerStyle={styles.queueContent} style={styles.queueList}>{player.queue.map((track, index) => <Pressable key={track.id} onPress={() => onSelect(track)} style={({ pressed }) => [styles.queueRow, pressed && styles.pressed]}><View style={styles.queueState}><Text style={styles.queueIndex}>{index + 1}</Text></View><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={42} style={styles.queueCover} /><View style={styles.queueCopy}><Text numberOfLines={1} style={[styles.queueTrackTitle, track.id === currentTrackId && styles.queueTrackTitleActive]}>{track.title}</Text><Text numberOfLines={1} style={styles.queueTrackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>)}{player.queue.length === 0 ? <View style={styles.queueEmpty}><Text style={styles.emptyText}>当前来源没有音乐</Text></View> : null}</ScrollView>
+                <ScrollView contentContainerStyle={styles.queueContent} style={styles.queueList}>{player.queue.map((track, index) => <Pressable key={track.id} onPress={() => onSelect(track)} style={({ pressed }) => [styles.queueRow, pressed && styles.pressed]}><View style={styles.queueState}><Text style={styles.queueIndex}>{index + 1}</Text></View><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={42} style={styles.queueCover} /><View style={styles.queueCopy}><View style={styles.queueTrackTitleRow}><Text numberOfLines={1} style={[styles.queueTrackTitle, track.id === currentTrackId && styles.queueTrackTitleActive]}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><Text numberOfLines={1} style={styles.queueTrackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>)}{player.queue.length === 0 ? <View style={styles.queueEmpty}><Text style={styles.emptyText}>当前来源没有音乐</Text></View> : null}</ScrollView>
               </>
             )}
     </DraggableBottomSheet>
@@ -335,6 +376,20 @@ function formatTime(value: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+function formatSleepTimerRemaining(endsAt: number, now: number): string {
+  const remainingSeconds = Math.max(0, Math.ceil((endsAt - now) / 1_000));
+  if (remainingSeconds < 60) return '不足 1 分钟';
+  return `剩余 ${Math.ceil(remainingSeconds / 60)} 分钟`;
+}
+
+function MoreMenuItem({ icon, label, onPress }: { icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void }) {
+  return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}><SymbolView name={icon} size={18} tintColor={colors.ink} type="hierarchical" /><Text style={styles.menuItemText}>{label}</Text></Pressable>;
+}
+
+function VerticalMoreIcon() {
+  return <View pointerEvents="none" style={styles.moreIcon}>{[0, 1, 2].map((item) => <View key={item} style={styles.moreDot} />)}</View>;
+}
+
 const styles = createThemedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.paper },
   header: { minHeight: 58, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
@@ -344,6 +399,8 @@ const styles = createThemedStyles(() => ({
   headerCopy: { flex: 1, alignItems: 'center' },
   headerTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
   headerMeta: { marginTop: 2, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  moreIcon: { width: 4, height: 17, alignItems: 'center', justifyContent: 'space-between' },
+  moreDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.inkSoft },
   playerBody: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, alignItems: 'center' },
   recordArea: { flex: 1, minHeight: 218, width: '100%', alignItems: 'center', justifyContent: 'center' },
   recordViewport: { alignItems: 'center', justifyContent: 'center' },
@@ -387,8 +444,12 @@ const styles = createThemedStyles(() => ({
   statusActions: { minHeight: 30, marginTop: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   modeLabel: { color: colors.inkFaint, fontSize: 10 },
   sleepTimer: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  sleepTimerText: { color: colors.inkFaint, fontSize: 10 },
-  sleepTimerTextActive: { color: colors.life, fontWeight: '700' },
+  sleepTimerActive: { paddingHorizontal: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  sleepTimerTextActive: { color: colors.life, fontSize: 10, fontWeight: '700' },
+  menuBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 5 },
+  moreMenu: { position: 'absolute', zIndex: 6, minWidth: 170, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
+  menuItem: { minHeight: 46, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  menuItemText: { color: colors.ink, fontSize: 11, fontWeight: '700' },
   pressed: { opacity: 0.58 },
   error: { width: '100%', minHeight: 42, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.sm, backgroundColor: colors.dangerLight },
   errorText: { flex: 1, color: colors.danger, fontSize: 10 },
@@ -425,6 +486,7 @@ const styles = createThemedStyles(() => ({
   queueCover: { marginRight: spacing.sm, borderRadius: radius.sm },
   queueCopy: { flex: 1, minWidth: 0, paddingRight: spacing.md },
   queueTrackTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' },
+  queueTrackTitleRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   queueTrackTitleActive: { color: colors.life },
   queueTrackMeta: { marginTop: 4, color: colors.inkFaint, fontSize: 9 },
   queueEmpty: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },

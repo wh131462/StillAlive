@@ -40,7 +40,7 @@ pub fn dec_init(
     dec.ok_or_else(|| errors.join(", ").into())
 }
 
-fn write_id3_tags(
+pub(crate) fn write_id3_tags(
     infile: Bytes,
     metadata: Option<Box<dyn algo::AudioMeta>>,
     cover: Option<Bytes>,
@@ -51,7 +51,9 @@ fn write_id3_tags(
         return Ok(infile);
     }
     let mut infile_reader = std::io::Cursor::new(infile.clone());
-    let mut tags = id3::Tag::read_from2(&mut infile_reader)?;
+    // Decoded streams commonly have no ID3 header yet. In that case create a
+    // fresh tag instead of dropping the decoder-provided cover/metadata.
+    let mut tags = id3::Tag::read_from2(&mut infile_reader).unwrap_or_else(|_| id3::Tag::new());
 
     tags.remove_comment(None, None);
     if let Some(meta) = metadata {
@@ -74,15 +76,22 @@ fn write_id3_tags(
     Ok(writer.into_inner().into())
 }
 
-pub fn get_result(mut dec: Box<dyn algo::Decoder>, filename: Option<&str>) -> DecoderResult<Bytes> {
+pub fn get_result_with_cover(
+    mut dec: Box<dyn algo::Decoder>,
+    filename: Option<&str>,
+) -> DecoderResult<(Bytes, Option<Bytes>)> {
     let decoded_bytes = dec.decode_bytes()?;
-    match super::sniff::audio_extension_with_fallback(&decoded_bytes, String::new()).as_str() {
-        ".mp3" | ".wav" => {
-            let cover = match dec.get_cover_image() {
-                Some(Ok(c)) => Some(c),
-                Some(Err(e)) => return Err(e),
-                None => None,
-            };
+    let cover = match dec.get_cover_image() {
+        Some(Ok(c)) if !c.is_empty() => Some(c),
+        Some(Ok(_)) => None,
+        Some(Err(e)) => return Err(e),
+        None => None,
+    };
+    let result = match super::sniff::audio_extension_with_fallback(&decoded_bytes, String::new()).as_str() {
+        // ID3 is a valid prefix for MPEG audio. Prepending it to a RIFF/WAV
+        // stream would move the `RIFF` signature and make the decoded file
+        // unreadable, so WAV artwork is kept in the sidecar returned below.
+        ".mp3" => {
             let mut metadata = match dec.get_audio_meta() {
                 Some(Ok(meta)) => Some(meta),
                 Some(Err(e)) => return Err(e),
@@ -93,8 +102,13 @@ pub fn get_result(mut dec: Box<dyn algo::Decoder>, filename: Option<&str>) -> De
                     super::super::algo::common::meta::parse_filename_meta(filename.unwrap()),
                 ));
             }
-            write_id3_tags(decoded_bytes.freeze(), metadata, cover)
+            write_id3_tags(decoded_bytes.freeze(), metadata, cover.clone())?
         }
-        _ => Ok(decoded_bytes.freeze()),
-    }
+        _ => decoded_bytes.freeze(),
+    };
+    Ok((result, cover))
+}
+
+pub fn get_result(dec: Box<dyn algo::Decoder>, filename: Option<&str>) -> DecoderResult<Bytes> {
+    Ok(get_result_with_cover(dec, filename)?.0)
 }

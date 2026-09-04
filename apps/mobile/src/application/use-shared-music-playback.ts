@@ -12,7 +12,7 @@ export function useSharedMusicPlayback(): (track: MusicTrack) => Promise<void> {
     const mediaIds = new Set(media.map((item) => item.id));
     const queueTrackIds = musicTracks.filter((item) => mediaIds.has(item.mediaId)).map((item) => item.id);
     if (!queueTrackIds.includes(track.id)) return;
-    await player.playTrack(track.id, queueTrackIds, 'all');
+    void player.playTrack(track.id, queueTrackIds, 'all');
     router.push('/music-player' as never);
   }, [media, musicTracks, player, router]);
 }

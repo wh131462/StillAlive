@@ -129,17 +129,36 @@ pub fn image_mime(header: &[u8]) -> Option<String> {
     if PrefixSniffer(vec![0xFF, 0xD8, 0xFF]).sniff(header) {
         return Some("image/jpeg".to_string());
     }
-    if PrefixSniffer(vec![b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n']).sniff(header) {
+    if PrefixSniffer(vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n']).sniff(header) {
         return Some("image/png".to_string());
     }
     if PrefixSniffer(b"BM".to_vec()).sniff(header) {
         return Some("image/bmp".to_string());
     }
-    if PrefixSniffer(b"RIFF".to_vec()).sniff(header) {
+    if header.len() >= 12
+        && PrefixSniffer(b"RIFF".to_vec()).sniff(header)
+        && &header[8..12] == b"WEBP"
+    {
         return Some("image/webp".to_string());
     }
     if PrefixSniffer(b"GIF8".to_vec()).sniff(header) {
         return Some("image/gif".to_string());
+    }
+    if header.len() >= 4
+        && ((&header[0..4] == b"II*\0")
+            || (&header[0..4] == b"MM\0*")
+            || (&header[0..4] == b"II+\0")
+            || (&header[0..4] == b"MM\0+"))
+    {
+        return Some("image/tiff".to_string());
+    }
+    if (header.len() >= 12 && &header[0..12] == b"\0\0\0\x0cjP  \r\n\x87\n")
+        || (header.len() >= 4 && &header[0..4] == [0xff, 0x4f, 0xff, 0x51])
+    {
+        return Some("image/jp2".to_string());
+    }
+    if let Some(mime) = iso_image_mime(header) {
+        return Some(mime.to_string());
     }
     None
 }
@@ -148,17 +167,65 @@ pub fn image_extension(header: &[u8]) -> Option<String> {
     if PrefixSniffer(vec![0xFF, 0xD8, 0xFF]).sniff(header) {
         return Some(".jpg".to_string());
     }
-    if PrefixSniffer(vec![b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n']).sniff(header) {
+    if PrefixSniffer(vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1A, b'\n']).sniff(header) {
         return Some(".png".to_string());
     }
     if PrefixSniffer(b"BM".to_vec()).sniff(header) {
         return Some(".bmp".to_string());
     }
-    if PrefixSniffer(b"RIFF".to_vec()).sniff(header) {
+    if header.len() >= 12
+        && PrefixSniffer(b"RIFF".to_vec()).sniff(header)
+        && &header[8..12] == b"WEBP"
+    {
         return Some(".webp".to_string());
     }
     if PrefixSniffer(b"GIF8".to_vec()).sniff(header) {
         return Some(".gif".to_string());
+    }
+    if header.len() >= 4
+        && ((&header[0..4] == b"II*\0")
+            || (&header[0..4] == b"MM\0*")
+            || (&header[0..4] == b"II+\0")
+            || (&header[0..4] == b"MM\0+"))
+    {
+        return Some(".tiff".to_string());
+    }
+    if (header.len() >= 12 && &header[0..12] == b"\0\0\0\x0cjP  \r\n\x87\n")
+        || (header.len() >= 4 && &header[0..4] == [0xff, 0x4f, 0xff, 0x51])
+    {
+        return Some(".jp2".to_string());
+    }
+    if let Some(mime) = iso_image_mime(header) {
+        return Some(if mime == "image/avif" {
+            ".avif".to_string()
+        } else {
+            ".heic".to_string()
+        });
+    }
+    None
+}
+
+fn iso_image_mime(header: &[u8]) -> Option<&'static str> {
+    if header.len() < 12 || &header[4..8] != b"ftyp" {
+        return None;
+    }
+    let declared_size = u32::from_be_bytes(header[0..4].try_into().ok()?) as usize;
+    let end = if declared_size >= 16 && declared_size <= header.len() {
+        declared_size
+    } else {
+        header.len()
+    };
+    for brand in header[8..end].chunks_exact(4) {
+        if matches!(
+            brand,
+            b"heic" | b"heix" | b"heis" | b"hevc" | b"hevx" | b"hevm" | b"hevs" | b"heim"
+                | b"mif1" | b"msf1"
+        ) {
+            return Some("image/heic");
+        }
+        if matches!(brand, b"avif" | b"avis") {
+            return Some("image/avif");
+        }
     }
     None
 }
@@ -188,5 +255,36 @@ mod tests {
             Some(".wav".to_string())
         );
         assert_eq!(audio_extension(b"RIFF\x00\x00\x00\x00AVI "), None);
+    }
+
+    #[test]
+    fn only_treats_webp_riff_containers_as_webp() {
+        assert_eq!(image_mime(b"RIFF\x00\x00\x00\x00WEBPVP8 "), Some("image/webp".to_string()));
+        assert_eq!(image_extension(b"RIFF\x00\x00\x00\x00WAVEfmt "), None);
+    }
+
+    #[test]
+    fn recognizes_png_signature() {
+        let png = b"\x89PNG\r\n\x1a\n";
+        assert_eq!(image_mime(png), Some("image/png".to_string()));
+        assert_eq!(image_extension(png), Some(".png".to_string()));
+    }
+
+    #[test]
+    fn recognizes_extended_image_signatures() {
+        assert_eq!(image_mime(b"II*\0"), Some("image/tiff".to_string()));
+        assert_eq!(image_extension(b"MM\0*"), Some(".tiff".to_string()));
+        assert_eq!(
+            image_mime(b"\0\0\0\x0cjP  \r\n\x87\n"),
+            Some("image/jp2".to_string())
+        );
+        assert_eq!(
+            image_extension(b"\0\0\0\x18ftypavif\0\0\0\0avif"),
+            Some(".avif".to_string())
+        );
+        assert_eq!(
+            image_mime(b"\0\0\0\x18ftypmif1\0\0\0\0heic"),
+            Some("image/heic".to_string())
+        );
     }
 }

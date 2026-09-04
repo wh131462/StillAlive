@@ -13,6 +13,7 @@ import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/to
 import { orderMusicTracksByCollectionEntries } from './music-library';
 import { MusicCover } from './music-cover';
 import { MusicPlayCount } from './music-play-count';
+import { MusicQualityBadge } from './music-quality';
 import { reportMusicImportFailure } from './music-import-coordinator';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { personDisplayName } from '../people/person-profile';
@@ -79,7 +80,7 @@ export default function PersonMusicScreen() {
           <View key={track.id} style={styles.trackRow}>
             <Pressable accessibilityRole="button" onPress={() => void playTrack(track.id)} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}>
               <MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={44} style={styles.trackCover} />
-              <View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, player.currentTrack?.id === track.id && styles.trackTitleActive]}>{track.title}</Text><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View>
+              <View style={styles.trackCopy}><View style={styles.trackTitleRow}><Text numberOfLines={1} style={[styles.trackTitle, player.currentTrack?.id === track.id && styles.trackTitleActive]}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View>
             </Pressable>
             <Pressable accessibilityLabel={`从喜欢的音乐中移除 ${track.title}`} onPress={() => person && void removeMusicCollectionEntry(track.id, 'person', person.id)} style={styles.removeButton}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={19} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
           </View>
@@ -90,7 +91,7 @@ export default function PersonMusicScreen() {
             <Text style={styles.sheetTitle}>添加喜欢的音乐</Text>
             <Text style={styles.sheetHint}>可连续选择多首音乐</Text>
             <Pressable disabled={importing} onPress={() => void importMusic()} style={({ pressed }) => [styles.importButton, importing && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'upload_file', ios: 'square.and.arrow.down', web: 'upload_file' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.importText}>{importing ? '正在导入' : '导入新音乐'}</Text></Pressable>
-            <ScrollView style={styles.musicList}>{availableTracks.map((track) => <Pressable key={track.id} onPress={() => void addExistingMusic(track.id)} style={({ pressed }) => [styles.musicChoice, pressed && styles.pressed]}><View style={styles.trackCopy}><Text numberOfLines={1} style={styles.trackTitle}>{track.title}</Text><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /></Pressable>)}{availableTracks.length === 0 ? <Text style={styles.musicEmpty}>音乐盒中没有可添加的其他音乐</Text> : null}</ScrollView>
+            <ScrollView style={styles.musicList}>{availableTracks.map((track) => <Pressable key={track.id} accessibilityRole="button" onPress={() => void addExistingMusic(track.id)} style={({ pressed }) => [styles.musicChoice, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={46} style={styles.musicChoiceCover} /><View style={styles.musicChoiceCopy}><View style={styles.trackTitleRow}><Text numberOfLines={1} style={styles.trackTitle}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View><View style={styles.musicChoiceAction}><SymbolView name={{ android: 'add', ios: 'plus', web: 'add' }} size={18} tintColor={colors.life} type="hierarchical" /></View></Pressable>)}{availableTracks.length === 0 ? <Text style={styles.musicEmpty}>音乐盒中没有可添加的其他音乐</Text> : null}</ScrollView>
       </DraggableBottomSheet>
     </SafeAreaView>
   );
@@ -106,9 +107,10 @@ const styles = createThemedStyles(() => ({
   trackCover: { borderRadius: radius.sm },
   trackCopy: { flex: 1, minWidth: 0, marginLeft: spacing.sm },
   trackTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
+  trackTitleRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   trackTitleActive: { color: colors.life },
   trackMetaRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center' },
-  trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 10 },
+  trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 11 },
   removeButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   empty: { marginTop: spacing.xl, paddingVertical: spacing.xxl, alignItems: 'center' },
   emptyCover: { marginBottom: spacing.sm, borderRadius: 48 },
@@ -123,7 +125,10 @@ const styles = createThemedStyles(() => ({
   importButton: { minHeight: 52, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, backgroundColor: colors.lifeLight },
   importText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   musicList: { marginTop: spacing.sm },
-  musicChoice: { minHeight: 58, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  musicChoice: { minHeight: 70, paddingRight: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  musicChoiceCover: { borderRadius: radius.sm },
+  musicChoiceCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
+  musicChoiceAction: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   musicEmpty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontSize: 10, textAlign: 'center' },
   disabled: { opacity: 0.38 },
   pressed: { opacity: 0.62 },

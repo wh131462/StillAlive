@@ -31,6 +31,10 @@ fn main() {
             value.to_string_lossy().into_owned()
         });
     fs::write(&output, &unlocked.bytes).expect("write output");
+    eprintln!("cover={} mime={:?}", unlocked.cover.as_ref().map(|v| v.len()).unwrap_or(0), unlocked.metadata.cover_mime_type);
+    if let Some(cover) = unlocked.cover.as_ref() {
+        fs::write(format!("{output}.cover.bin"), cover).expect("write cover");
+    }
     println!(
         "{} {} {}",
         unlocked.metadata.extension, unlocked.metadata.size_bytes, output

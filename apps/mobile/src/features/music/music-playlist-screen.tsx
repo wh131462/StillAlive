@@ -1,13 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import type { Media, MusicTrack } from '@still-alive/types';
+import type { Media, MusicQuality, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
@@ -17,6 +17,11 @@ import { orderMusicTracksByCollectionEntries } from './music-library';
 import { useMusicPlayer } from './music-player-state';
 import { MusicCover } from './music-cover';
 import { MusicPlayCount } from './music-play-count';
+import { MusicQualityBadge } from './music-quality';
+import { QUALITY_OPTIONS } from './music-quality';
+import { inferMusicQuality, readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
+import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
+import { saveMusicCopy } from './music-downloads';
 import { reportMusicImportFailure, reportMusicImportFailures, type MusicImportFailure } from './music-import-coordinator';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 
@@ -24,7 +29,7 @@ export default function MusicPlaylistScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { addMusicTracksToPlaylist, deleteMusicPlaylist, discardMedia, importMusicTrack, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, removeMusicTrackFromPlaylist, renameMusicPlaylist, setMusicPlaylistCover } = useAppState();
+  const { addMusicTracksToPlaylist, deleteMusicPlaylist, discardMedia, importMusicTrack, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, removeMusicTrackFromPlaylist, renameMusicPlaylist, setMusicPlaylistCover, setMusicTrackCover, updateMusicTrack } = useAppState();
   const player = useMusicPlayer();
   const [manageVisible, setManageVisible] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -32,6 +37,15 @@ export default function MusicPlaylistScreen() {
   const [importing, setImporting] = useState(false);
   const [playlistName, setPlaylistName] = useState('');
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [actionTrack, setActionTrack] = useState<MusicTrack | null>(null);
+  const [editingTrack, setEditingTrack] = useState<MusicTrack | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingArtist, setEditingArtist] = useState('');
+  const [editingAlbum, setEditingAlbum] = useState('');
+  const [editingDurationMs, setEditingDurationMs] = useState<number | null>(null);
+  const [editingQuality, setEditingQuality] = useState<MusicQuality | null>(null);
+  const [pendingCover, setPendingCover] = useState<Media | null>(null);
+  const [readingMetadata, setReadingMetadata] = useState(false);
   const importingRef = useRef(false);
   const playlist = musicPlaylists.find((item) => item.id === id);
   const tracks = useMemo(() => {
@@ -44,14 +58,15 @@ export default function MusicPlaylistScreen() {
   const selfTracks = useMemo(() => orderMusicTracksByCollectionEntries(musicTracks, musicCollectionEntries.filter((entry) => entry.targetType === 'self')), [musicCollectionEntries, musicTracks]);
   const trackIds = useMemo(() => new Set(tracks.map((track) => track.id)), [tracks]);
   const availableTracks = useMemo(() => selfTracks.filter((track) => !trackIds.has(track.id)), [selfTracks, trackIds]);
+  const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
 
-  const playTrack = async (track: MusicTrack) => {
+  const playTrack = useCallback(async (track: MusicTrack) => {
     if (!playlist) return;
     if (player.currentTrack?.id !== track.id) {
       await player.playTrack(track.id, tracks.map((item) => item.id), 'playlist', playlist.id);
     }
     router.push('/music-player' as never);
-  };
+  }, [playlist, player.currentTrack?.id, player.playTrack, router, tracks]);
 
   const playAll = () => {
     if (playlist && tracks[0]) void player.playTrack(tracks[0].id, tracks.map((track) => track.id), 'playlist', playlist.id);
@@ -69,14 +84,14 @@ export default function MusicPlaylistScreen() {
     setPickerVisible(true);
   };
 
-  const toggleSelectedTrack = (trackId: string) => {
+  const toggleSelectedTrack = useCallback((trackId: string) => {
     setSelectedTrackIds((current) => {
       const next = new Set(current);
       if (next.has(trackId)) next.delete(trackId);
       else next.add(trackId);
       return next;
     });
-  };
+  }, []);
 
   const addSelectedTracks = async () => {
     if (!playlist || !selectedTrackIds.size) return;
@@ -191,6 +206,47 @@ export default function MusicPlaylistScreen() {
     ]);
   };
 
+  const editTrack = (track: MusicTrack) => {
+    setActionTrack(null); setEditingTrack(track); setEditingTitle(track.title); setEditingArtist(track.artist ?? ''); setEditingAlbum(track.album ?? ''); setEditingDurationMs(track.durationMs); setEditingQuality(track.quality);
+  };
+
+  const readTrackMetadata = async () => {
+    if (!editingTrack || readingMetadata) return;
+    const source = media.find((item) => item.id === editingTrack.mediaId);
+    if (!source) return;
+    setReadingMetadata(true);
+    try {
+      const embedded = await readEmbeddedMusicMetadata(source);
+      const technical = await readAudioFileMetadata(source.localPath).catch(() => null);
+      if (embedded.title) setEditingTitle(embedded.title);
+      if (embedded.artist) setEditingArtist(embedded.artist);
+      if (embedded.album) setEditingAlbum(embedded.album);
+      if (technical?.durationMs !== null && technical?.durationMs !== undefined) setEditingDurationMs(technical.durationMs);
+      if (technical) setEditingQuality(inferMusicQuality(technical.format, technical.bitrateKbps));
+      if (embedded.cover) { if (pendingCover) await discardMedia(pendingCover).catch(() => undefined); setPendingCover(embedded.cover); }
+    } catch (cause) { feedback.alert('元数据读取失败', cause instanceof Error ? cause.message : '请稍后重试。'); }
+    finally { setReadingMetadata(false); }
+  };
+
+  const saveTrackEdit = async () => {
+    if (!editingTrack || !editingTitle.trim()) return;
+    try {
+      await updateMusicTrack({ ...editingTrack, title: editingTitle.trim(), artist: editingArtist.trim() || null, album: editingAlbum.trim() || null, durationMs: editingDurationMs, quality: editingQuality, updatedAt: new Date().toISOString() }, pendingCover ?? undefined);
+      setPendingCover(null); setEditingTrack(null);
+    } catch (cause) { feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。'); }
+  };
+
+  const showTrackCoverActions = (track: MusicTrack) => {
+    setActionTrack(null);
+    feedback.alert('歌曲封面', undefined, [
+      { text: '更换封面', onPress: async () => { const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 }); if (!result.canceled && result.assets[0]) { const item = await persistPickedImage(result.assets[0]); await setMusicTrackCover(track.id, item).catch(async (cause) => { await discardMedia(item).catch(() => undefined); feedback.alert('封面保存失败', cause instanceof Error ? cause.message : '请稍后重试。'); }); } } },
+      ...(track.coverMediaId ? [{ text: '恢复默认封面', style: 'destructive' as const, onPress: () => void setMusicTrackCover(track.id, null) }] : []),
+      { text: '取消', style: 'cancel' },
+    ]);
+  };
+
+  const showTrackActions = useCallback((track: MusicTrack) => setActionTrack(track), []);
+
   if (!playlist) return (
     <SafeAreaView style={styles.safe}>
       <ToolPageHeader onBack={() => router.back()} title="歌单" />
@@ -209,13 +265,33 @@ export default function MusicPlaylistScreen() {
           <Pressable disabled={!tracks.length} onPress={() => void shuffleAll()} style={({ pressed }) => [styles.shuffle, !tracks.length && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'shuffle', ios: 'shuffle', web: 'shuffle' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.shuffleText}>随机播放</Text></Pressable>
         </View>
         <View style={styles.listHeader}><View style={styles.listTitleRow}><Text style={styles.listTitle}>歌曲</Text><Text style={styles.listCount}>{tracks.length}</Text></View><Pressable accessibilityLabel="添加歌曲" onPress={openPicker} style={styles.addButton}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={21} tintColor={colors.life} type="hierarchical" /></Pressable></View>
-        {tracks.length ? tracks.map((track) => <TrackRow key={track.id} media={media} selected={player.currentTrack?.id === track.id} track={track} onPlay={() => void playTrack(track)} onRemove={() => confirmRemoveTrack(track)} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>歌单还没有歌曲</Text><Text style={styles.emptyText}>从音乐盒或本地文件添加歌曲。</Text><Pressable accessibilityRole="button" onPress={openPicker} style={({ pressed }) => [styles.emptyAction, pressed && styles.emptyActionPressed]}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.emptyActionText}>添加歌曲</Text></Pressable></View>}
+        {tracks.length ? tracks.map((track) => <TrackRow key={track.id} media={media} selected={player.currentTrack?.id === track.id} track={track} onPlay={playTrack} onMore={showTrackActions} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>歌单还没有歌曲</Text><Text style={styles.emptyText}>从音乐盒或本地文件添加歌曲。</Text><Pressable accessibilityRole="button" onPress={openPicker} style={({ pressed }) => [styles.emptyAction, pressed && styles.emptyActionPressed]}><SymbolView name={{ android: 'playlist_add', ios: 'text.badge.plus', web: 'playlist_add' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.emptyActionText}>添加歌曲</Text></Pressable></View>}
       </ScrollView>
+
+      <DraggableBottomSheet accessibilityRole="menu" onClose={() => setActionTrack(null)} open={Boolean(actionTrack)} sheetStyle={styles.actionSheet}>
+        <View style={styles.actionPreview}><MusicCover media={media.find((item) => item.id === actionTrack?.coverMediaId)} size={56} /><View style={styles.previewCopy}><Text numberOfLines={1} style={styles.previewTitle}>{actionTrack?.title}</Text><Text numberOfLines={1} style={styles.previewMeta}>{actionTrack?.artist || '未知艺术家'}{actionTrack?.album ? ` / ${actionTrack.album}` : ''}</Text></View></View>
+        <ActionOption icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑歌曲信息" onPress={() => actionTrack && editTrack(actionTrack)} />
+        <ActionOption icon={{ android: 'info', ios: 'info.circle', web: 'info' }} label="文件信息" onPress={() => actionTrack && feedback.alert('文件信息', `歌曲：${actionTrack.title}\n时长：${formatDuration(actionTrack.durationMs)}`)} />
+        <ActionOption icon={{ android: 'download', ios: 'arrow.down.to.line', web: 'download' }} label="下载" onPress={() => { const track = actionTrack; setActionTrack(null); if (track) { const source = media.find((item) => item.id === track.mediaId); if (source) void saveMusicCopy(source, track.title).then((result) => result && feedback.alert('下载完成', `已另存为“${result.fileName}”。`)).catch((cause) => feedback.alert('下载失败', cause instanceof Error ? cause.message : '请稍后重试。')); } }} />
+        <ActionOption icon={{ android: 'image', ios: 'photo', web: 'image' }} label="管理歌曲封面" onPress={() => actionTrack && showTrackCoverActions(actionTrack)} />
+        <ActionOption icon={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} label="移出歌单" onPress={() => actionTrack && (setActionTrack(null), confirmRemoveTrack(actionTrack))} />
+        <Pressable onPress={() => setActionTrack(null)} style={styles.cancelAction}><Text style={styles.cancelText}>取消</Text></Pressable>
+      </DraggableBottomSheet>
+
+      <DraggableBottomSheet keyboardAvoiding onClose={() => setEditingTrack(null)} open={Boolean(editingTrack)} sheetStyle={styles.editSheet}>
+        <Text style={styles.sheetTitle}>编辑歌曲信息</Text>
+        <Pressable disabled={readingMetadata} onPress={() => void readTrackMetadata()} style={styles.metadataButton}>{readingMetadata ? <ActivityIndicator color={colors.life} size="small" /> : <SymbolView name={{ android: 'refresh', ios: 'arrow.clockwise', web: 'refresh' }} size={17} tintColor={colors.life} type="hierarchical" />}<Text style={styles.metadataButtonText}>{readingMetadata ? '正在读取' : '从文件读取元数据'}</Text></Pressable>
+        <Text style={styles.inputLabel}>歌曲名称</Text><TextInput maxLength={80} onChangeText={setEditingTitle} style={styles.editInput} value={editingTitle} />
+        <Text style={styles.inputLabel}>艺术家</Text><TextInput maxLength={80} onChangeText={setEditingArtist} style={styles.editInput} value={editingArtist} />
+        <Text style={styles.inputLabel}>专辑</Text><TextInput maxLength={80} onChangeText={setEditingAlbum} style={styles.editInput} value={editingAlbum} />
+        <Text style={styles.inputLabel}>音质标记</Text><View style={styles.qualityPicker}>{QUALITY_OPTIONS.map((option) => <Pressable key={option.value ?? 'none'} onPress={() => setEditingQuality(option.value)} style={[styles.qualityOption, editingQuality === option.value && styles.qualityOptionActive]}><Text style={[styles.qualityOptionText, editingQuality === option.value && styles.qualityOptionTextActive]}>{option.label}</Text></Pressable>)}</View>
+        <Pressable disabled={!editingTitle.trim() || readingMetadata} onPress={() => void saveTrackEdit()} style={[styles.confirmButton, (!editingTitle.trim() || readingMetadata) && styles.disabled]}><Text style={styles.confirmButtonText}>保存</Text></Pressable>
+      </DraggableBottomSheet>
 
       <DraggableBottomSheet onClose={() => setPickerVisible(false)} open={pickerVisible} sheetStyle={[styles.pickerSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
             <View style={styles.sheetHeader}><View><Text style={styles.sheetTitle}>添加歌曲</Text><Text style={styles.sheetMeta}>已选择 {selectedTrackIds.size} 首</Text></View><Pressable accessibilityLabel="关闭" onPress={() => setPickerVisible(false)} style={styles.sheetClose}><SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor={colors.inkSoft} type="hierarchical" /></Pressable></View>
             <Pressable disabled={importing} onPress={() => void importLocalMusic()} style={({ pressed }) => [styles.importButton, importing && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'upload_file', ios: 'square.and.arrow.down', web: 'upload_file' }} size={18} tintColor={colors.life} type="hierarchical" /><Text style={styles.importText}>{importing ? '正在导入' : '从本地导入'}</Text></Pressable>
-            <ScrollView contentContainerStyle={styles.pickerContent} style={styles.pickerList}>{availableTracks.map((track) => { const checked = selectedTrackIds.has(track.id); return <Pressable key={track.id} accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={() => toggleSelectedTrack(track.id)} style={({ pressed }) => [styles.pickerRow, pressed && styles.pressed]}><View style={[styles.checkbox, checked && styles.checkboxActive]}>{checked ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={15} tintColor={colors.onLife} type="hierarchical" /> : null}</View><View style={styles.trackCopy}><Text numberOfLines={1} style={styles.trackTitle}>{track.title}</Text><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>; })}{!availableTracks.length ? <View style={styles.pickerEmpty}><Text style={styles.emptyText}>曲库中的歌曲都已加入这个歌单</Text></View> : null}</ScrollView>
+            <ScrollView contentContainerStyle={styles.pickerContent} style={styles.pickerList}>{availableTracks.map((track) => <PickerTrackRow key={track.id} checked={selectedTrackIds.has(track.id)} media={mediaById.get(track.coverMediaId ?? '')} onToggle={toggleSelectedTrack} track={track} />)}{!availableTracks.length ? <View style={styles.pickerEmpty}><Text style={styles.emptyText}>曲库中的歌曲都已加入这个歌单</Text></View> : null}</ScrollView>
             <Pressable disabled={!selectedTrackIds.size} onPress={() => void addSelectedTracks()} style={[styles.confirmButton, !selectedTrackIds.size && styles.disabled]}><Text style={styles.confirmButtonText}>添加 {selectedTrackIds.size ? `${selectedTrackIds.size} 首` : '歌曲'}</Text></Pressable>
       </DraggableBottomSheet>
 
@@ -230,9 +306,13 @@ export default function MusicPlaylistScreen() {
   );
 }
 
-function TrackRow({ media, onPlay, onRemove, selected, track }: { media: Media[]; onPlay(): void; onRemove(): void; selected: boolean; track: MusicTrack }) {
-  return <View style={styles.trackRow}><Pressable accessibilityRole="button" onPress={onPlay} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={44} style={styles.trackCover} /><View style={styles.trackCopy}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable><Pressable accessibilityLabel={`将 ${track.title} 移出歌单`} onPress={onRemove} style={styles.removeButton}><SymbolView name={{ android: 'remove_circle_outline', ios: 'minus.circle', web: 'remove_circle_outline' }} size={20} tintColor={colors.inkFaint} type="hierarchical" /></Pressable></View>;
-}
+const TrackRow = memo(function TrackRow({ media, onMore, onPlay, selected, track }: { media: Media[]; onMore(track: MusicTrack): void; onPlay(track: MusicTrack): void; selected: boolean; track: MusicTrack }) {
+  return <View style={styles.trackRow}><Pressable accessibilityRole="button" onPress={() => onPlay(track)} style={({ pressed }) => [styles.trackMain, pressed && styles.pressed]}><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={44} style={styles.trackCover} /><View style={styles.trackCopy}><View style={styles.trackTitleRow}><Text numberOfLines={1} style={[styles.trackTitle, selected && styles.trackTitleActive]}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable><Pressable accessibilityLabel={`管理 ${track.title}`} onPress={() => onMore(track)} style={styles.moreButton}><VerticalMoreIcon /></Pressable></View>;
+});
+
+const PickerTrackRow = memo(function PickerTrackRow({ checked, media, onToggle, track }: { checked: boolean; media?: Media; onToggle(trackId: string): void; track: MusicTrack }) {
+  return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={() => onToggle(track.id)} style={({ pressed }) => [styles.pickerRow, pressed && styles.pressed]}><View style={[styles.checkbox, checked && styles.checkboxActive]}>{checked ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={15} tintColor={colors.onLife} type="hierarchical" /> : null}</View><MusicCover media={media} size={44} style={styles.pickerCover} /><View style={styles.trackCopy}><View style={styles.trackTitleRow}><Text numberOfLines={1} style={styles.trackTitle}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><View style={styles.trackMetaRow}><Text numberOfLines={1} style={styles.trackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text><MusicPlayCount count={track.playCount} /></View></View></Pressable>;
+});
 
 function VerticalMoreIcon() {
   return <View pointerEvents="none" style={styles.moreIcon}>{[0, 1, 2].map((item) => <View key={item} style={styles.moreDot} />)}</View>;
@@ -240,6 +320,12 @@ function VerticalMoreIcon() {
 
 function ActionOption({ destructive = false, icon, label, onPress }: { destructive?: boolean; icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void }) {
   return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.actionOption, pressed && styles.pressed]}><SymbolView name={icon} size={20} tintColor={destructive ? colors.danger : colors.ink} type="hierarchical" /><Text style={[styles.actionLabel, destructive && styles.actionLabelDanger]}>{label}</Text></Pressable>;
+}
+
+function formatDuration(durationMs: number | null): string {
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs < 0) return '未知';
+  const totalSeconds = Math.round(durationMs / 1_000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 }
 
 const styles = createThemedStyles(() => ({
@@ -269,10 +355,11 @@ const styles = createThemedStyles(() => ({
   trackCover: { borderRadius: radius.sm },
   trackCopy: { flex: 1, minWidth: 0, marginLeft: spacing.sm },
   trackTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
+  trackTitleRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   trackTitleActive: { color: colors.life },
   trackMetaRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center' },
   trackMeta: { flex: 1, minWidth: 0, color: colors.inkFaint, fontSize: 10 },
-  removeButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
+  moreButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
   empty: { paddingVertical: spacing.xxl, alignItems: 'center' },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17 },
@@ -291,13 +378,18 @@ const styles = createThemedStyles(() => ({
   importText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   pickerList: { marginTop: spacing.sm },
   pickerContent: { paddingBottom: spacing.md },
-  pickerRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  pickerRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  pickerCover: { marginLeft: spacing.xs, borderRadius: radius.sm },
   checkbox: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 12 },
   checkboxActive: { borderColor: colors.life, backgroundColor: colors.life },
   pickerEmpty: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   confirmButton: { minHeight: 50, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
   confirmButtonText: { color: colors.onLife, fontSize: 11, fontWeight: '700' },
   actionSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
+  actionPreview: { minHeight: 72, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  previewCopy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
+  previewTitle: { color: colors.ink, fontSize: 14, fontWeight: '600' },
+  previewMeta: { marginTop: 4, color: colors.inkFaint, fontSize: 10 },
   actionPlaylistHeader: { minHeight: 88, marginBottom: spacing.sm, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper },
   actionPlaylistCoverButton: { width: 66, height: 66 },
   actionPlaylistCoverPressed: { opacity: 0.68 },
@@ -313,8 +405,15 @@ const styles = createThemedStyles(() => ({
   cancelAction: { minHeight: 48, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center' },
   cancelText: { color: colors.inkSoft, fontSize: 11, fontWeight: '600' },
   editSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
+  metadataButton: { minHeight: 44, marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  metadataButtonText: { color: colors.life, fontSize: 11, fontWeight: '700' },
   inputLabel: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta },
   editInput: { minHeight: 52, marginTop: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: 14 },
+  qualityPicker: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.sm },
+  qualityOption: { minWidth: 72, minHeight: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md, backgroundColor: colors.paper },
+  qualityOptionActive: { borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
+  qualityOptionText: { color: colors.inkFaint, fontSize: 11, fontWeight: '700' },
+  qualityOptionTextActive: { color: colors.life },
   disabled: { opacity: 0.38 },
   pressed: { opacity: 0.62 },
 }));

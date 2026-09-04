@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.source_files   = 'ios/**/*.{h,m,mm,swift}'
   s.dependency 'ExpoModulesCore'
-  s.frameworks      = 'Foundation'
+  s.frameworks      = ['Foundation', 'AVFoundation', 'UIKit']
   s.pod_target_xcconfig = {
     'LIBRARY_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/native/build/$(CONFIGURATION)"',
     'OTHER_LDFLAGS' => '$(inherited) -force_load "$(PODS_TARGET_SRCROOT)/native/build/$(CONFIGURATION)/libstillalive_music_unlocker_core.a"'

@@ -62,12 +62,27 @@ export async function saveMusicCopy(media: Media, title: string): Promise<MusicD
 function preferredFileName(media: Media, title: string, sourceExtension: string): string {
   const originalName = media.originalName?.split(/[\\/]/).pop()?.trim();
   const fallbackExtension = sourceExtension && sourceExtension.startsWith('.') ? sourceExtension : '';
-  const requestedName = originalName || `${title.trim() || '未命名音乐'}${fallbackExtension}`;
+  // Document providers can return URL-encoded names (for example `%E5...%20`).
+  // Decode them before passing the name to expo-file-system. The new File API
+  // treats a raw `%` in a child path as an invalid URI character on Android.
+  const decodedOriginalName = originalName ? decodeFileName(originalName) : '';
+  const decodedTitle = decodeFileName(title.trim());
+  const requestedName = decodedOriginalName || `${decodedTitle || '未命名音乐'}${fallbackExtension}`;
   const sanitized = requestedName
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/[<>:"/\\|?*%#\u0000-\u001f]/g, '_')
     .replace(/[.\s]+$/g, '')
     .trim();
   return sanitized || `未命名音乐${fallbackExtension}`;
+}
+
+function decodeFileName(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Keep malformed provider output usable; sanitization below removes the
+    // remaining URI-reserved characters.
+    return value;
+  }
 }
 
 function availableFileName(directory: Directory, requestedName: string): string {

@@ -19,12 +19,15 @@ pub struct UnlockMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub cover_mime_type: Option<String>,
+    pub cover_path: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct UnlockOutput {
     pub bytes: Vec<u8>,
     pub metadata: UnlockMetadata,
+    pub cover: Option<Vec<u8>>,
 }
 
 pub fn unlock(
@@ -46,10 +49,23 @@ pub fn unlock(
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         if ext == "mp3" && crate::internal::sniff::Mpeg4Sniffer.sniff(input) {
-            let bytes = crate::transcode::mp4_to_mp3(input)?;
-            return Ok::<_, Box<dyn std::error::Error>>((bytes, None));
+            let (bytes, cover) = crate::transcode::mp4_to_mp3(input)?;
+            // MP4 `covr` artwork is otherwise only returned as a sidecar. The
+            // regular local-import path carries just the converted Media
+            // record, so embed the image in the MP3 ID3 tag as well; this lets
+            // the normal JS metadata parser persist it after the conversion.
+            let bytes = match cover.as_ref() {
+                Some(image) => crate::internal::helpers::write_id3_tags(
+                    Bytes::from(bytes),
+                    None,
+                    Some(Bytes::copy_from_slice(image)),
+                )?
+                .to_vec(),
+                None => bytes,
+            };
+            return Ok::<_, Box<dyn std::error::Error>>((bytes, None, cover));
         }
-        let mut decoder =
+        let decoder =
             crate::internal::helpers::dec_init(Bytes::copy_from_slice(input), true, &ext)?;
         let metadata = decoder.get_audio_meta().transpose()?.map(|meta| {
             (
@@ -58,8 +74,11 @@ pub fn unlock(
                 meta.get_album(),
             )
         });
-        let bytes = decoder.decode_bytes()?.freeze().to_vec();
-        Ok::<_, Box<dyn std::error::Error>>((bytes, metadata))
+        // Keep the decoder-provided cover when the decoded output is rewritten.
+        // `get_result` embeds artwork into MP3 ID3 tags before the file is
+        // returned; WAV artwork remains available through the sidecar path.
+        let (bytes, cover) = crate::internal::helpers::get_result_with_cover(decoder, filename)?;
+        Ok::<_, Box<dyn std::error::Error>>((bytes.to_vec(), metadata, cover.map(|value| value.to_vec())))
     }))
     .map_err(|_| "解码器拒绝了损坏或越界的容器".to_string())?
     .map_err(|error| error.to_string())?;
@@ -85,6 +104,8 @@ pub fn unlock(
             )
         })
     });
+    let cover = result.2;
+    let cover_mime_type = cover.as_deref().and_then(crate::internal::sniff::image_mime);
     let size_bytes = result.0.len();
     Ok(UnlockOutput {
         bytes: result.0,
@@ -104,7 +125,10 @@ pub fn unlock(
                 .as_ref()
                 .map(|value| value.2.clone())
                 .filter(|v| !v.is_empty()),
+            cover_mime_type,
+            cover_path: None,
         },
+        cover,
     })
 }
 
@@ -126,6 +150,21 @@ pub unsafe extern "C" fn stillalive_unlock_file(
         if input_path.is_empty() || output_path.is_empty() || metadata_path.is_empty() {
             return Err("文件路径为空".to_string());
         }
+        // A retry may reuse an output name after a process interruption. Remove
+        // every artifact before decoding so a failed attempt cannot expose an
+        // older audio file or cover through the metadata response.
+        let _ = fs::remove_file(format!("{output_path}.partial"));
+        let _ = fs::remove_file(format!("{metadata_path}.partial"));
+        let _ = fs::remove_file(&output_path);
+        let _ = fs::remove_file(&metadata_path);
+        for extension in [
+            ".jpg", ".png", ".bmp", ".webp", ".gif", ".heic", ".avif", ".tiff", ".jp2",
+        ] {
+            let _ = fs::remove_file(format!("{output_path}.cover{extension}"));
+            let _ = fs::remove_file(format!("{output_path}.cover{extension}.partial"));
+        }
+        let _ = fs::remove_file(format!("{output_path}.cover"));
+        let _ = fs::remove_file(format!("{output_path}.cover.partial"));
         let input_size = fs::metadata(&input_path)
             .map_err(|error| error.to_string())?
             .len();
@@ -139,14 +178,19 @@ pub unsafe extern "C" fn stillalive_unlock_file(
             .and_then(|value| value.to_str())
             .unwrap_or_default();
         let filename = path.file_name().and_then(|value| value.to_str());
-        let unlocked = unlock(&input, extension, filename)?;
+        let mut unlocked = unlock(&input, extension, filename)?;
         let output_partial = format!("{output_path}.partial");
         let metadata_partial = format!("{metadata_path}.partial");
-        let _ = fs::remove_file(&output_partial);
-        let _ = fs::remove_file(&metadata_partial);
-        let _ = fs::remove_file(&output_path);
-        let _ = fs::remove_file(&metadata_path);
         fs::write(&output_partial, &unlocked.bytes).map_err(|error| error.to_string())?;
+        if let Some(cover) = &unlocked.cover {
+            if let Some(extension) = crate::internal::sniff::image_extension(cover) {
+                let cover_path = format!("{output_path}.cover{extension}");
+                let cover_partial = format!("{cover_path}.partial");
+                fs::write(&cover_partial, cover).map_err(|error| error.to_string())?;
+                fs::rename(&cover_partial, &cover_path).map_err(|error| error.to_string())?;
+                unlocked.metadata.cover_path = Some(cover_path);
+            }
+        }
         let metadata = serde_json::to_vec(&unlocked.metadata).map_err(|error| error.to_string())?;
         fs::write(&metadata_partial, metadata).map_err(|error| error.to_string())?;
         fs::rename(&output_partial, &output_path).map_err(|error| error.to_string())?;
@@ -158,6 +202,12 @@ pub unsafe extern "C" fn stillalive_unlock_file(
         failed => {
             let _ = fs::remove_file(format!("{output_hint}.partial"));
             let _ = fs::remove_file(format!("{metadata_hint}.partial"));
+            for extension in [
+                ".jpg", ".png", ".bmp", ".webp", ".gif", ".heic", ".avif", ".tiff", ".jp2",
+            ] {
+                let _ = fs::remove_file(format!("{output_hint}.cover{extension}"));
+                let _ = fs::remove_file(format!("{output_hint}.cover{extension}.partial"));
+            }
             let message = match failed {
                 Ok(Err(error)) => error,
                 Err(_) => "解码器拒绝了损坏或越界的容器".to_string(),

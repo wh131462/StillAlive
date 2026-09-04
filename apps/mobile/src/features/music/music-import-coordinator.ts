@@ -3,8 +3,8 @@ import type { Media, MusicCollectionEntry, MusicTrack } from '@still-alive/types
 import type { StillAliveRepository } from '../../infrastructure/database/repository-contract';
 import { unlockMusicFile } from '../../infrastructure/files/music-unlocker';
 import { probeAudioFile } from '../../infrastructure/files/local-assets';
-import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
-import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
+import { persistMusicCoverFile, readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
+import { inferMusicQuality, readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import { writePersistentError } from '../../infrastructure/platform/persistent-log';
 
 const ENCRYPTED_EXTENSIONS = new Set([
@@ -121,7 +121,7 @@ function musicImportFailureMessage(cause: unknown, sourceName: string | null): {
   if (/只支持|文件头|无法识别|格式不受支持|文件已损坏|unsupported|invalid.*(?:audio|format|magic)/i.test(detail)) {
     return {
       title: '无法读取这个音频文件',
-      message: '请选择可正常播放的 MP3、M4A、AAC、WAV、FLAC 或 OGG 文件；当前文件可能格式不受支持或已经损坏。',
+      message: '请选择可正常播放的 MP3、M4A、AAC、WAV、FLAC、OGG、OGA 或 Opus 文件；当前文件可能格式不受支持或已经损坏。',
     };
   }
   return {
@@ -147,6 +147,8 @@ export async function importEncryptedMusicTrack(
   const mediaDirectory = new Directory(Paths.document, 'media');
   mediaDirectory.create({ idempotent: true, intermediates: true });
   let destination: File | null = null;
+  let coverMedia: Media | null = null;
+  let coverFile: File | null = null;
 
   try {
     const unlocked = await unlockMusicFile(input.uri, temporaryOutput.uri);
@@ -156,6 +158,13 @@ export async function importEncryptedMusicTrack(
     const detected = await probeAudioFile(temporaryOutput);
     if (!detected || detected.extension !== extension || detected.mimeType !== unlocked.mimeType) {
       throw new Error('格式不受支持或文件已损坏');
+    }
+
+    if (unlocked.coverPath) {
+      coverFile = new File(unlocked.coverPath);
+      coverMedia = await persistMusicCoverFile(coverFile, unlocked.coverMimeType);
+      if (coverFile.exists) coverFile.delete();
+      coverFile = null;
     }
 
     const mediaId = `media_${operationId}`;
@@ -176,16 +185,21 @@ export async function importEncryptedMusicTrack(
       sizeBytes: destination.size,
     };
     if (!media.checksum) throw new Error('无法校验解码后的音频');
-    const embeddedMetadata = await readEmbeddedMusicMetadata(media).catch(() => ({ album: null, artist: null, cover: null, title: null }));
+    const embeddedMetadata = await readEmbeddedMusicMetadata(media, source.importSourceUri).catch(() => ({ album: null, artist: null, cover: null, title: null }));
+    if (coverMedia && embeddedMetadata.cover) {
+      const duplicateCover = new File(embeddedMetadata.cover.localPath);
+      if (duplicateCover.exists) duplicateCover.delete();
+    }
     const technicalMetadata = await readAudioFileMetadata(media.localPath).catch(() => null);
     const track: MusicTrack = {
       id: `track_${operationId}`,
       mediaId: media.id,
-      coverMediaId: embeddedMetadata.cover?.id ?? null,
+      coverMediaId: coverMedia?.id ?? embeddedMetadata.cover?.id ?? null,
       title: embeddedMetadata.title || unlocked.title?.trim() || source.originalName?.replace(/\.[^.]+$/, '') || '未命名音乐',
       artist: embeddedMetadata.artist || unlocked.artist?.trim() || null,
       album: embeddedMetadata.album || unlocked.album?.trim() || null,
       durationMs: technicalMetadata?.durationMs ?? null,
+      quality: technicalMetadata ? inferMusicQuality(technicalMetadata.format, technicalMetadata.bitrateKbps) : null,
       playCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -194,7 +208,7 @@ export async function importEncryptedMusicTrack(
       { trackId: track.id, targetType: 'self', targetId: null, createdAt: now },
       ...(personId ? [{ trackId: track.id, targetType: 'person' as const, targetId: personId, createdAt: now }] : []),
     ];
-    const coverMedia = embeddedMetadata.cover;
+    coverMedia ??= embeddedMetadata.cover;
     try {
       await repository.importMusicTrack(media, track, collections, coverMedia);
       return { media, track };
@@ -206,6 +220,11 @@ export async function importEncryptedMusicTrack(
       throw cause;
     }
   } catch (cause) {
+    if (coverFile?.exists) coverFile.delete();
+    if (coverMedia) {
+      const file = new File(coverMedia.localPath);
+      if (file.exists) file.delete();
+    }
     if (destination?.exists) destination.delete();
     if (temporaryOutput.exists) temporaryOutput.delete();
     throw cause;

@@ -12,6 +12,7 @@ import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { orderMusicTracksByCollectionEntries } from './music-library';
 import { MusicCover, resolveMusicCoverUri } from './music-cover';
+import { writePersistentError } from '../../infrastructure/platform/persistent-log';
 
 export type MusicQueueSource = 'all' | 'self' | 'person' | 'playlist';
 
@@ -79,6 +80,7 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
   const [sleepAfterTrack, setSleepAfterTrack] = useState(false);
   const [miniPlayerCollapsed, setMiniPlayerCollapsed] = useState(true);
   const loadRequestRef = useRef(0);
+  const audioModePromiseRef = useRef<Promise<void> | null>(null);
   const shuffleRemainingRef = useRef<string[]>([]);
   const shuffleHistoryRef = useRef<string[]>([]);
   const playCountSessionRef = useRef<PlayCountSession | null>(null);
@@ -133,41 +135,49 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
     shuffleHistoryRef.current = shuffleHistoryRef.current.filter((id) => playableTrackIds.has(id));
   }, [playableTrackIds, queueTrackIds.length, validQueueTrackIds]);
 
+  const ensureAudioMode = useCallback(() => {
+    if (!audioModePromiseRef.current) {
+      audioModePromiseRef.current = setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: false,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
+      }).catch((cause) => {
+        audioModePromiseRef.current = null;
+        throw cause;
+      });
+    }
+    return audioModePromiseRef.current;
+  }, []);
+
   const loadTrack = useCallback(async (trackId: string) => {
     const requestId = ++loadRequestRef.current;
     const track = musicTracks.find((item) => item.id === trackId);
     const asset = track ? media.find((item) => item.id === track.mediaId) : null;
     if (!track || !asset) throw new Error('音乐文件不存在');
+    // Select the track before waiting for the audio session/source to load so the
+    // player screen never renders an empty state during the first playback.
+    setCurrentTrackId(trackId);
+    setError(null);
+    playCountSessionRef.current = createPlayCountSession(trackId, 0);
     try {
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: false,
-        shouldPlayInBackground: true,
-        interruptionMode: 'doNotMix',
-      });
-      if (requestId !== loadRequestRef.current) return;
-      const coverAsset = track.coverMediaId ? media.find((item) => item.id === track.coverMediaId) : null;
-      const artworkUrl = await resolveMusicCoverUri(coverAsset);
+      await ensureAudioMode();
       if (requestId !== loadRequestRef.current) return;
       player.replace(asset.localPath);
       player.setActiveForLockScreen(true, {
         title: track.title,
         artist: track.artist || '未知艺术家',
         albumTitle: track.album || undefined,
-        artworkUrl,
       }, {
         showPrevious: true,
         showNext: true,
         showClose: true,
       });
-      playCountSessionRef.current = createPlayCountSession(trackId, 0);
-      setCurrentTrackId(trackId);
-      setError(null);
       player.play();
     } catch (cause) {
       if (requestId === loadRequestRef.current) throw cause;
     }
-  }, [media, musicTracks, player]);
+  }, [ensureAudioMode, media, musicTracks, player]);
 
   const playTrack = useCallback(async (trackId: string, nextQueueTrackIds: string[], source: MusicQueueSource, sourceId: string | null = null) => {
     if ((source === 'person' || source === 'playlist') && !sourceId) return;
@@ -197,7 +207,7 @@ export function MusicPlayerProvider({ children }: PropsWithChildren) {
     setQueueSourceState(source);
     if (source === 'person') setQueuePersonId(nextPersonId);
     if (source === 'playlist') setQueuePlaylistId(nextPlaylistId);
-    setQueueTrackIds(nextIds);
+    setQueueTrackIds((currentIds) => arraysEqual(currentIds, nextIds) ? currentIds : nextIds);
     shuffleRemainingRef.current = mode === 'shuffle' ? nextIds.filter((id) => id !== currentTrackId) : [];
     shuffleHistoryRef.current = [];
   }, [currentTrackId, mode, musicCollectionEntries, musicPlaylistEntries, playableTrackIds, playableTracks, queuePersonId, queuePlaylistId, trackIdsBySource]);
@@ -411,7 +421,9 @@ function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: bo
     const ratio = clampRatio(nextYRatio);
     setEdge(nextEdge);
     setYRatio(ratio);
-    void updatePreferences({ miniPlayerEdge: nextEdge, miniPlayerYRatio: ratio });
+    void updatePreferences({ miniPlayerEdge: nextEdge, miniPlayerYRatio: ratio }).catch((cause) => {
+      writePersistentError('music.mini-player.placement.persist.failed', cause);
+    });
   }, [updatePreferences]);
 
   useEffect(() => {
@@ -430,7 +442,9 @@ function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: bo
     initialised.current = true;
     setPlacementReady(true);
     if (!preferences.miniPlayerEdge || preferences.miniPlayerYRatio === null) {
-      void updatePreferences({ miniPlayerEdge: storedEdge, miniPlayerYRatio: ratio });
+      void updatePreferences({ miniPlayerEdge: storedEdge, miniPlayerYRatio: ratio }).catch((cause) => {
+        writePersistentError('music.mini-player.placement.initialize.failed', cause);
+      });
     }
   }, [animatedPosition, collapsed, metricsFor, positionFor, preferences.miniPlayerEdge, preferences.miniPlayerX, preferences.miniPlayerY, preferences.miniPlayerYRatio, updatePreferences, window.width]);
 
@@ -557,6 +571,10 @@ function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: bo
 
 function clampRatio(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function animateMiniPlayerLayout(): void {

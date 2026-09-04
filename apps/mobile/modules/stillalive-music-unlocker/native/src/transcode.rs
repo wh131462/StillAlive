@@ -7,8 +7,14 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
+const MAX_COVER_BYTES: usize = 32 * 1024 * 1024;
+
 /// Decode the first audio track from an MP4 container and encode it as MP3.
-pub fn mp4_to_mp3(input: &[u8]) -> Result<Vec<u8>, String> {
+///
+/// The returned artwork is kept separate so the native bridge can expose it as
+/// a sidecar. The caller also embeds it into the generated MP3's ID3 tag so
+/// ordinary local imports can discover it through their normal metadata path.
+pub fn mp4_to_mp3(input: &[u8]) -> Result<(Vec<u8>, Option<Vec<u8>>), String> {
     let source = MediaSourceStream::new(
         Box::new(Cursor::new(input)),
         Default::default(),
@@ -18,6 +24,18 @@ pub fn mp4_to_mp3(input: &[u8]) -> Result<Vec<u8>, String> {
     let mut format = symphonia::default::get_probe()
         .probe(&hint, source, FormatOptions::default(), MetadataOptions::default())
         .map_err(|error| format!("MP4 容器无法读取: {error}"))?;
+    let cover = {
+        let metadata = format.metadata();
+        metadata.current().and_then(|revision| {
+            revision
+                .media
+                .visuals
+                .iter()
+                .chain(revision.per_track.iter().flat_map(|track| track.metadata.visuals.iter()))
+                .find(|visual| !visual.data.is_empty() && visual.data.len() <= MAX_COVER_BYTES)
+                .map(|visual| visual.data.to_vec())
+        })
+    };
     let (track_id, sample_rate, audio_params) = {
         let track = format
             .default_track(TrackType::Audio)
@@ -72,7 +90,7 @@ pub fn mp4_to_mp3(input: &[u8]) -> Result<Vec<u8>, String> {
     if output.is_empty() {
         return Err("MP4 音频没有可编码的数据".to_string());
     }
-    Ok(output)
+    Ok((output, cover))
 }
 
 fn drain_encoder(encoder: &mut Mp3Encoder, output: &mut Vec<u8>) -> Result<(), String> {
