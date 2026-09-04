@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
@@ -30,6 +30,10 @@ export interface StillAliveRepository {
   savePersonRelationship(relationship: PersonRelationship): Promise<void>;
   deletePersonRelationship(relationshipId: string): Promise<void>;
   setPersonMemoryEnabled(personId: string, enabled: boolean): Promise<void>;
+  listPersonEvents(personId?: string): Promise<PersonEvent[]>;
+  savePersonEvent(event: PersonEvent): Promise<void>;
+  deletePersonEvent(eventId: string): Promise<void>;
+  mergePersons(targetPersonId: string, sourcePersonIds: string[]): Promise<void>;
   listPersonBooks(): Promise<PersonBook[]>;
   setPersonBooks(personId: string, bookIds: string[]): Promise<void>;
   listTagDefinitions(): Promise<TagDefinition[]>;
@@ -60,6 +64,7 @@ export interface StillAliveRepository {
   applyProfileCollectionUpdate(requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTags: TagDefinition[], consumedAt: string): Promise<void>;
   listMusicTracks(): Promise<MusicTrack[]>;
   importMusicTrack(media: Media, track: MusicTrack, collections: MusicCollectionEntry[], coverMedia?: Media | null): Promise<void>;
+  attachMusicTrackCover(trackId: string, coverMedia: Media, expectedCoverMediaId?: string | null): Promise<boolean>;
   createMusicTrack(track: MusicTrack, collection?: MusicCollectionEntry): Promise<void>;
   updateMusicTrack(track: MusicTrack): Promise<void>;
   incrementMusicTrackPlayCount(trackId: string): Promise<void>;

@@ -1,4 +1,4 @@
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 
 export interface AppStateValue {
@@ -8,6 +8,7 @@ export interface AppStateValue {
   posts: Post[];
   people: Person[];
   personRelationships: PersonRelationship[];
+  personEvents: PersonEvent[];
   personRelationshipNodes: PersonRelationshipNode[];
   media: Media[];
   tagDefinitions: TagDefinition[];
@@ -45,7 +46,10 @@ export interface AppStateValue {
   replaceMedia(mediaId: string, replacement: Media): Promise<void>;
   discardMedia(media: Media): Promise<void>;
   createPerson(name: string): Promise<Person>;
-  updatePerson(personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday' | 'contacts'>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
+  updatePerson(personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday' | 'contacts'> & Partial<Pick<Person, 'customFields' | 'importantDates' | 'privacyMode'>>, mbti?: string | null, customTagIds?: string[]): Promise<void>;
+  savePersonEvent(event: PersonEvent): Promise<void>;
+  deletePersonEvent(eventId: string): Promise<void>;
+  mergePersons(targetPersonId: string, sourcePersonIds: string[]): Promise<void>;
   deletePerson(personId: string): Promise<void>;
   createPersonRelationshipNode(personId?: string | null, label?: string | null): Promise<PersonRelationshipNode>;
   deletePersonRelationshipNode(nodeId: string): Promise<void>;

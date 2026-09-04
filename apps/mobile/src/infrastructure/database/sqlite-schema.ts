@@ -529,6 +529,31 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'persons', 'contacts_json', "TEXT NOT NULL DEFAULT '[]'");
     await db.execAsync('PRAGMA user_version = 32;');
   }
+  if (currentVersion < 33) {
+    await addColumnIfMissing(db, 'persons', 'custom_fields_json', "TEXT NOT NULL DEFAULT '{}'");
+    await addColumnIfMissing(db, 'persons', 'important_dates_json', "TEXT NOT NULL DEFAULT '[]'");
+    await addColumnIfMissing(db, 'persons', 'privacy_mode', "TEXT NOT NULL DEFAULT 'normal'");
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS person_events (
+        id TEXT PRIMARY KEY NOT NULL,
+        person_id TEXT NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        description TEXT,
+        time_text TEXT,
+        participant_ids_json TEXT NOT NULL DEFAULT '[]',
+        pinned INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS person_events_person_idx ON person_events(person_id, pinned DESC, sort_order, created_at DESC);
+      PRAGMA user_version = 33;
+    `);
+  }
+  if (currentVersion < 34) {
+    await addColumnIfMissing(db, 'music_tracks', 'quality', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 34;');
+  }
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

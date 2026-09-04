@@ -6,6 +6,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { BACKUP_SCHEMA_VERSION } from './backup-contract';
 import type { BackupManifest } from './backup-contract';
 import type { MusicTrack, PersonRelationship, PersonRelationshipNode } from '@still-alive/types';
+import { PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH } from '@still-alive/types';
 import type { BackupSnapshot } from '../../infrastructure/database/database-models';
 import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../journal/embedded-media';
 import { unlockPasswordVault } from '../vault/password-vault-crypto';
@@ -321,6 +322,7 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
   });
   const tagDefinitions = mergeUpdatedEntities(current.tagDefinitions ?? [], incomingTags, (item) => item.normalizedName);
   const people = mergeUpdatedById(current.people, incoming.people);
+  const personEvents = mergeUpdatedById(current.personEvents ?? [], incoming.personEvents ?? []);
   const relationshipNodes = mergeUpdatedEntities(
     current.personRelationshipNodes ?? [],
     incoming.personRelationshipNodes ?? [],
@@ -362,6 +364,7 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
     posts,
     drafts: mergeUpdatedByKey(current.drafts, incoming.drafts, (item) => item.dayKey),
     people,
+    personEvents: personEvents.filter((event) => personIds.has(event.personId)).map((event) => ({ ...event, participantIds: event.participantIds.filter((personId) => personIds.has(personId)) })),
     media,
     postPersons: mergeRelations(
       current.postPersons,
@@ -553,6 +556,7 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   const albums = value.albums ?? [];
   const albumMedia = value.albumMedia ?? [];
   const personBooks = value.personBooks ?? [];
+  const personEvents = value.personEvents ?? [];
   const musicTracks = value.musicTracks ?? [];
   const musicCollectionEntries = value.musicCollectionEntries ?? [];
   const musicPlaylists = value.musicPlaylists ?? [];
@@ -577,6 +581,11 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   }
   const postIds = new Set(value.posts.map((post) => post.id));
   const personIds = new Set(value.people.map((person) => person.id));
+  const eventIds = new Set<string>();
+  for (const event of personEvents) {
+    if (!event.id || eventIds.has(event.id) || !personIds.has(event.personId) || !event.title.trim() || event.title.length > 80 || (event.description !== null && event.description.length > 1000) || (event.timeText !== null && event.timeText.length > 40) || !Array.isArray(event.participantIds) || event.participantIds.some((id) => !personIds.has(id)) || !isValidDate(event.createdAt) || !isValidDate(event.updatedAt)) throw new Error('备份中的人物经历无效');
+    eventIds.add(event.id);
+  }
   const mediaIds = new Set(value.media.map((item) => item.id));
   const bookIds = new Set(books.map((book) => book.id));
   const bookListIds = new Set(bookLists.map((list) => list.id));
@@ -592,6 +601,7 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   for (const track of musicTracks) {
     if (!mediaIds.has(track.mediaId) || !value.media.find((item) => item.id === track.mediaId)?.mimeType.startsWith('audio/')) throw new Error('备份中的音乐文件关联无效');
     if (track.coverMediaId && !mediaIds.has(track.coverMediaId)) throw new Error('备份中的音乐封面关联无效');
+    if (track.quality !== null && track.quality !== 'SQ' && track.quality !== 'HQ') throw new Error('备份中的音乐音质标记无效');
     if (!Number.isSafeInteger(track.playCount) || track.playCount < 0) throw new Error('备份中的音乐播放次数无效');
   }
   const collectionKeys = new Set<string>();
@@ -647,6 +657,9 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
     if (person.bio != null && (typeof person.bio !== 'string' || person.bio.length > 500)) throw new Error('备份中的人物简介无效');
     if (person.gender && !['female', 'male', 'other'].includes(person.gender)) throw new Error('备份中的人物性别无效');
     if (!Array.isArray(person.contacts) || person.contacts.some((contact) => !contact || typeof contact.id !== 'string' || typeof contact.type !== 'string' || typeof contact.value !== 'string')) throw new Error('备份中的人物联系方式无效');
+    if (!person.customFields || typeof person.customFields !== 'object' || Array.isArray(person.customFields) || Object.entries(person.customFields).some(([key, fieldValue]) => !key.trim() || key.length > 20 || typeof fieldValue !== 'string' || !fieldValue.trim() || fieldValue.length > PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH)) throw new Error('备份中的人物自定义资料无效');
+    if (!Array.isArray(person.importantDates) || person.importantDates.some((item) => !item || typeof item.id !== 'string' || !item.name.trim() || typeof item.date !== 'string' || !/^(?:\d{4}-)?\d{2}-\d{2}$/.test(item.date) || typeof item.reminderEnabled !== 'boolean')) throw new Error('备份中的人物重要日期无效');
+    if (!['normal', 'private'].includes(person.privacyMode)) throw new Error('备份中的人物隐私设置无效');
     if (person.birthday && !['solar', 'lunar', 'both'].includes(person.birthday.reminderMode)) throw new Error('备份中的生日提醒方式无效');
     if (person.birthday && (typeof person.birthday.reminderEnabled !== 'boolean' || !validReminderTime(person.birthday.reminderHour, person.birthday.reminderMinute))) throw new Error('备份中的生日提醒设置无效');
   }
@@ -718,6 +731,12 @@ function migrateSnapshot(value: BackupSnapshot): void {
     { system: 'custom', enabled: true, sortOrder: 3 },
   ];
   value.personTags ??= [];
+  for (const person of value.people) {
+    person.customFields ??= {};
+    person.importantDates ??= [];
+    person.privacyMode ??= 'normal';
+  }
+  value.personEvents ??= [];
   const legacyRelationships = (value.personRelationships ?? []) as Array<PersonRelationship & { sourcePersonId?: string | null; targetPersonId?: string }>;
   const legacyFormat = legacyRelationships.some((item) => typeof item.targetPersonId === 'string');
   if (legacyFormat) {
@@ -755,6 +774,7 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.bookListEntries ??= [];
   for (const track of value.musicTracks) {
     track.coverMediaId ??= null;
+    track.quality ??= null;
     track.playCount ??= 0;
   }
   for (const playlist of value.musicPlaylists) playlist.coverMediaId ??= null;

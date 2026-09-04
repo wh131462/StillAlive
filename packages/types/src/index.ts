@@ -5,10 +5,13 @@ export type BuiltInTagSystem = 'mbti' | 'constellation' | 'zodiac' | 'custom';
 export type Gender = 'female' | 'male' | 'other';
 export type AppThemeId = 'moss' | 'sand' | 'midnight';
 export type NameStyleId = 'fresh' | 'journal' | 'sunlit' | 'colorful' | 'iridescent';
-export type ProfileCollectionField = 'name' | 'nickname' | 'bio' | 'gender' | 'birthday' | 'mbti' | 'customTags';
+export const PROFILE_COLLECTION_FIELDS = ['name', 'nickname', 'bio', 'gender', 'birthday', 'mbti', 'customTags'] as const;
+export type ProfileCollectionField = typeof PROFILE_COLLECTION_FIELDS[number];
+export const PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH = 2000;
 export type ProfileCollectionRequestStatus = 'pending' | 'consumed';
 export type MusicCollectionTargetType = 'self' | 'person';
 export type MusicPlaybackMode = 'list' | 'shuffle' | 'single';
+export type MusicQuality = 'SQ' | 'HQ';
 export type BookFormat = 'pdf' | 'epub' | 'mobi' | 'txt' | 'html' | 'fb2' | 'azw' | 'azw3';
 export type BookParseStatus = 'ready' | 'protected' | 'unsupported' | 'failed';
 export type BookLocationType = 'epub-cfi' | 'reflow-cfi' | 'pdf-page' | 'manual';
@@ -17,6 +20,7 @@ export type ReaderFontFamily = 'serif' | 'sans';
 export type ReaderFlow = 'paginated' | 'scrolled';
 export type PersonRelationshipKind = 'parent' | 'child' | 'partner' | 'sibling' | 'other';
 export type PersonRelationshipNodeKind = 'self' | 'person' | 'placeholder';
+export type PersonPrivacyMode = 'normal' | 'private';
 
 export interface ReaderTocItem {
   href: string;
@@ -77,7 +81,31 @@ export interface Person {
   impression: string | null;
   birthday: Birthday | null;
   contacts: PersonContact[];
+  customFields: Record<string, string>;
+  importantDates: PersonImportantDate[];
+  privacyMode: PersonPrivacyMode;
   memoryEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonImportantDate {
+  id: string;
+  name: string;
+  date: string;
+  note: string | null;
+  reminderEnabled: boolean;
+}
+
+export interface PersonEvent {
+  id: string;
+  personId: string;
+  title: string;
+  description: string | null;
+  timeText: string | null;
+  participantIds: string[];
+  pinned: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -188,6 +216,11 @@ export interface BirthdayNotificationSchedule {
 export interface Media {
   id: string;
   localPath: string;
+  /**
+   * Original picker URI kept only for the active import operation. It is
+   * intentionally omitted by database mappers and backup serializers.
+   */
+  importSourceUri?: string | null;
   mimeType: string;
   width: number | null;
   height: number | null;
@@ -206,6 +239,7 @@ export interface MusicTrack {
   artist: string | null;
   album: string | null;
   durationMs: number | null;
+  quality: MusicQuality | null;
   playCount: number;
   createdAt: string;
   updatedAt: string;

@@ -1,9 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from './repository-contract';
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, Gender, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, Gender, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
-import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
-import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapMedia, mapMusicTrack, mapPerson, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
+import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
+import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapMedia, mapMusicTrack, mapPerson, mapPersonEvent, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
 import { writePersistentError } from '../platform/persistent-log';
 
 function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
@@ -272,7 +272,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       `SELECT id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression,
               birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode,
               birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute,
-              contacts_json, memory_enabled, created_at, updated_at
+              contacts_json, custom_fields_json, important_dates_json, privacy_mode, memory_enabled, created_at, updated_at
        FROM persons ORDER BY updated_at DESC`,
     );
     return rows.map(mapPerson);
@@ -280,8 +280,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async createPerson(person: Person): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync(
-      `INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, contacts_json, memory_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, contacts_json, custom_fields_json, important_dates_json, privacy_mode, memory_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       person.id,
       person.name,
       person.nickname,
@@ -300,6 +300,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.reminderHour ?? null,
       person.birthday?.reminderMinute ?? null,
       JSON.stringify(person.contacts),
+      JSON.stringify(person.customFields ?? {}),
+      JSON.stringify(person.importantDates ?? []),
+      person.privacyMode ?? 'normal',
       person.memoryEnabled ? 1 : 0,
       person.createdAt,
       person.updatedAt,
@@ -312,7 +315,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
        SET name = ?, nickname = ?, bio = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?,
            birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?,
            birthday_reminder_enabled = ?, birthday_reminder_hour = ?, birthday_reminder_minute = ?,
-           contacts_json = ?, memory_enabled = ?, updated_at = ?
+           contacts_json = ?, custom_fields_json = ?, important_dates_json = ?, privacy_mode = ?, memory_enabled = ?, updated_at = ?
        WHERE id = ?`,
       person.name,
       person.nickname,
@@ -331,6 +334,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       person.birthday?.reminderHour ?? null,
       person.birthday?.reminderMinute ?? null,
       JSON.stringify(person.contacts),
+      JSON.stringify(person.customFields ?? {}),
+      JSON.stringify(person.importantDates ?? []),
+      person.privacyMode ?? 'normal',
       person.memoryEnabled ? 1 : 0,
       person.updatedAt,
       person.id,
@@ -340,6 +346,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async deletePerson(personId: string): Promise<string[]> {
     return this.withTransaction(async (transaction) => {
       const musicRows = await transaction.getAllAsync<{ track_id: string }>("SELECT track_id FROM music_collection_entries WHERE target_type = 'person' AND target_id = ?", personId);
+      const eventRows = await transaction.getAllAsync<PersonEventRow>('SELECT id, person_id, title, description, time_text, participant_ids_json, pinned, sort_order, created_at, updated_at FROM person_events WHERE participant_ids_json LIKE ?', `%${personId}%`);
+      for (const row of eventRows) {
+        if (row.person_id === personId) continue;
+        const participantIds = parseStringList(row.participant_ids_json ?? undefined).filter((id) => id !== personId);
+        await transaction.runAsync('UPDATE person_events SET participant_ids_json = ? WHERE id = ?', JSON.stringify(participantIds), row.id);
+      }
       await transaction.runAsync("DELETE FROM music_collection_entries WHERE target_type = 'person' AND target_id = ?", personId);
       await transaction.runAsync('DELETE FROM persons WHERE id = ?', personId);
       const deletedTrackIds: string[] = [];
@@ -361,6 +373,95 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       new Date().toISOString(),
       personId,
     ));
+  }
+
+  async listPersonEvents(personId?: string): Promise<PersonEvent[]> {
+    const rows = await this.db.getAllAsync<PersonEventRow>(
+      `SELECT id, person_id, title, description, time_text, participant_ids_json, pinned, sort_order, created_at, updated_at
+       FROM person_events ${personId ? 'WHERE person_id = ?' : ''} ORDER BY pinned DESC, sort_order, created_at DESC`,
+      ...(personId ? [personId] : []),
+    );
+    return rows.map(mapPersonEvent);
+  }
+
+  async savePersonEvent(event: PersonEvent): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO person_events (id, person_id, title, description, time_text, participant_ids_json, pinned, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET person_id = excluded.person_id, title = excluded.title, description = excluded.description,
+       time_text = excluded.time_text, participant_ids_json = excluded.participant_ids_json, pinned = excluded.pinned,
+       sort_order = excluded.sort_order, updated_at = excluded.updated_at`,
+      event.id, event.personId, event.title, event.description, event.timeText, JSON.stringify(event.participantIds), event.pinned ? 1 : 0, event.sortOrder, event.createdAt, event.updatedAt,
+    ));
+  }
+
+  async deletePersonEvent(eventId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM person_events WHERE id = ?', eventId));
+  }
+
+  async mergePersons(targetPersonId: string, sourcePersonIds: string[]): Promise<void> {
+    const sourceIds = [...new Set(sourcePersonIds)].filter((id) => id && id !== targetPersonId);
+    if (!sourceIds.length) return;
+    const people = await this.listPeople();
+    const target = people.find((person) => person.id === targetPersonId);
+    const sources = sourceIds.map((id) => people.find((person) => person.id === id)).filter((person): person is Person => Boolean(person));
+    if (!target || sources.length !== sourceIds.length) throw new Error('人物不存在或已删除');
+    const mergedContacts = [...target.contacts];
+    for (const source of sources) for (const contact of source.contacts) if (!mergedContacts.some((item) => item.type === contact.type && item.value === contact.value)) mergedContacts.push(contact);
+    const mergedCustomFields = { ...target.customFields };
+    const mergedImportantDates = [...target.importantDates];
+    for (const source of sources) {
+      for (const [key, value] of Object.entries(source.customFields)) if (!mergedCustomFields[key]) mergedCustomFields[key] = value;
+      for (const item of source.importantDates) if (!mergedImportantDates.some((date) => date.name === item.name && date.date === item.date)) mergedImportantDates.push(item);
+    }
+    const firstNonEmpty = <T>(value: T | null, fallback: (T | null)[]): T | null => value !== null && value !== undefined && value !== '' ? value : fallback.find((item) => item !== null && item !== undefined && item !== '') ?? null;
+    const sourceValues = (key: keyof Person) => sources.map((item) => item[key] as never);
+    const merged: Person = {
+      ...target,
+      nickname: firstNonEmpty(target.nickname, sourceValues('nickname')) ?? '',
+      bio: firstNonEmpty(target.bio, sourceValues('bio')),
+      avatarMediaId: firstNonEmpty(target.avatarMediaId, sourceValues('avatarMediaId')),
+      gender: firstNonEmpty(target.gender, sourceValues('gender')),
+      relationToMe: firstNonEmpty(target.relationToMe, sourceValues('relationToMe')),
+      impression: firstNonEmpty(target.impression, sourceValues('impression')),
+      birthday: firstNonEmpty(target.birthday, sourceValues('birthday')),
+      contacts: mergedContacts,
+      customFields: mergedCustomFields,
+      importantDates: mergedImportantDates,
+      privacyMode: target.privacyMode === 'private' || sources.some((item) => item.privacyMode === 'private') ? 'private' : 'normal',
+      updatedAt: new Date().toISOString(),
+    };
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync(`UPDATE persons SET nickname = ?, bio = ?, avatar_media_id = ?, gender = ?, relation_to_me = ?, impression = ?, birthday_calendar = ?, birthday_year = ?, birthday_month = ?, birthday_day = ?, birthday_is_leap_month = ?, birthday_reminder_mode = ?, birthday_reminder_enabled = ?, birthday_reminder_hour = ?, birthday_reminder_minute = ?, contacts_json = ?, custom_fields_json = ?, important_dates_json = ?, privacy_mode = ?, updated_at = ? WHERE id = ?`, merged.nickname, merged.bio, merged.avatarMediaId, merged.gender, merged.relationToMe, merged.impression, merged.birthday?.calendar ?? null, merged.birthday?.year ?? null, merged.birthday?.month ?? null, merged.birthday?.day ?? null, merged.birthday?.isLeapMonth ? 1 : 0, merged.birthday?.reminderMode ?? null, merged.birthday?.reminderEnabled === false ? 0 : 1, merged.birthday?.reminderHour ?? null, merged.birthday?.reminderMinute ?? null, JSON.stringify(merged.contacts), JSON.stringify(merged.customFields), JSON.stringify(merged.importantDates), merged.privacyMode, merged.updatedAt, targetPersonId);
+      for (const sourceId of sourceIds) {
+        await transaction.runAsync('INSERT OR IGNORE INTO post_persons (post_id, person_id) SELECT post_id, ? FROM post_persons WHERE person_id = ?', targetPersonId, sourceId);
+        await transaction.runAsync('DELETE FROM post_persons WHERE person_id = ?', sourceId);
+        await transaction.runAsync('INSERT OR IGNORE INTO person_books (person_id, book_id, created_at) SELECT ?, book_id, created_at FROM person_books WHERE person_id = ?', targetPersonId, sourceId);
+        await transaction.runAsync('DELETE FROM person_books WHERE person_id = ?', sourceId);
+        await transaction.runAsync("INSERT OR IGNORE INTO person_tag_assignments (person_id, kind, value) SELECT ?, kind, value FROM person_tag_assignments WHERE person_id = ?", targetPersonId, sourceId);
+        await transaction.runAsync('DELETE FROM person_tag_assignments WHERE person_id = ?', sourceId);
+        await transaction.runAsync("INSERT OR IGNORE INTO music_collection_entries (track_id, target_type, target_id, created_at) SELECT track_id, target_type, ?, created_at FROM music_collection_entries WHERE target_type = 'person' AND target_id = ?", targetPersonId, sourceId);
+        await transaction.runAsync("DELETE FROM music_collection_entries WHERE target_type = 'person' AND target_id = ?", sourceId);
+        await transaction.runAsync('UPDATE person_albums SET person_id = ? WHERE person_id = ?', targetPersonId, sourceId);
+        await transaction.runAsync('UPDATE person_events SET person_id = ? WHERE person_id = ?', targetPersonId, sourceId);
+      }
+      const eventRows = await transaction.getAllAsync<PersonEventRow>('SELECT id, person_id, title, description, time_text, participant_ids_json, pinned, sort_order, created_at, updated_at FROM person_events');
+      for (const row of eventRows) {
+        const currentParticipantIds = parseStringList(row.participant_ids_json ?? undefined);
+        const participantIds = currentParticipantIds.map((id) => sourceIds.includes(id) ? targetPersonId : id);
+        if (participantIds.join('|') !== currentParticipantIds.join('|')) await transaction.runAsync('UPDATE person_events SET participant_ids_json = ? WHERE id = ?', JSON.stringify([...new Set(participantIds)]), row.id);
+      }
+      for (const sourceId of sourceIds) {
+        const sourceNode = await transaction.getFirstAsync<{ id: string }>('SELECT id FROM person_relationship_nodes WHERE person_id = ?', sourceId);
+        const targetNode = await transaction.getFirstAsync<{ id: string }>('SELECT id FROM person_relationship_nodes WHERE person_id = ?', targetPersonId);
+        if (sourceNode && targetNode) {
+          await transaction.runAsync('UPDATE OR IGNORE person_relationships SET source_node_id = ? WHERE source_node_id = ?', targetNode.id, sourceNode.id);
+          await transaction.runAsync('UPDATE OR IGNORE person_relationships SET target_node_id = ? WHERE target_node_id = ?', targetNode.id, sourceNode.id);
+          await transaction.runAsync('DELETE FROM person_relationship_nodes WHERE id = ?', sourceNode.id);
+        } else if (sourceNode) await transaction.runAsync('UPDATE person_relationship_nodes SET person_id = ? WHERE id = ?', targetPersonId, sourceNode.id);
+        await transaction.runAsync('DELETE FROM persons WHERE id = ?', sourceId);
+      }
+    });
   }
 
   async listPersonRelationships(): Promise<PersonRelationship[]> {
@@ -665,7 +766,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async listMusicTracks(): Promise<MusicTrack[]> {
-    const rows = await this.db.getAllAsync<MusicTrackRow>('SELECT id, media_id, cover_media_id, title, artist, album, duration_ms, play_count, created_at, updated_at FROM music_tracks ORDER BY created_at DESC');
+    const rows = await this.db.getAllAsync<MusicTrackRow>('SELECT id, media_id, cover_media_id, title, artist, album, duration_ms, quality, play_count, created_at, updated_at FROM music_tracks ORDER BY created_at DESC');
     return rows.map(mapMusicTrack);
   }
 
@@ -679,20 +780,56 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at, kind, original_name, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         coverMedia.id, coverMedia.localPath, coverMedia.mimeType, coverMedia.width, coverMedia.height, coverMedia.checksum, coverMedia.createdAt, coverMedia.kind ?? 'image', coverMedia.originalName ?? null, coverMedia.sizeBytes ?? null,
       );
-      await transaction.runAsync('INSERT INTO music_tracks (id, media_id, cover_media_id, title, artist, album, duration_ms, play_count, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.coverMediaId ?? null, track.title, track.artist, track.album, track.durationMs, track.playCount, 'unassigned', track.createdAt, track.updatedAt);
+      // The cover is inserted in this same transaction; derive the foreign key
+      // from that record so callers cannot accidentally persist a dangling ID.
+      await transaction.runAsync('INSERT INTO music_tracks (id, media_id, cover_media_id, title, artist, album, duration_ms, quality, play_count, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, coverMedia?.id ?? null, track.title, track.artist, track.album, track.durationMs, track.quality ?? null, track.playCount, 'unassigned', track.createdAt, track.updatedAt);
       for (const collection of collections) await transaction.runAsync('INSERT INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', collection.trackId, collection.targetType, collection.targetId ?? '', collection.createdAt);
+    });
+  }
+
+  async attachMusicTrackCover(trackId: string, coverMedia: Media, expectedCoverMediaId?: string | null): Promise<boolean> {
+    return this.withTransaction(async (transaction) => {
+      const track = await transaction.getFirstAsync<{ cover_media_id: string | null }>('SELECT cover_media_id FROM music_tracks WHERE id = ?', trackId);
+      if (!track) return false;
+      const expectedMatches = expectedCoverMediaId === undefined
+        ? !track.cover_media_id
+        : expectedCoverMediaId
+          ? track.cover_media_id === expectedCoverMediaId
+          : !track.cover_media_id;
+      if (!expectedMatches) return false;
+      await transaction.runAsync(
+        'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at, kind, original_name, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        coverMedia.id, coverMedia.localPath, coverMedia.mimeType, coverMedia.width, coverMedia.height, coverMedia.checksum, coverMedia.createdAt, coverMedia.kind ?? 'image', coverMedia.originalName ?? null, coverMedia.sizeBytes ?? null,
+      );
+      const updateSql = expectedCoverMediaId === undefined
+        ? "UPDATE music_tracks SET cover_media_id = ?, updated_at = ? WHERE id = ? AND (cover_media_id IS NULL OR cover_media_id = '')"
+        : expectedCoverMediaId
+          ? 'UPDATE music_tracks SET cover_media_id = ?, updated_at = ? WHERE id = ? AND cover_media_id = ?'
+          : "UPDATE music_tracks SET cover_media_id = ?, updated_at = ? WHERE id = ? AND (cover_media_id IS NULL OR cover_media_id = '')";
+      const updated = await transaction.runAsync(
+        updateSql,
+        coverMedia.id,
+        new Date().toISOString(),
+        trackId,
+        ...(expectedCoverMediaId ? [expectedCoverMediaId] : []),
+      );
+      if (updated.changes !== 1) {
+        await transaction.runAsync('DELETE FROM media WHERE id = ?', coverMedia.id);
+        return false;
+      }
+      return true;
     });
   }
 
   async createMusicTrack(track: MusicTrack, collection?: MusicCollectionEntry): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.runAsync('INSERT INTO music_tracks (id, media_id, cover_media_id, title, artist, album, duration_ms, play_count, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.coverMediaId ?? null, track.title, track.artist, track.album, track.durationMs, track.playCount, 'unassigned', track.createdAt, track.updatedAt);
+      await transaction.runAsync('INSERT INTO music_tracks (id, media_id, cover_media_id, title, artist, album, duration_ms, quality, play_count, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.coverMediaId ?? null, track.title, track.artist, track.album, track.durationMs, track.quality ?? null, track.playCount, 'unassigned', track.createdAt, track.updatedAt);
       if (collection) await transaction.runAsync('INSERT INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', collection.trackId, collection.targetType, collection.targetId ?? '', collection.createdAt);
     });
   }
 
   async updateMusicTrack(track: MusicTrack): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('UPDATE music_tracks SET cover_media_id = ?, title = ?, artist = ?, album = ?, duration_ms = ?, updated_at = ? WHERE id = ?', track.coverMediaId, track.title, track.artist, track.album, track.durationMs, track.updatedAt, track.id));
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE music_tracks SET cover_media_id = ?, title = ?, artist = ?, album = ?, duration_ms = ?, quality = ?, updated_at = ? WHERE id = ?', track.coverMediaId, track.title, track.artist, track.album, track.durationMs, track.quality ?? null, track.updatedAt, track.id));
   }
 
   async incrementMusicTrackPlayCount(trackId: string): Promise<void> {
@@ -975,12 +1112,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
     });
   }
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
-    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, personRelationshipNodes, personRelationships, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, bookLists, bookListEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
+    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, personRelationshipNodes, personRelationships, personEvents, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, bookLists, bookListEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
       this.db.getAllAsync<CheckInRow>('SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key'),
       this.listPosts(),
       this.db.getAllAsync<DraftRow>('SELECT id, day_key, body_markdown, updated_at FROM drafts ORDER BY day_key'),
@@ -994,6 +1131,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       this.listPersonTagAssignments(),
       this.listPersonRelationshipNodes(),
       this.listPersonRelationships(),
+      this.listPersonEvents(),
       this.listAlbums(),
       this.listAlbumMedia(),
       this.listPersonBooks(),
@@ -1021,6 +1159,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       personTags,
       personRelationshipNodes,
       personRelationships,
+      personEvents,
       albums,
       albumMedia,
       personBooks,
@@ -1038,16 +1177,17 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(
-          'INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, contacts_json, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          person.id, person.name, person.nickname, person.bio, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.reminderMode ?? null, person.birthday?.reminderEnabled === false ? 0 : 1, person.birthday?.reminderHour ?? null, person.birthday?.reminderMinute ?? null, JSON.stringify(person.contacts ?? []), person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
+          'INSERT INTO persons (id, name, nickname, bio, avatar_media_id, gender, relation_to_me, impression, birthday_calendar, birthday_year, birthday_month, birthday_day, birthday_is_leap_month, birthday_reminder_mode, birthday_reminder_enabled, birthday_reminder_hour, birthday_reminder_minute, contacts_json, custom_fields_json, important_dates_json, privacy_mode, memory_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          person.id, person.name, person.nickname, person.bio, person.avatarMediaId, person.gender, person.relationToMe, person.impression, person.birthday?.calendar ?? null, person.birthday?.year ?? null, person.birthday?.month ?? null, person.birthday?.day ?? null, person.birthday?.isLeapMonth ? 1 : 0, person.birthday?.reminderMode ?? null, person.birthday?.reminderEnabled === false ? 0 : 1, person.birthday?.reminderHour ?? null, person.birthday?.reminderMinute ?? null, JSON.stringify(person.contacts ?? []), JSON.stringify(person.customFields ?? {}), JSON.stringify(person.importantDates ?? []), person.privacyMode ?? 'normal', person.memoryEnabled ? 1 : 0, person.createdAt, person.updatedAt,
         );
       }
+      for (const event of snapshot.personEvents ?? []) await transaction.runAsync('INSERT INTO person_events (id, person_id, title, description, time_text, participant_ids_json, pinned, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', event.id, event.personId, event.title, event.description ?? null, event.timeText ?? null, JSON.stringify(event.participantIds ?? []), event.pinned ? 1 : 0, event.sortOrder, event.createdAt, event.updatedAt);
       for (const item of snapshot.media) {
         await transaction.runAsync(
           'INSERT INTO media (id, local_path, mime_type, width, height, checksum, created_at, kind, original_name, size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -1074,7 +1214,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const relationship of snapshot.personRelationships ?? []) await transaction.runAsync('INSERT INTO person_relationships (id, source_node_id, target_node_id, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', relationship.id, relationship.sourceNodeId, relationship.targetNodeId, relationship.kind, relationship.createdAt, relationship.updatedAt);
       for (const album of snapshot.albums ?? []) await transaction.runAsync('INSERT INTO person_albums (id, person_id, name, cover_media_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', album.id, album.personId, album.name, album.coverMediaId, album.sortOrder, album.createdAt, album.updatedAt);
       for (const relation of snapshot.albumMedia ?? []) await transaction.runAsync('INSERT INTO album_media (album_id, media_id, sort_order, added_at) VALUES (?, ?, ?, ?)', relation.albumId, relation.mediaId, relation.sortOrder, relation.addedAt);
-      for (const track of snapshot.musicTracks ?? []) await transaction.runAsync('INSERT INTO music_tracks (id, media_id, cover_media_id, title, artist, album, duration_ms, play_count, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.coverMediaId ?? null, track.title, track.artist, track.album, track.durationMs, track.playCount, 'unassigned', track.createdAt, track.updatedAt);
+      for (const track of snapshot.musicTracks ?? []) await transaction.runAsync('INSERT INTO music_tracks (id, media_id, cover_media_id, title, artist, album, duration_ms, quality, play_count, owner_type, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)', track.id, track.mediaId, track.coverMediaId ?? null, track.title, track.artist, track.album, track.durationMs, track.quality ?? null, track.playCount, 'unassigned', track.createdAt, track.updatedAt);
       for (const entry of snapshot.musicCollectionEntries ?? []) await transaction.runAsync('INSERT INTO music_collection_entries (track_id, target_type, target_id, created_at) VALUES (?, ?, ?, ?)', entry.trackId, entry.targetType, entry.targetId ?? '', entry.createdAt);
       for (const playlist of snapshot.musicPlaylists ?? []) await transaction.runAsync('INSERT INTO music_playlists (id, name, cover_media_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', playlist.id, playlist.name, playlist.coverMediaId ?? null, playlist.createdAt, playlist.updatedAt);
       for (const entry of snapshot.musicPlaylistEntries ?? []) await transaction.runAsync('INSERT INTO music_playlist_entries (playlist_id, track_id, added_at) VALUES (?, ?, ?)', entry.playlistId, entry.trackId, entry.addedAt);

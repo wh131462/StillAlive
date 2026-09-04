@@ -1,4 +1,4 @@
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, Draft, Gender, Media, MusicCollectionEntry, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonRelationshipNodeKind, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, Draft, Gender, Media, MusicCollectionEntry, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicQuality, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonPrivacyMode, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonRelationshipNodeKind, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
 
 export interface CheckInRow { id: string; day_key: string; city: string | null; created_at: string; }
@@ -8,10 +8,11 @@ export interface PersonRow {
   id: string; name: string; nickname: string | null; bio: string | null; avatar_media_id: string | null; gender: Gender | null; relation_to_me: string | null; impression: string | null;
   birthday_calendar: 'solar' | 'lunar' | null; birthday_year: number | null; birthday_month: number | null; birthday_day: number | null;
   birthday_is_leap_month: number; birthday_reminder_mode: BirthdayReminderMode | null; birthday_reminder_enabled: number;
-  birthday_reminder_hour: number | null; birthday_reminder_minute: number | null; contacts_json: string | null; memory_enabled: number; created_at: string; updated_at: string;
+  birthday_reminder_hour: number | null; birthday_reminder_minute: number | null; contacts_json: string | null; custom_fields_json: string | null; important_dates_json: string | null; privacy_mode: PersonPrivacyMode | null; memory_enabled: number; created_at: string; updated_at: string;
 }
+export interface PersonEventRow { id: string; person_id: string; title: string; description: string | null; time_text: string | null; participant_ids_json: string | null; pinned: number; sort_order: number; created_at: string; updated_at: string; }
 export interface MediaRow { id: string; local_path: string; mime_type: string; width: number | null; height: number | null; checksum: string; created_at: string; kind?: 'image' | 'video' | 'audio' | 'book' | null; original_name?: string | null; size_bytes?: number | null; }
-export interface MusicTrackRow { id: string; media_id: string; cover_media_id: string | null; title: string; artist: string | null; album: string | null; duration_ms: number | null; play_count: number; created_at: string; updated_at: string; }
+export interface MusicTrackRow { id: string; media_id: string; cover_media_id: string | null; title: string; artist: string | null; album: string | null; duration_ms: number | null; quality: MusicQuality | null; play_count: number; created_at: string; updated_at: string; }
 export interface MusicCollectionEntryRow { track_id: string; target_type: MusicCollectionEntry['targetType']; target_id: string; created_at: string; }
 export interface MusicPlaylistRow { id: string; name: string; cover_media_id: string | null; created_at: string; updated_at: string; }
 export interface MusicPlaylistEntryRow { playlist_id: string; track_id: string; added_at: string; }
@@ -32,6 +33,7 @@ export interface BackupSnapshot {
   albums?: PersonAlbum[]; albumMedia?: AlbumMedia[]; personBooks?: PersonBook[]; musicTracks?: MusicTrack[]; musicCollectionEntries?: MusicCollectionEntry[];
   personRelationships?: PersonRelationship[];
   personRelationshipNodes?: PersonRelationshipNode[];
+  personEvents?: PersonEvent[];
   musicPlaylists?: MusicPlaylist[]; musicPlaylistEntries?: MusicPlaylistEntry[];
   bookLists?: BookList[]; bookListEntries?: BookListEntry[];
   books?: Book[]; bookExcerpts?: BookExcerpt[]; readingNoteSources?: ReadingNoteSource[];

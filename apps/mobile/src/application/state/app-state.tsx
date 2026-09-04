@@ -1,15 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
+import { PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH } from '@still-alive/types';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState as NativeAppState, Linking } from 'react-native';
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
+import type { StillAliveRepository } from '../../infrastructure/database/repository-contract';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 import { cleanupOrphanedAlbumFiles, deletePersonAlbumDirectory } from '../../infrastructure/files/local-media';
 import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
-import { readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
+import { inferMusicQuality, readAudioFileMetadata } from '../../infrastructure/files/audio-file-metadata';
 import { MBTI_TYPES, validateBirthday } from '../../features/people/person-profile';
 import { cancelBirthdayNotifications } from '../../features/people/birthday-notifications';
 import { cancelMemoryNotifications } from '../../features/home/memory-notifications';
@@ -27,16 +29,90 @@ import { writePersistentError, writePersistentLog } from '../../infrastructure/p
 
 const AppStateContext = createContext<AppStateValue | null>(null);
 
+interface MusicCoverBackfillResult {
+  candidates: number;
+  durationMs: number;
+  failed: number;
+  noCover: number;
+  recovered: number;
+  skipped: number;
+}
+
+async function backfillMissingMusicCovers(tracks: MusicTrack[], media: Media[], repository: Pick<StillAliveRepository, 'attachMusicTrackCover' | 'isMediaReferenced' | 'deleteMedia'>): Promise<MusicCoverBackfillResult> {
+  const startedAt = Date.now();
+  const mediaById = new Map(media.map((item) => [item.id, item]));
+  const candidates = tracks.filter((track) => {
+    if (!mediaById.has(track.mediaId)) return false;
+    if (!track.coverMediaId) return true;
+    const cover = mediaById.get(track.coverMediaId);
+    if (!cover || (cover.kind && cover.kind !== 'image') || !cover.localPath) return true;
+    try {
+      const file = new File(cover.localPath);
+      return !file.exists || file.size <= 0;
+    } catch {
+      return true;
+    }
+  });
+  let recovered = 0;
+  let noCover = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const track of candidates) {
+    const audio = mediaById.get(track.mediaId);
+    if (!audio) continue;
+    let cover: Media | null = null;
+    try {
+      cover = (await readEmbeddedMusicMetadata(audio)).cover;
+      if (!cover) {
+        noCover += 1;
+        continue;
+      }
+      if (await repository.attachMusicTrackCover(track.id, cover, track.coverMediaId)) {
+        recovered += 1;
+        if (track.coverMediaId && track.coverMediaId !== cover.id && !(await repository.isMediaReferenced(track.coverMediaId))) {
+          const previous = mediaById.get(track.coverMediaId);
+          if (previous) {
+            try {
+              const file = new File(previous.localPath);
+              if (file.exists) file.delete();
+            } catch (cause) {
+              writePersistentError('music.cover.backfill.previous-file.cleanup.failed', cause, { trackId: track.id, mediaId: track.coverMediaId });
+            }
+          }
+          await repository.deleteMedia(track.coverMediaId).catch((cause) => writePersistentError('music.cover.backfill.previous-record.cleanup.failed', cause, { trackId: track.id, mediaId: track.coverMediaId }));
+        }
+        continue;
+      }
+      skipped += 1;
+    } catch (cause) {
+      failed += 1;
+      writePersistentError('music.cover.backfill.failed', cause, { trackId: track.id, mediaId: audio.id });
+    }
+    if (cover) {
+      try {
+        const file = new File(cover.localPath);
+        if (file.exists) file.delete();
+      } catch (cause) {
+        writePersistentError('music.cover.backfill.cleanup.failed', cause, { trackId: track.id, mediaId: cover.id });
+      }
+    }
+  }
+  return { candidates: candidates.length, durationMs: Date.now() - startedAt, failed, noCover, recovered, skipped };
+}
+
 export function AppStateProvider({ children }: PropsWithChildren) {
   const database = useSQLiteContext();
   const repository = useMemo(() => new SQLiteStillAliveRepository(database), [database]);
   const databaseReadyRef = useRef(false);
+  const musicCoverBackfillInFlightRef = useRef<Promise<void> | null>(null);
+  const providerMountedRef = useRef(false);
   const [today, setToday] = useState<DayKey>(() => toDayKey(new Date()));
   const [todayCheckIn, setTodayCheckIn] = useState<CheckIn | null>(null);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [personRelationships, setPersonRelationships] = useState<PersonRelationship[]>([]);
+  const [personEvents, setPersonEvents] = useState<PersonEvent[]>([]);
   const [personRelationshipNodes, setPersonRelationshipNodes] = useState<PersonRelationshipNode[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
   const [tagDefinitions, setTagDefinitions] = useState<TagDefinition[]>([]);
@@ -69,25 +145,66 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await deleteProfileCollectionPrivateKeys(requestIds);
   }, [repository]);
 
+  const runMusicCoverBackfill = useCallback((reason: 'resume' | 'startup', initial?: { media: Media[]; tracks: MusicTrack[] }): Promise<void> => {
+    if (musicCoverBackfillInFlightRef.current) {
+      writePersistentLog('INFO', 'music.cover.backfill.skipped', { reason, cause: 'in-flight' });
+      return musicCoverBackfillInFlightRef.current;
+    }
+    const operation = (async () => {
+      const startedAt = Date.now();
+      const [tracks, storedMedia] = initial
+        ? [initial.tracks, initial.media]
+        : await Promise.all([repository.listMusicTracks(), repository.listMedia()]);
+      writePersistentLog('INFO', 'music.cover.backfill.started', { reason, trackCount: tracks.length, mediaCount: storedMedia.length });
+      const result = await backfillMissingMusicCovers(tracks, storedMedia, repository);
+      if (result.recovered > 0 && providerMountedRef.current) {
+        const [refreshedMedia, refreshedTracks] = await Promise.all([repository.listMedia(), repository.listMusicTracks()]);
+        if (providerMountedRef.current) {
+          setMedia(refreshedMedia);
+          setMusicTracks(refreshedTracks);
+        }
+      }
+      writePersistentLog('INFO', 'music.cover.backfill.finished', {
+        ...result,
+        elapsedMs: Date.now() - startedAt,
+        reason,
+      });
+    })().catch((cause) => {
+      writePersistentError('music.cover.backfill.failed', cause, { reason });
+    }).finally(() => {
+      musicCoverBackfillInFlightRef.current = null;
+    });
+    musicCoverBackfillInFlightRef.current = operation;
+    return operation;
+  }, [repository]);
+
+  useEffect(() => {
+    providerMountedRef.current = true;
+    return () => { providerMountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     void Promise.all([initializeBirthdayNotificationChannel(), initializeMemoryNotificationChannel()]).catch((cause) => writePersistentError('notifications.channels.initialize.failed', cause));
     const subscription = NativeAppState.addEventListener('change', (state) => {
       writePersistentLog('INFO', 'app.state.changed', { state, databaseReady: databaseReadyRef.current });
       if (state === 'active' && databaseReadyRef.current) {
+        void runMusicCoverBackfill('resume');
         const activeToday = toDayKey(new Date());
         setToday(activeToday);
         void (async () => {
           await cleanupExpiredProfileCollectionRequests().catch((cause) => writePersistentError('profile-collection.expired.cleanup.failed', cause));
-          const [checkIn, storedCheckIns, storedPeople, storedPosts, storedPreferences] = await Promise.all([
+          const [checkIn, storedCheckIns, storedPeople, storedPosts, storedPreferences, storedEvents] = await Promise.all([
             repository.getCheckIn(activeToday),
             repository.listCheckIns(),
             repository.listPeople(),
             repository.listPosts(),
             repository.getPreferences(),
+            repository.listPersonEvents(),
           ]);
           setTodayCheckIn(checkIn);
           setCheckIns(storedCheckIns);
           setPosts(storedPosts);
+          setPersonEvents(storedEvents);
           await syncBirthdayNotifications(storedPeople, storedPreferences).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
           await syncMemoryNotifications(storedPosts, storedPreferences).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
           if (storedPreferences.persistentNotificationEnabled) await refreshPersistentNotification().catch((cause) => writePersistentError('notifications.persistent.refresh.background-failed', cause));
@@ -96,7 +213,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       }
     });
     return () => subscription.remove();
-  }, [cleanupExpiredProfileCollectionRequests, repository, syncBirthdayNotifications, syncMemoryNotifications]);
+  }, [cleanupExpiredProfileCollectionRequests, repository, runMusicCoverBackfill, syncBirthdayNotifications, syncMemoryNotifications]);
 
   useEffect(() => {
     let active = true;
@@ -109,6 +226,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const storedPosts = await repository.listPosts();
       const storedPeople = await repository.listPeople();
       const storedPersonRelationships = await repository.listPersonRelationships();
+      const storedPersonEvents = await repository.listPersonEvents();
       const storedPersonRelationshipNodes = await repository.listPersonRelationshipNodes();
       const storedMedia = await repository.listMedia();
       const memory = await repository.getHomeMemory(today);
@@ -136,6 +254,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setPosts(storedPosts);
         setPeople(storedPeople);
         setPersonRelationships(storedPersonRelationships);
+        setPersonEvents(storedPersonEvents);
         setPersonRelationshipNodes(storedPersonRelationshipNodes);
         setMedia(storedMedia);
         setTagDefinitions(storedTags);
@@ -161,13 +280,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           ? { ...storedPreferences, onboardingCompleted: true }
           : storedPreferences;
         setPreferences(effectivePreferences);
+        setReady(true);
+        databaseReadyRef.current = true;
+        void runMusicCoverBackfill('startup', { media: storedMedia, tracks: storedMusicTracks });
         void (async () => {
           await syncBirthdayNotifications(storedPeople, effectivePreferences).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
           await syncMemoryNotifications(storedPosts, effectivePreferences).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
           if (memory) await repository.markMemoryShown(memory).catch((cause) => writePersistentError('memory.mark-shown.failed', cause, { postId: memory.post.id }));
           if (effectivePreferences.onboardingCompleted !== storedPreferences.onboardingCompleted) await repository.updatePreferences({ onboardingCompleted: true }).catch((cause) => writePersistentError('preferences.onboarding.migrate.failed', cause));
-          setReady(true);
-          databaseReadyRef.current = true;
         })().catch((cause) => {
           writePersistentError('app.data.post-load.failed', cause);
           setReady(true);
@@ -181,7 +301,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setReady(true);
       });
     return () => { active = false; };
-  }, [cleanupExpiredProfileCollectionRequests, repository, syncBirthdayNotifications, syncMemoryNotifications, today]);
+  }, [cleanupExpiredProfileCollectionRequests, repository, runMusicCoverBackfill, syncBirthdayNotifications, syncMemoryNotifications, today]);
 
   useEffect(() => {
     if (!ready || !persistentNotificationSupported) return;
@@ -295,6 +415,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       impression: null,
       birthday: null,
       contacts: [],
+      customFields: {},
+      importantDates: [],
+      privacyMode: 'normal',
       memoryEnabled: true,
       createdAt: now,
       updatedAt: now,
@@ -318,17 +441,36 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPersonBooksState(await repository.listPersonBooks());
   }, [books, people, repository]);
 
-  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday' | 'contacts'>, mbti?: string | null, customTagIds?: string[]) => {
+  const updatePerson = useCallback(async (personId: string, changes: Pick<Person, 'name' | 'nickname' | 'bio' | 'avatarMediaId' | 'gender' | 'relationToMe' | 'impression' | 'birthday' | 'contacts'> & Partial<Pick<Person, 'customFields' | 'importantDates' | 'privacyMode'>>, mbti?: string | null, customTagIds?: string[]) => {
     if (!changes.name.trim()) throw new Error('人物名字不能为空');
     if ((changes.impression?.length ?? 0) > 100) throw new Error('一句话印象最多 100 字');
     if ((changes.bio?.length ?? 0) > 500) throw new Error('个人简介最多 500 字');
-    if (changes.contacts.some((contact) => !contact.type.trim() || !contact.value.trim())) throw new Error('联系方式类型和内容不能为空');
+    if (changes.contacts.some((contact) => {
+      const hasType = Boolean(contact.type.trim());
+      const hasValue = Boolean(contact.value.trim());
+      return hasType !== hasValue;
+    })) throw new Error('联系方式类型和内容不能为空');
     const existing = people.find((person) => person.id === personId);
     if (!existing) throw new Error('要编辑的人物不存在');
+    const customFields = changes.customFields ?? existing.customFields;
+    const importantDates = changes.importantDates ?? existing.importantDates;
+    for (const [key, value] of Object.entries(customFields)) {
+      if (!key.trim() || !value.trim()) throw new Error('自定义资料的名称和值不能为空');
+      if (key.trim().length > 20 || value.trim().length > PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH) throw new Error(`自定义资料名称最多 20 字，值最多 ${PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH} 字`);
+    }
+    if (new Set(Object.keys(customFields).map((key) => key.trim())).size !== Object.keys(customFields).length) throw new Error('自定义资料名称不能重复');
+    const normalizedCustomFields = Object.fromEntries(Object.entries(customFields).map(([key, value]) => [key.trim(), value.trim()]));
+    for (const item of importantDates) {
+      if (!item.name.trim() || !/^(?:\d{4}-)?\d{2}-\d{2}$/.test(item.date)) throw new Error('重要日期格式无效');
+      const normalized = item.date.length === 5 ? `2000-${item.date}` : item.date;
+      const date = new Date(`${normalized}T12:00:00`);
+      const [year, month, day] = normalized.split('-').map(Number);
+      if (Number.isNaN(date.getTime()) || date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) throw new Error('重要日期不存在');
+    }
     if (changes.birthday) validateBirthday(changes.birthday);
     if (mbti && !MBTI_TYPES.includes(mbti as typeof MBTI_TYPES[number])) throw new Error('MBTI 类型无效');
     const previousAvatarId = existing.avatarMediaId;
-    await repository.updatePerson({ ...existing, ...changes, name: changes.name.trim(), nickname: changes.nickname.trim(), bio: changes.bio?.trim() || null, updatedAt: new Date().toISOString() });
+    await repository.updatePerson({ ...existing, ...changes, customFields: normalizedCustomFields, importantDates, privacyMode: changes.privacyMode ?? existing.privacyMode, name: changes.name.trim(), nickname: changes.nickname.trim(), bio: changes.bio?.trim() || null, updatedAt: new Date().toISOString() });
     if (mbti !== undefined || customTagIds !== undefined) await repository.setPersonTags(personId, mbti ?? null, customTagIds ?? []);
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);
@@ -336,6 +478,26 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
     if (previousAvatarId && previousAvatarId !== changes.avatarMediaId) await cleanupUnreferencedMedia([previousAvatarId]);
   }, [cleanupUnreferencedMedia, people, repository, syncBirthdayNotifications]);
+
+  const savePersonEvent = useCallback(async (event: PersonEvent) => {
+    if (!event.title.trim()) throw new Error('事件标题不能为空');
+    if (event.title.trim().length > 80 || (event.description?.length ?? 0) > 1000 || (event.timeText?.length ?? 0) > 40) throw new Error('事件内容超出长度限制');
+    if (!people.some((person) => person.id === event.personId)) throw new Error('人物不存在或已删除');
+    await repository.savePersonEvent({ ...event, title: event.title.trim(), description: event.description?.trim() || null, timeText: event.timeText?.trim() || null, participantIds: [...new Set(event.participantIds)] });
+    setPersonEvents(await repository.listPersonEvents());
+  }, [people, repository]);
+
+  const deletePersonEvent = useCallback(async (eventId: string) => {
+    await repository.deletePersonEvent(eventId);
+    setPersonEvents(await repository.listPersonEvents());
+  }, [repository]);
+
+  const mergePersons = useCallback(async (targetPersonId: string, sourcePersonIds: string[]) => {
+    await repository.mergePersons(targetPersonId, sourcePersonIds);
+    const [storedPeople, storedPosts, storedEvents, storedAlbums, storedAlbumMedia, storedPersonBooks, storedPersonTags, storedMusicTracks, storedMusicCollections, storedRelationships, storedNodes] = await Promise.all([repository.listPeople(), repository.listPosts(), repository.listPersonEvents(), repository.listAlbums(), repository.listAlbumMedia(), repository.listPersonBooks(), repository.listPersonTagAssignments(), repository.listMusicTracks(), repository.listMusicCollectionEntries(), repository.listPersonRelationships(), repository.listPersonRelationshipNodes()]);
+    setPeople(storedPeople); setPosts(storedPosts); setPersonEvents(storedEvents); setAlbums(storedAlbums); setAlbumMedia(storedAlbumMedia); setPersonBooksState(storedPersonBooks); setPersonTagsState(storedPersonTags); setMusicTracks(storedMusicTracks); setMusicCollectionEntries(storedMusicCollections); setPersonRelationships(storedRelationships); setPersonRelationshipNodes(storedNodes);
+    void syncBirthdayNotifications(storedPeople, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
+  }, [repository, syncBirthdayNotifications]);
 
   const createProfileCollectionRequest = useCallback(async (request: ProfileCollectionRequest, privateKeyJwk: string) => {
     await saveProfileCollectionPrivateKey(request.id, privateKeyJwk);
@@ -391,6 +553,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const deletedTrackIds = await repository.deletePerson(personId);
     const storedPeople = await repository.listPeople();
     setPeople(storedPeople);
+    setPersonEvents(await repository.listPersonEvents());
     setPersonRelationships(await repository.listPersonRelationships());
     setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
     const deletedMusicAssets = deletedTrackIds
@@ -683,7 +846,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
     if (personId && !people.some((person) => person.id === personId)) throw new Error('人物不存在或已删除');
     const now = new Date().toISOString();
-    const metadata = await readEmbeddedMusicMetadata(item).catch(() => ({ album: null, artist: null, cover: null, title: null }));
+    const metadata = await readEmbeddedMusicMetadata(item, item.importSourceUri).catch(() => ({ album: null, artist: null, cover: null, title: null }));
     const technicalMetadata = await readAudioFileMetadata(item.localPath).catch(() => null);
     const track: MusicTrack = {
       id: `track_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
@@ -693,6 +856,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       artist: metadata.artist,
       album: metadata.album,
       durationMs: technicalMetadata?.durationMs ?? null,
+      quality: technicalMetadata ? inferMusicQuality(technicalMetadata.format, technicalMetadata.bitrateKbps) : null,
       playCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -763,8 +927,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const deleteMusicTrack = useCallback(async (trackId: string) => {
     const track = musicTracks.find((item) => item.id === trackId);
     await repository.deleteMusicTrack(trackId);
-    setMusicTracks(await repository.listMusicTracks());
-    setMusicCollectionEntries(await repository.listMusicCollectionEntries());
+    const [storedTracks, storedCollections, storedPlaylistEntries] = await Promise.all([
+      repository.listMusicTracks(),
+      repository.listMusicCollectionEntries(),
+      repository.listMusicPlaylistEntries(),
+    ]);
+    setMusicTracks(storedTracks);
+    setMusicCollectionEntries(storedCollections);
+    setMusicPlaylistEntries(storedPlaylistEntries);
     if (track) {
       const assets = [media.find((item) => item.id === track.mediaId), track.coverMediaId ? media.find((item) => item.id === track.coverMediaId) : null].filter((item): item is Media => Boolean(item));
       if (assets.length) await cleanupUnreferencedMedia(assets.map((item) => item.id), assets);
@@ -841,10 +1011,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [cleanupUnreferencedMedia, musicPlaylists, repository]);
 
   const addMusicTracksToPlaylist = useCallback(async (playlistId: string, trackIds: string[]) => {
-    const playlist = musicPlaylists.find((item) => item.id === playlistId);
+    const [currentPlaylists, currentEntries, storedTracks] = await Promise.all([
+      repository.listMusicPlaylists(),
+      repository.listMusicPlaylistEntries(),
+      repository.listMusicTracks(),
+    ]);
+    const playlist = currentPlaylists.find((item) => item.id === playlistId);
     if (!playlist) throw new Error('歌单不存在或已删除');
-    const validTrackIds = new Set((await repository.listMusicTracks()).map((track) => track.id));
-    const existingTrackIds = new Set(musicPlaylistEntries.filter((entry) => entry.playlistId === playlistId).map((entry) => entry.trackId));
+    const validTrackIds = new Set(storedTracks.map((track) => track.id));
+    const existingTrackIds = new Set(currentEntries.filter((entry) => entry.playlistId === playlistId).map((entry) => entry.trackId));
     const addedAt = Date.now();
     const entries = [...new Set(trackIds)]
       .filter((trackId) => validTrackIds.has(trackId) && !existingTrackIds.has(trackId))
@@ -855,7 +1030,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const [storedPlaylists, storedEntries] = await Promise.all([repository.listMusicPlaylists(), repository.listMusicPlaylistEntries()]);
     setMusicPlaylists(storedPlaylists);
     setMusicPlaylistEntries(storedEntries);
-  }, [musicPlaylistEntries, musicPlaylists, repository]);
+  }, [repository]);
 
   const removeMusicTrackFromPlaylist = useCallback(async (playlistId: string, trackId: string) => {
     const playlist = musicPlaylists.find((item) => item.id === playlistId);
@@ -1057,13 +1232,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       void syncMemoryNotifications(oldPosts, oldPreferences).catch((syncCause) => writePersistentError('notifications.memory.restore-rollback.failed', syncCause));
       throw cause;
     }
-    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedPersonRelationshipNodes, storedPersonRelationships, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
+    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedPersonRelationshipNodes, storedPersonRelationships, storedPersonEvents, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
       repository.getCheckIn(today),
       repository.listCheckIns(),
       repository.listPosts(),
       repository.listPeople(),
       repository.listPersonRelationshipNodes(),
       repository.listPersonRelationships(),
+      repository.listPersonEvents(),
       repository.listMedia(),
       repository.getHomeMemory(today),
       repository.getPreferences(),
@@ -1090,6 +1266,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPeople(storedPeople);
     setPersonRelationshipNodes(storedPersonRelationshipNodes);
     setPersonRelationships(storedPersonRelationships);
+    setPersonEvents(storedPersonEvents);
     setMedia(storedMedia);
     setHomeMemory(memory);
     setPreferences(storedPreferences);
@@ -1155,6 +1332,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPosts([]);
     setPeople([]);
     setPersonRelationships([]);
+    setPersonEvents([]);
     setPersonRelationshipNodes(await repository.listPersonRelationshipNodes());
     setMedia([]);
     setMusicTracks([]);
@@ -1211,6 +1389,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     posts,
     people,
     personRelationships,
+    personEvents,
     personRelationshipNodes,
     media,
     tagDefinitions,
@@ -1249,6 +1428,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     discardMedia,
     createPerson,
     updatePerson,
+    savePersonEvent,
+    deletePersonEvent,
+    mergePersons,
     deletePerson,
     createPersonRelationshipNode,
     deletePersonRelationshipNode,
@@ -1317,7 +1499,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     getReadingNoteSource,
     saveReadingNoteSource,
     deleteReadingNoteSource,
-  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonRelationship, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
+  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonEvent, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, mergePersons, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personEvents, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonEvent, savePersonRelationship, savePost, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

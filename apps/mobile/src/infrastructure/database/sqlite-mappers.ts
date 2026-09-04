@@ -1,5 +1,5 @@
-import type { AppThemeId, Book, BookExcerpt, CheckIn, DayKey, Draft, Gender, Media, MusicTrack, NameStyleId, Person, Post, ProfileCollectionField, ProfileCollectionRequest, ReaderTocItem, ReadingNoteSource, TagSystemSetting } from '@still-alive/types';
-import type { BookExcerptRow, BookRow, CheckInRow, DraftRow, MediaRow, MusicTrackRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
+import { PROFILE_COLLECTION_FIELDS, type AppThemeId, type Book, type BookExcerpt, type CheckIn, type DayKey, type Draft, type Gender, type Media, type MusicQuality, type MusicTrack, type NameStyleId, type Person, type PersonEvent, type PersonImportantDate, type Post, type ProfileCollectionField, type ProfileCollectionRequest, type ReaderTocItem, type ReadingNoteSource, type TagSystemSetting } from '@still-alive/types';
+import type { BookExcerptRow, BookRow, CheckInRow, DraftRow, MediaRow, MusicTrackRow, PersonEventRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
 
 export function mapCheckIn(row: CheckInRow): CheckIn {
   return { id: row.id, dayKey: row.day_key as DayKey, city: row.city, createdAt: row.created_at };
@@ -28,7 +28,7 @@ export function mapDraft(row: DraftRow): Draft {
 export function parseStringList(value: string | undefined): string[] {
   if (!value) return [];
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = JSON.parse(value ?? '{}');
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
   } catch {
     return [];
@@ -69,10 +69,26 @@ export function mapPerson(row: PersonRow): Person {
       reminderMode: row.birthday_reminder_mode ?? row.birthday_calendar,
     } : null,
     contacts: parsePersonContacts(row.contacts_json),
+    customFields: parseStringMap(row.custom_fields_json ?? undefined),
+    importantDates: parseImportantDates(row.important_dates_json),
+    privacyMode: row.privacy_mode === 'private' ? 'private' : 'normal',
     memoryEnabled: row.memory_enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export function mapPersonEvent(row: PersonEventRow): PersonEvent {
+  return { id: row.id, personId: row.person_id, title: row.title, description: row.description, timeText: row.time_text, participantIds: parseStringList(row.participant_ids_json ?? undefined), pinned: row.pinned === 1, sortOrder: row.sort_order, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function parseImportantDates(value: string | null): PersonImportantDate[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is PersonImportantDate => Boolean(item && typeof item === 'object' && typeof (item as Record<string, unknown>).id === 'string' && typeof (item as Record<string, unknown>).name === 'string' && typeof (item as Record<string, unknown>).date === 'string')).map((item) => ({ id: item.id, name: item.name, date: item.date, note: typeof item.note === 'string' ? item.note : null, reminderEnabled: item.reminderEnabled !== false }));
+  } catch { return []; }
 }
 
 function parsePersonContacts(value: string | null): Person['contacts'] {
@@ -108,7 +124,11 @@ function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
 }
 
 export function mapMusicTrack(row: MusicTrackRow): MusicTrack {
-  return { id: row.id, mediaId: row.media_id, coverMediaId: row.cover_media_id, title: row.title, artist: row.artist, album: row.album, durationMs: row.duration_ms, playCount: row.play_count, createdAt: row.created_at, updatedAt: row.updated_at };
+  return { id: row.id, mediaId: row.media_id, coverMediaId: row.cover_media_id, title: row.title, artist: row.artist, album: row.album, durationMs: row.duration_ms, quality: parseMusicQuality(row.quality), playCount: row.play_count, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function parseMusicQuality(value: string | null | undefined): MusicQuality | null {
+  return value === 'SQ' || value === 'HQ' ? value : null;
 }
 
 export function mapBook(row: BookRow): Book {
@@ -147,15 +167,15 @@ export function parseProfileCollectionFields(value: string): ProfileCollectionFi
   try {
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is ProfileCollectionField => item === 'name' || item === 'gender' || item === 'birthday' || item === 'mbti' || item === 'customTags');
+    return parsed.filter((item): item is ProfileCollectionField => typeof item === 'string' && PROFILE_COLLECTION_FIELDS.includes(item as ProfileCollectionField));
   } catch {
     return [];
   }
 }
 
-export function parseStringMap(value: string): Record<string, string> {
+export function parseStringMap(value: string | undefined | null): Record<string, string> {
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = JSON.parse(value ?? '{}');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   } catch {

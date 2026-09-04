@@ -8,7 +8,7 @@ import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-s
 
 export interface DateParts { year: number; month: number; day: number }
 
-interface DatePickerFieldProps { calendar?: BirthdayCalendar; isLeapMonth?: boolean; label: string; value: DateParts | null; maximumDate?: Date; onChange(value: DateParts, isLeapMonth: boolean): void; onClear?(): void }
+interface DatePickerFieldProps { calendar?: BirthdayCalendar; isLeapMonth?: boolean; label: string; value: DateParts | null; defaultValue?: DateParts; maximumDate?: Date; formatValue?(value: DateParts, calendar: BirthdayCalendar, isLeapMonth: boolean): string; onChange(value: DateParts, isLeapMonth: boolean): void; onClear?(): void }
 
 const ITEM_HEIGHT = 44;
 const VISIBLE_ITEMS = 5;
@@ -17,15 +17,15 @@ export function DatePickerField(props: DatePickerFieldProps) {
   return <CalendarDatePickerField key={props.calendar ?? 'solar'} {...props} />;
 }
 
-function CalendarDatePickerField({ calendar = 'solar', isLeapMonth = false, label, value, maximumDate = new Date(), onChange, onClear }: DatePickerFieldProps) {
+function CalendarDatePickerField({ calendar = 'solar', isLeapMonth = false, label, value, defaultValue, maximumDate = new Date(), formatValue, onChange, onClear }: DatePickerFieldProps) {
   const [open, setOpen] = useState(false);
   const maximum = birthdayForCalendar(toBirthday({ year: maximumDate.getFullYear(), month: maximumDate.getMonth() + 1, day: maximumDate.getDate() }, 'solar', false), calendar);
   const maximumParts = toDateParts(maximum);
-  const [draft, setDraft] = useState(value ?? maximumParts);
+  const [draft, setDraft] = useState(value ?? defaultValue ?? maximumParts);
   const [draftIsLeapMonth, setDraftIsLeapMonth] = useState(calendar === 'lunar' && isLeapMonth);
   useEffect(() => {
     if (!open) return;
-    setDraft(value ?? maximumParts);
+    setDraft(value ?? defaultValue ?? maximumParts);
     setDraftIsLeapMonth(calendar === 'lunar' && (value ? isLeapMonth : maximum.isLeapMonth));
   }, [open]);
 
@@ -62,7 +62,7 @@ function CalendarDatePickerField({ calendar = 'solar', isLeapMonth = false, labe
   return <>
     <Pressable accessibilityRole="button" onPress={() => setOpen(true)} style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.fieldValueRow}><Text style={[styles.value, !value && styles.placeholder]}>{value ? formatDate(value, calendar, isLeapMonth) : '请选择日期'}</Text><Text style={styles.fieldAction}>选择</Text></View>
+      <View style={styles.fieldValueRow}><Text style={[styles.value, !value && styles.placeholder]}>{value ? formatValue?.(value, calendar, isLeapMonth) ?? formatDate(value, calendar, isLeapMonth) : '请选择日期'}</Text><Text style={styles.fieldAction}>选择</Text></View>
     </Pressable>
     <DraggableBottomSheet onClose={() => setOpen(false)} open={open} sheetStyle={styles.sheet}>
           <View style={styles.header}><Pressable onPress={() => setOpen(false)} style={styles.headerAction}><Text style={styles.cancel}>取消</Text></Pressable><Text style={styles.title}>{label}</Text><Pressable onPress={() => { onChange(draft, calendar === 'lunar' && draftIsLeapMonth); setOpen(false); }} style={styles.headerAction}><Text style={styles.confirm}>完成</Text></Pressable></View>
