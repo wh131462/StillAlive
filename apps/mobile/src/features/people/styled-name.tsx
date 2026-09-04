@@ -1,7 +1,7 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
-import { getActiveColorTheme } from '@still-alive/tokens';
+import { getActiveColorTheme, typography } from '@still-alive/tokens';
 import type { NameStyleId } from '@still-alive/types';
 import { nameTextStyle } from '../../shared/theme/app-theme';
 
@@ -38,6 +38,12 @@ export function StyledName({ numberOfLines, style, value, variant }: StyledNameP
     </View>;
   }
 
+  if (variant === 'petal') {
+    return <Text accessibilityLabel={value} numberOfLines={numberOfLines} style={[style, nameTextStyle(variant)]}>
+      {[...value].map((character, index) => <Text key={`${character}_${index}`} style={{ color: palette[(index * 2) % palette.length], fontFamily: typography.display, fontStyle: index % 2 ? 'italic' : 'normal' }}>{character}</Text>)}
+    </Text>;
+  }
+
   return (
     <Text accessibilityLabel={value} numberOfLines={numberOfLines} style={[style, nameTextStyle(variant)]}>
       {variant === 'colorful'
@@ -64,7 +70,7 @@ function mixHexColors(start: string, end: string, amount: number): string {
 }
 
 const styles = StyleSheet.create({
-  iridescentName: { maxWidth: '100%' },
+  iridescentName: { width: '100%', maxWidth: '100%' },
   measureText: { opacity: 0 },
   maskText: { color: '#000000' },
   gradient: { flex: 1, flexDirection: 'row' },

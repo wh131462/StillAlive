@@ -44,7 +44,7 @@ export function parseAppTheme(value: string | undefined): AppThemeId {
 }
 
 export function parseNameStyle(value: string | undefined, fallback: NameStyleId): NameStyleId {
-  return value === 'fresh' || value === 'journal' || value === 'sunlit' || value === 'colorful' || value === 'iridescent' ? value : fallback;
+  return value === 'fresh' || value === 'journal' || value === 'sunlit' || value === 'colorful' || value === 'iridescent' || value === 'quiet' || value === 'mono' || value === 'ember' || value === 'brush' || value === 'poem' || value === 'petal' || value === 'neon' ? value : fallback;
 }
 
 export function mapPerson(row: PersonRow): Person {
