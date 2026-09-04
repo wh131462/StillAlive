@@ -5,7 +5,7 @@ import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
-import type { ProfileCollectionField, ProfileCollectionRequest } from '@still-alive/types';
+import { PROFILE_COLLECTION_FIELDS, type ProfileCollectionField, type ProfileCollectionRequest } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import ProfileCollectionCrypto from './profile-collection-crypto.dom';
 import type { ProfileCollectionCryptoCommand, ProfileCollectionCryptoResult } from './profile-collection-crypto.types';
@@ -16,15 +16,16 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { executeProfileCollectionCrypto, isNativeProfileCollectionCryptoAvailable } from './profile-collection-crypto';
 
-const FIELD_OPTIONS: Array<{ id: ProfileCollectionField; label: string; hint: string }> = [
-  { id: 'name', label: '姓名', hint: '对方平时希望被怎样称呼' },
-  { id: 'nickname', label: '昵称', hint: '对方更常使用的称呼' },
-  { id: 'bio', label: '个人简介', hint: '由对方补充自己的介绍' },
-  { id: 'gender', label: '性别', hint: '由对方自己选择' },
-  { id: 'birthday', label: '生日', hint: '公历或农历都可以' },
-  { id: 'mbti', label: 'MBTI', hint: '由对方选择自己的类型' },
-  { id: 'customTags', label: '人物标签', hint: '由对方选择已有标签或创建新标签' },
-];
+const FIELD_COPY: Record<ProfileCollectionField, { label: string; hint: string }> = {
+  name: { label: '姓名', hint: '对方平时希望被怎样称呼' },
+  nickname: { label: '昵称', hint: '对方更常使用的称呼' },
+  bio: { label: '个人简介', hint: '由对方补充自己的介绍' },
+  gender: { label: '性别', hint: '由对方自己选择' },
+  birthday: { label: '生日', hint: '公历或农历都可以' },
+  mbti: { label: 'MBTI', hint: '由对方选择自己的类型' },
+  customTags: { label: '人物标签', hint: '由对方选择已有标签或创建新标签' },
+};
+const FIELD_OPTIONS = PROFILE_COLLECTION_FIELDS.map((id) => ({ id, ...FIELD_COPY[id] }));
 
 export default function ProfileCollectionInviteScreen() {
   const router = useRouter();

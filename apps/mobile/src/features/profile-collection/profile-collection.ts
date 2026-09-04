@@ -1,5 +1,5 @@
 import { strFromU8, strToU8 } from 'fflate';
-import type { BirthdayCalendar, Gender, ProfileCollectionField, ProfileCollectionRequest } from '@still-alive/types';
+import { PROFILE_COLLECTION_FIELDS, type BirthdayCalendar, type Gender, type ProfileCollectionField, type ProfileCollectionRequest } from '@still-alive/types';
 import { MBTI_TYPES, validateBirthday } from '../people/person-profile';
 
 export const PROFILE_COLLECTION_PROTOCOL_VERSION = 1;
@@ -123,7 +123,7 @@ export function parseProfileCollectionResponseInput(input: string): string {
 export function validateProfileCollectionPayload(payload: unknown, request: ProfileCollectionRequest): ProfileCollectionResponsePayloadV1 {
   if (!isRecord(payload) || !hasOnlyKeys(payload, ['v', 'id', 'submittedAt', 'answers']) || payload.v !== 1 || payload.id !== request.id || !validIsoDate(payload.submittedAt) || !isRecord(payload.answers)) throw new Error('填写结果格式无效');
   const answers = payload.answers;
-  const allowedAnswerKeys = new Set(['name', 'nickname', 'bio', 'gender', 'birthday', 'mbti', 'customTags', 'newCustomTags']);
+  const allowedAnswerKeys = new Set<string>([...PROFILE_COLLECTION_FIELDS, 'newCustomTags']);
   if (Object.keys(answers).some((key) => !allowedAnswerKeys.has(key))) throw new Error('填写结果包含不支持的字段');
   const result: ProfileCollectionAnswers = {};
   if (answers.name !== undefined) {
@@ -191,9 +191,9 @@ export function decodeBase64Url(value: string, maxBytes: number): Uint8Array {
 }
 
 function validateInvitation(value: unknown): asserts value is ProfileCollectionInvitationV1 {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['v', 'id', 'exp', 'pk', 'f', 'tags']) || value.v !== 1 || !validRequestId(value.id) || !validIsoDate(value.exp) || typeof value.pk !== 'string' || !Array.isArray(value.f) || !value.f.length || value.f.length > 7 || !Array.isArray(value.tags) || value.tags.length > 100) throw new Error('邀请内容无效');
+  if (!isRecord(value) || !hasOnlyKeys(value, ['v', 'id', 'exp', 'pk', 'f', 'tags']) || value.v !== 1 || !validRequestId(value.id) || !validIsoDate(value.exp) || typeof value.pk !== 'string' || !Array.isArray(value.f) || !value.f.length || value.f.length > PROFILE_COLLECTION_FIELDS.length || !Array.isArray(value.tags) || value.tags.length > 100) throw new Error('邀请内容无效');
   const fields = value.f;
-  if (fields.some((field) => !['name', 'nickname', 'bio', 'gender', 'birthday', 'mbti', 'customTags'].includes(field)) || new Set(fields).size !== fields.length) throw new Error('邀请字段无效');
+  if (fields.some((field) => typeof field !== 'string' || !PROFILE_COLLECTION_FIELDS.includes(field as ProfileCollectionField)) || new Set(fields).size !== fields.length) throw new Error('邀请字段无效');
   decodeBase64Url(value.pk, 65);
   if (decodeBase64Url(value.pk, 65).byteLength !== 65) throw new Error('邀请公钥无效');
   for (const option of value.tags) {

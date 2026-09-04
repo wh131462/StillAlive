@@ -15,6 +15,7 @@
     "build": "turbo run build",
     "build:aab": "./apps/mobile/scripts/build-android.sh aab",
     "build:apk": "./apps/mobile/scripts/build-android.sh apk",
+    "check:profile-collection": "node ./scripts/check-profile-collection-fields.mjs",
     "release": "node ./scripts/release.mjs",
     "release:testflight": "cd apps/mobile && npx eas-cli@latest build --platform ios --profile production --auto-submit",
     "typecheck": "turbo run typecheck",
