@@ -1,4 +1,5 @@
-import { PostCommentPreview } from '../journal/post-comments';
+import { PostCommentComposer, PostCommentMenu, PostCommentPreview } from '../journal/post-comments';
+import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +7,7 @@ import { Image, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput,
 import { feedback } from '../../shared/feedback';
 import { toDayKey } from '../../shared/core/day-key';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import type { BirthdayCalendar, CheckIn, DayKey, Media, Person, Post } from '@still-alive/types';
+import type { BirthdayCalendar, CheckIn, DayKey, Media, Person, Post, PostComment } from '@still-alive/types';
 import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
@@ -49,6 +50,15 @@ const POST_PREVIEW_MAX_HEIGHT = 168;
 export default function SpaceScreen() {
   const router = useRouter();
   const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, readingNoteSources, ready, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
+  const [commentTarget, setCommentTarget] = useState<{ postId: string; commentId?: string } | null>(null);
+  const commentPost = posts.find((post) => post.id === commentTarget?.postId);
+  const openComment = (postId: string, comment?: PostComment) => {
+    if (commentTarget) {
+      if (commentTarget.postId !== postId || commentTarget.commentId !== comment?.id) feedback.alert('当前正在编辑评论', '请先发送或收起当前评论，再切换到其他评论。');
+      return;
+    }
+    setCommentTarget({ postId, commentId: comment?.id });
+  };
   const [profileName, setProfileName] = useState('');
   const [nickname, setNickname] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -259,7 +269,10 @@ export default function SpaceScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <AppKeyboardAvoidingView style={styles.feed}>
       <SectionList<TimelineItem, TimelineSection>
+        keyboardShouldPersistTaps="handled"
+        style={styles.feed}
         contentContainerStyle={styles.container}
         keyExtractor={(item) => item.kind === 'post' ? item.post.id : item.checkIn.id}
         ListEmptyComponent={<Text style={styles.empty}>还没有记录。今天，可以从一个小小的坐标开始。</Text>}
@@ -269,6 +282,7 @@ export default function SpaceScreen() {
             authorName={preferences.nickname || preferences.profileName || '我'}
             avatarUri={profileAvatar?.localPath ?? null}
             mediaById={mediaById}
+            onComment={(comment) => openComment(item.post.id, comment)}
             onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
             onPress={() => router.push(`/post/${item.post.id}`)}
             post={item.post}
@@ -282,6 +296,8 @@ export default function SpaceScreen() {
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
       />
+      {commentPost && commentTarget ? <PostCommentComposer key={`${commentPost.id}:${commentTarget.commentId ?? 'new'}`} post={commentPost} comment={commentPost.comments.find((comment) => comment.id === commentTarget.commentId)} onClose={() => setCommentTarget(null)} /> : null}
+      </AppKeyboardAvoidingView>
 
       <DraggableBottomSheet accessibilityLabel="首次设置" backdropStyle={styles.onboardingBackdrop} dismissDisabled keyboardAvoiding onClose={() => undefined} open={ready && !preferences.onboardingCompleted} sheetStyle={styles.onboardingSheet}>
             <ScrollView contentContainerStyle={styles.onboardingContent} keyboardShouldPersistTaps="handled" style={styles.onboardingScroll}>
@@ -327,7 +343,7 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
   );
 }
 
-function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, onPress, post, readingSource, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null; signature: string }) {
+function PostCard({ authorName, avatarUri, mediaById, nameStyle, onComment, onImagePress, onPress, post, readingSource, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onComment(comment?: PostComment): void; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null; signature: string }) {
   const [bodyOverflowed, setBodyOverflowed] = useState(false);
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
@@ -348,10 +364,11 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
         {readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} /></View> : null}
         {musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} /></View> : null}
         {hasHiddenContent ? <><Text style={styles.postOverflowMark}>…</Text><Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>查看更多</Text></Pressable></> : null}
-        <PostCommentPreview post={post} />
         <View style={[styles.postFooter, hasHiddenContent && styles.postFooterAfterMore]}>
           <Text numberOfLines={1} style={styles.postTime}>{post.locationName ? `${post.locationName} / ` : ''}{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' / 修改过' : ''}</Text>
+          <PostCommentMenu onComment={() => onComment()} />
         </View>
+        <PostCommentPreview post={post} onEdit={onComment} />
       </View>
     </Pressable>
   );
@@ -674,9 +691,10 @@ const styles = createThemedStyles(() => ({
   postMoreButton: { minWidth: 64, minHeight: 44, marginTop: spacing.xs, alignSelf: 'flex-start', alignItems: 'flex-start', justifyContent: 'center' },
   postOverflowMark: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 14 },
   postMoreText: { color: colors.life, fontFamily: typography.mono, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },
-  postFooter: { marginTop: spacing.md },
+  feed: { flex: 1 },
+  postFooter: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   postFooterAfterMore: { marginTop: 0 },
-  postTime: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  postTime: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 10 },
   empty: { paddingVertical: spacing.xl, color: colors.inkFaint, fontFamily: typography.display, fontSize: 15, lineHeight: 26 },
   onboardingBackdrop: { backgroundColor: colors.backdropStrong },
   onboardingSheet: { maxHeight: '100%', backgroundColor: colors.sheet },

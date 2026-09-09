@@ -123,20 +123,27 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     });
   }
 
-  async savePostComment(postId: string, body: string | null, commentId?: string): Promise<void> {
+  async savePostComment(postId: string, body: string | null, commentId?: string, mediaIds?: string[]): Promise<void> {
     await this.withTransaction(async (transaction) => {
       const row = await transaction.getFirstAsync<PostRow>('SELECT * FROM posts WHERE id = ?', postId);
       if (!row) throw new Error('记录不存在或已被删除');
       const comments = mapPost(row).comments;
       const existing = comments.find((comment) => comment.id === commentId);
       if (commentId && !existing) throw new Error('评论不存在或已被删除');
-      if (body !== null && !body.trim()) throw new Error('评论不能为空');
+      const images = [...new Set(mediaIds ?? existing?.mediaIds ?? [])];
+      if (body !== null) {
+        if (!body.trim() && !images.length) throw new Error('请填写评论或选择图片');
+        for (const id of images) {
+          const image = await transaction.getFirstAsync<{ mime_type: string }>('SELECT mime_type FROM media WHERE id = ?', id);
+          if (!image?.mime_type.startsWith('image/')) throw new Error('评论图片不存在或格式不受支持');
+        }
+      }
       const now = new Date().toISOString();
       const next = body === null
         ? comments.filter((comment) => comment.id !== commentId)
         : existing
-          ? comments.map((comment) => comment.id === commentId ? { ...comment, body: body.trim(), updatedAt: now } : comment)
-          : [...comments, { id: createLocalId('comment'), body: body.trim(), createdAt: now, updatedAt: now }];
+          ? comments.map((comment) => comment.id === commentId ? { ...comment, body: body.trim(), mediaIds: images, updatedAt: now } : comment)
+          : [...comments, { id: createLocalId('comment'), body: body.trim(), mediaIds: images, createdAt: now, updatedAt: now }];
       await transaction.runAsync('UPDATE posts SET comments_json = ? WHERE id = ?', JSON.stringify(next), postId);
     });
   }
@@ -250,6 +257,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       `SELECT EXISTS(
         SELECT 1 FROM posts WHERE body_markdown LIKE ?
         UNION ALL
+        SELECT 1 FROM posts, json_each(posts.comments_json) AS comment, json_each(comment.value, '$.mediaIds') AS image WHERE image.value = ?
+        UNION ALL
         SELECT 1 FROM drafts WHERE body_markdown LIKE ?
         UNION ALL
         SELECT 1 FROM posts WHERE body_markdown LIKE ?
@@ -271,6 +280,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         SELECT 1 FROM settings WHERE key = 'profileAvatarMediaId' AND value = ?
       ) AS referenced`,
       imageReference,
+      mediaId,
       imageReference,
       audioReference,
       audioReference,

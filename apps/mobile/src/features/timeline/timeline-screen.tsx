@@ -1,4 +1,3 @@
-import { PostCommentPreview } from '../journal/post-comments';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -9,17 +8,15 @@ import { toDayKey } from '../../shared/core/day-key';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
 import { useAppState } from '../../application/state/app-state';
-import MarkdownView from '../journal/markdown-view.dom';
 import { extractAudioEmbeds, withoutEmbeddedAttachments } from '../journal/embedded-media';
 import { birthdayFromDateString, birthdayInSolarYear, birthdaySolarDate, toLocalDayKey } from '../people/person-profile';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
-import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
+import { createThemedStyles } from '../../shared/theme/app-theme';
 import { extractMusicShares } from '../../application/music-share';
 import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 
 type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
 
-const CALENDAR_POST_PREVIEW_MAX_HEIGHT = 106;
 const birthdayCakeSource = require('../../../assets/birthday-cake.png');
 
 export default function CalendarScreen() {
@@ -248,17 +245,14 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
             {selectedPosts.map((post) => {
               const readingSource = readingNoteSources.find((source) => source.postId === post.id) ?? null;
               const attachmentLabel = postAttachmentLabel(post.bodyMarkdown, readingSource);
-              const displayMarkdown = withoutReadingSourceQuote(withoutEmbeddedAttachments(post.bodyMarkdown), readingSource);
+              const previewText = calendarPostPreview(withoutReadingSourceQuote(withoutEmbeddedAttachments(post.bodyMarkdown), readingSource));
               const markerKind = postMarkerKind(post.bodyMarkdown);
               return (
                 <Pressable key={post.id} accessibilityLabel={`打开 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedEntry, pressed && styles.selectedEntryPressed]}>
                   <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor(markerKind) }]} /></View>
                   <View style={styles.selectedEntryContent}>
                     <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} / {post.locationName ? `${post.locationName} / ` : ''}{formatTime(post.createdAt)}{attachmentLabel ? ` / ${attachmentLabel}` : ''}</Text>
-                    {displayMarkdown
-                      ? <View pointerEvents="none" style={styles.selectedPostMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.selectedPostMarkdown, matchContents: true, scrollEnabled: false, style: styles.selectedPostMarkdown }} markdown={displayMarkdown} maxHeight={CALENDAR_POST_PREVIEW_MAX_HEIGHT} media={[]} preview theme={editorTheme()} /></View>
-                      : <Text style={styles.selectedPostFallback}>{attachmentLabel || '记录了一些内容'}</Text>}
-                    <PostCommentPreview post={post} />
+                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.selectedPostPreview}>{previewText || attachmentLabel || '记录了一些内容'}</Text>
                   </View>
                   <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
                 </Pressable>
@@ -269,6 +263,23 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
       </View>
     </View>
   );
+}
+
+function calendarPostPreview(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^```.*$/gm, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+\[([ xX])\]\s*/gm, (_match, checked: string) => checked.toLowerCase() === 'x' ? '☑ ' : '☐ ')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/~~|\*\*|__|[*_`]/g, '')
+    .replace(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, '')
+    .replace(/\s*\|\s*/g, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function LegendItem({ kind, label }: { kind: CalendarMarkerKind; label: string }) {
@@ -476,8 +487,6 @@ const styles = createThemedStyles(() => ({
   selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
   selectedCheckInTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
   selectedBirthdayTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 24 },
-  selectedPostMarkdownFrame: { width: '100%' },
-  selectedPostMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
-  selectedPostFallback: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
+  selectedPostPreview: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
   selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
 }));

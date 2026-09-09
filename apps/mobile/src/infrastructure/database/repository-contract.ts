@@ -7,7 +7,7 @@ export interface StillAliveRepository {
   listCheckIns(): Promise<CheckIn[]>;
   createPost(post: Post, personIds?: string[]): Promise<void>;
   updatePost(post: Post, personIds?: string[]): Promise<void>;
-  savePostComment(postId: string, body: string | null, commentId?: string): Promise<void>;
+  savePostComment(postId: string, body: string | null, commentId?: string, mediaIds?: string[]): Promise<void>;
   deletePost(postId: string): Promise<void>;
   listPersonIdsByPost(postId: string): Promise<string[]>;
   listPosts(): Promise<Post[]>;

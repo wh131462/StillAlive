@@ -75,7 +75,10 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
       return audio ? `[语音记录（${formatAudioDuration(Number(duration ?? 0))}）](../${audio.localPath})` : token;
     });
     const locationLine = post.locationName ? `地点：${post.locationName}\n\n` : '';
-    const commentsMarkdown = (post.comments ?? []).map((comment) => `### ${comment.createdAt}\n\n${comment.body}`).join('\n\n');
+    const commentsMarkdown = (post.comments ?? []).map((comment) => {
+      const images = (comment.mediaIds ?? []).map((id) => portableMedia.find((item) => item.id === id)).flatMap((item) => item ? [`![评论图片](../${item.localPath})`] : []).join('\n\n');
+      return `### ${comment.createdAt}\n\n${[comment.body, images].filter(Boolean).join('\n\n')}`;
+    }).join('\n\n');
     entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${locationLine}${portableMarkdown}\n${commentsMarkdown ? `\n## 评论\n\n${commentsMarkdown}\n` : ''}`);
   }
 
@@ -329,7 +332,9 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
     incoming.personRelationshipNodes ?? [],
     (item) => item.kind === 'self' ? 'self' : item.personId ? `person:${item.personId}` : `placeholder:${item.id}`,
   );
-  const posts = mergeUpdatedById(current.posts, incoming.posts);
+  const currentComments = new Map(current.posts.map((post) => [post.id, post.comments ?? []]));
+  const incomingComments = new Map(incoming.posts.map((post) => [post.id, post.comments ?? []]));
+  const posts = mergeUpdatedById(current.posts, incoming.posts).map((post) => ({ ...post, comments: mergeUpdatedById(currentComments.get(post.id) ?? [], incomingComments.get(post.id) ?? []).sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt)) }));
   const albums = mergeUpdatedById(current.albums ?? [], incoming.albums ?? []);
   const musicTracks = mergeUpdatedEntities(current.musicTracks ?? [], incoming.musicTracks ?? [], (item) => item.mediaId);
   const musicPlaylists = mergeUpdatedById(current.musicPlaylists ?? [], incoming.musicPlaylists ?? []);
@@ -651,7 +656,8 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
     if (!Array.isArray(post.comments)) throw new Error('备份中的记录评论无效');
     const commentIds = new Set<string>();
     for (const comment of post.comments) {
-      if (!comment || typeof comment.id !== 'string' || !comment.id || commentIds.has(comment.id) || typeof comment.body !== 'string' || !comment.body.trim() || !isValidDate(comment.createdAt) || !isValidDate(comment.updatedAt)) throw new Error('备份中的记录评论无效');
+      if (!comment || typeof comment.id !== 'string' || !comment.id || commentIds.has(comment.id) || typeof comment.body !== 'string' || (!comment.body.trim() && !comment.mediaIds?.length) || !isValidDate(comment.createdAt) || !isValidDate(comment.updatedAt)) throw new Error('备份中的记录评论无效');
+      if (comment.mediaIds !== undefined && (!Array.isArray(comment.mediaIds) || new Set(comment.mediaIds).size !== comment.mediaIds.length || comment.mediaIds.some((id) => typeof id !== 'string' || !value.media.some((item) => item.id === id && item.mimeType.startsWith('image/'))))) throw new Error('备份中的评论图片关联无效');
       commentIds.add(comment.id);
     }
     validateAudioEmbeds(post.bodyMarkdown, value.media, mediaIds);

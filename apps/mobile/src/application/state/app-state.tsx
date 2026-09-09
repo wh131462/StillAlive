@@ -387,15 +387,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await cleanupUnreferencedMedia(removedMediaIds);
   }, [cleanupUnreferencedMedia, posts, repository]);
 
-  const savePostComment = useCallback(async (postId: string, body: string | null, commentId?: string) => {
-    await repository.savePostComment(postId, body, commentId);
+  const savePostComment = useCallback(async (postId: string, body: string | null, commentId?: string, mediaIds?: string[]) => {
+    const previousMediaIds = posts.find((post) => post.id === postId)?.comments.find((comment) => comment.id === commentId)?.mediaIds ?? [];
+    await repository.savePostComment(postId, body, commentId, mediaIds);
     const storedPosts = await repository.listPosts();
     setPosts(storedPosts);
     setHomeMemory((current) => {
       const post = storedPosts.find((item) => item.id === current?.post.id);
       return current && post ? { ...current, post } : current;
     });
-  }, [repository]);
+    await cleanupUnreferencedMedia(previousMediaIds);
+  }, [cleanupUnreferencedMedia, posts, repository]);
 
   const deletePost = useCallback(async (postId: string) => {
     const existing = posts.find((post) => post.id === postId);
@@ -406,7 +408,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setPosts(storedPosts);
     setReadingNoteSources((current) => current.filter((source) => source.postId !== postId));
     setHomeMemory((current) => current?.post.id === postId ? null : current);
-    await cleanupUnreferencedMedia(extractEmbeddedMediaIds(existing.bodyMarkdown));
+    await cleanupUnreferencedMedia([...extractEmbeddedMediaIds(existing.bodyMarkdown), ...existing.comments.flatMap((comment) => comment.mediaIds ?? [])]);
     void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
   }, [cleanupUnreferencedMedia, posts, repository, syncMemoryNotifications]);
 

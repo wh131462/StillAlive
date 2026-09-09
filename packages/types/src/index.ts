@@ -64,6 +64,7 @@ export interface CheckIn {
 export interface PostComment {
   id: string;
   body: string;
+  mediaIds?: string[];
   createdAt: string;
   updatedAt: string;
 }

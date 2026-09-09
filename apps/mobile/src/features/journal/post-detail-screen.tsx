@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Animated, Easing, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useVideoPlayer, type VideoThumbnail } from 'expo-video';
 import { feedback } from '../../shared/feedback';
@@ -21,13 +21,23 @@ import { readingSourceTitle, withoutReadingSourceQuote } from '../../application
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaVideo } from '../../shared/components/media-video';
 import { PostShareDialog } from './post-share-dialog';
-import { PostComments } from './post-comments';
+import { PostCommentComposer, PostCommentMenu, PostComments } from './post-comments';
+import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import * as Clipboard from 'expo-clipboard';
 
 export default function PostDetailScreen() {
   const router = useRouter();
   const window = useWindowDimensions();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, commentId } = useLocalSearchParams<{ id: string; commentId?: string }>();
+  const [commentTarget, setCommentTarget] = useState<{ commentId?: string } | null>(null);
+  const openComment = (editingCommentId?: string) => {
+    if (commentTarget) {
+      if (commentTarget.commentId !== editingCommentId) feedback.alert('当前正在编辑评论', '请先发送或收起当前评论，再切换到其他评论。');
+      return;
+    }
+    setCommentTarget({ commentId: editingCommentId });
+  };
+  useEffect(() => setCommentTarget(commentId ? { commentId } : null), [commentId, id]);
   const { deletePost, media, posts, readingNoteSources, ready } = useAppState();
   const post = useMemo(() => posts.find((item) => item.id === id), [id, posts]);
   const readingSource = useMemo(() => readingNoteSources.find((source) => source.postId === id) ?? null, [id, readingNoteSources]);
@@ -113,7 +123,7 @@ export default function PostDetailScreen() {
       {!ready ? (
         <DetailLoading />
       ) : post ? (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.detailContainer}>
+        <AppKeyboardAvoidingView style={styles.detailContainer}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} pointerEvents={contentReady ? 'auto' : 'none'} showsVerticalScrollIndicator={false} style={!contentReady && styles.contentHidden}>
             <PostBody
               markdown={post.bodyMarkdown}
@@ -122,11 +132,12 @@ export default function PostDetailScreen() {
               onReady={handleContentReady}
               readingSource={readingSource}
             />
-            <Text style={styles.detailTime}>{post.locationName ? `${post.locationName} / ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
-            <PostComments key={post.id} post={post} />
+            <View style={styles.commentBar}><Text style={styles.detailTime}>{post.locationName ? `${post.locationName} / ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text><PostCommentMenu onComment={() => openComment()} /></View>
+            <PostComments key={post.id} post={post} onEdit={(comment) => openComment(comment.id)} />
           </ScrollView>
+          {commentTarget ? <PostCommentComposer key={`${post.id}:${commentTarget.commentId ?? 'new'}`} post={post} comment={post.comments.find((comment) => comment.id === commentTarget.commentId)} onClose={() => setCommentTarget(null)} /> : null}
           {!contentReady ? <View pointerEvents="none" style={styles.loadingOverlay}><DetailLoading /></View> : null}
-        </KeyboardAvoidingView>
+        </AppKeyboardAvoidingView>
       ) : (
         <Text style={styles.missing}>这条记录不存在或已被删除。</Text>
       )}
@@ -138,6 +149,7 @@ export default function PostDetailScreen() {
       ) : null}
 
       {moreOpen ? <><Pressable accessibilityLabel="关闭记录菜单" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} /><View accessibilityLabel="记录更多操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}>
+        <MoreMenuItem icon={{ android: 'chat_bubble_outline', ios: 'bubble.right', web: 'chat_bubble_outline' }} label="评论" onPress={() => { setMoreOpen(false); openComment(); }} />
         <MoreMenuItem icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑记录" onPress={editPost} />
         <MoreMenuItem icon={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} label="复制正文" onPress={() => void copyPost(false)} />
         <MoreMenuItem icon={{ android: 'copy_all', ios: 'doc.on.clipboard', web: 'copy_all' }} label="复制全文" onPress={() => void copyPost(true)} />
@@ -349,7 +361,8 @@ const styles = createThemedStyles(() => ({
   detailContainer: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   contentHidden: { opacity: 0 },
-  detailTime: { marginTop: spacing.lg, color: colors.inkFaint, fontSize: 9, textAlign: 'right' },
+  commentBar: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  detailTime: { flex: 1, color: colors.inkFaint, fontSize: 10 },
   markdownView: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
   musicShare: { marginBottom: spacing.lg },
   readingShare: { marginBottom: spacing.lg },
