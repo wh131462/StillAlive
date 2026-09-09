@@ -1,3 +1,4 @@
+import { PostCommentPreview } from '../journal/post-comments';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -257,6 +258,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                     {displayMarkdown
                       ? <View pointerEvents="none" style={styles.selectedPostMarkdownFrame}><MarkdownView dom={{ containerStyle: styles.selectedPostMarkdown, matchContents: true, scrollEnabled: false, style: styles.selectedPostMarkdown }} markdown={displayMarkdown} maxHeight={CALENDAR_POST_PREVIEW_MAX_HEIGHT} media={[]} preview theme={editorTheme()} /></View>
                       : <Text style={styles.selectedPostFallback}>{attachmentLabel || '记录了一些内容'}</Text>}
+                    <PostCommentPreview post={post} />
                   </View>
                   <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
                 </Pressable>

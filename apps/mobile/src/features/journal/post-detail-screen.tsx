@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useVideoPlayer, type VideoThumbnail } from 'expo-video';
 import { feedback } from '../../shared/feedback';
@@ -21,6 +21,7 @@ import { readingSourceTitle, withoutReadingSourceQuote } from '../../application
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaVideo } from '../../shared/components/media-video';
 import { PostShareDialog } from './post-share-dialog';
+import { PostComments } from './post-comments';
 import * as Clipboard from 'expo-clipboard';
 
 export default function PostDetailScreen() {
@@ -46,7 +47,7 @@ export default function PostDetailScreen() {
 
   const confirmDelete = () => {
     if (!post) return;
-    feedback.alert('删除这条记录？', '正文、语音、人物关联和不再使用的本地媒体也会一并清理。', [
+    feedback.alert('删除这条记录？', '正文、评论、语音、人物关联和不再使用的本地媒体也会一并清理。', [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
@@ -112,8 +113,8 @@ export default function PostDetailScreen() {
       {!ready ? (
         <DetailLoading />
       ) : post ? (
-        <View style={styles.detailContainer}>
-          <ScrollView contentContainerStyle={styles.content} pointerEvents={contentReady ? 'auto' : 'none'} showsVerticalScrollIndicator={false} style={!contentReady && styles.contentHidden}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.detailContainer}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} pointerEvents={contentReady ? 'auto' : 'none'} showsVerticalScrollIndicator={false} style={!contentReady && styles.contentHidden}>
             <PostBody
               markdown={post.bodyMarkdown}
               mediaById={mediaById}
@@ -122,9 +123,10 @@ export default function PostDetailScreen() {
               readingSource={readingSource}
             />
             <Text style={styles.detailTime}>{post.locationName ? `${post.locationName} / ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text>
+            <PostComments key={post.id} post={post} />
           </ScrollView>
           {!contentReady ? <View pointerEvents="none" style={styles.loadingOverlay}><DetailLoading /></View> : null}
-        </View>
+        </KeyboardAvoidingView>
       ) : (
         <Text style={styles.missing}>这条记录不存在或已被删除。</Text>
       )}

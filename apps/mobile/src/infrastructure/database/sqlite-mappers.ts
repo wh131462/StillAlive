@@ -10,6 +10,7 @@ export function mapPost(row: PostRow): Post {
     id: row.id,
     dayKey: row.day_key as DayKey,
     bodyMarkdown: row.body_markdown,
+    comments: JSON.parse(row.comments_json),
     locationName: row.location_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

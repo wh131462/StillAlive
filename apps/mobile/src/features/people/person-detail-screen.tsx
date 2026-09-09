@@ -1,3 +1,4 @@
+import { PostCommentPreview } from '../journal/post-comments';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -230,6 +231,7 @@ export default function PersonScreen() {
                   <Text style={styles.date}>{post.dayKey.replaceAll('-', '.')}</Text>
                   {image ? <MediaThumbnail accessibilityLabel="共同记忆媒体" item={image} style={styles.memoryImage} /> : null}
                   <Text style={styles.body}>{body || (readingSource ? `读了《${readingSourceTitle(readingSource)}》` : extractMusicShares(post.bodyMarkdown)[0] ? `分享了《${extractMusicShares(post.bodyMarkdown)[0].title}》` : extractAudioEmbeds(post.bodyMarkdown).length ? `${extractAudioEmbeds(post.bodyMarkdown).length} 段语音` : image?.mimeType.startsWith('video/') ? '一段视频' : '一张照片')}</Text>
+                  <PostCommentPreview post={post} />
                 </Pressable></View>
               );
             })}

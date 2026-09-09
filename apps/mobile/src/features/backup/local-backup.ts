@@ -75,7 +75,8 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
       return audio ? `[语音记录（${formatAudioDuration(Number(duration ?? 0))}）](../${audio.localPath})` : token;
     });
     const locationLine = post.locationName ? `地点：${post.locationName}\n\n` : '';
-    entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${locationLine}${portableMarkdown}\n`);
+    const commentsMarkdown = (post.comments ?? []).map((comment) => `### ${comment.createdAt}\n\n${comment.body}`).join('\n\n');
+    entries[`markdown/${post.dayKey}_${post.id}.md`] = strToU8(`# ${post.dayKey}\n\n${locationLine}${portableMarkdown}\n${commentsMarkdown ? `\n## 评论\n\n${commentsMarkdown}\n` : ''}`);
   }
 
   const files: BackupManifest['files'] = [];
@@ -646,6 +647,13 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   for (const checkIn of value.checkIns) if (checkIn.city !== null && (typeof checkIn.city !== 'string' || checkIn.city.length > 40)) throw new Error('备份中的打卡城市无效');
   for (const post of value.posts) {
     if (post.locationName !== null && (typeof post.locationName !== 'string' || post.locationName.length > 80)) throw new Error('备份中的记录地点无效');
+    post.comments ??= [];
+    if (!Array.isArray(post.comments)) throw new Error('备份中的记录评论无效');
+    const commentIds = new Set<string>();
+    for (const comment of post.comments) {
+      if (!comment || typeof comment.id !== 'string' || !comment.id || commentIds.has(comment.id) || typeof comment.body !== 'string' || !comment.body.trim() || !isValidDate(comment.createdAt) || !isValidDate(comment.updatedAt)) throw new Error('备份中的记录评论无效');
+      commentIds.add(comment.id);
+    }
     validateAudioEmbeds(post.bodyMarkdown, value.media, mediaIds);
   }
   for (const draft of value.drafts) validateAudioEmbeds(draft.bodyMarkdown, value.media, mediaIds);

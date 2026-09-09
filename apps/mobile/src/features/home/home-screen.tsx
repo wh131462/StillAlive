@@ -1,3 +1,4 @@
+import { PostCommentPreview } from '../journal/post-comments';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -228,6 +229,7 @@ export default function SpaceScreen() {
           <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${homeMemory.post.id}`)} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
             {memoryImage ? <MediaThumbnail accessibilityLabel="回忆媒体" item={memoryImage} style={styles.memoryImage} /> : null}
             <Text numberOfLines={4} style={styles.memoryText}>{memoryExcerpt(homeMemory.post.bodyMarkdown, memoryReadingSource)}</Text>
+            <PostCommentPreview post={homeMemory.post} />
         <Text style={styles.memoryFoot}>{homeMemory.kind === 'person' ? `与 ${personDisplayName(homeMemory.person)} 有关的一段过去` : '那一天留下的坐标'}　›</Text>
           </Pressable>
         </View>
@@ -346,6 +348,7 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onImagePress, o
         {readingSource ? <View style={styles.readingShare}><ReadingShareCard source={readingSource} /></View> : null}
         {musicShare ? <View style={styles.musicShare}><MusicShareCard share={musicShare} /></View> : null}
         {hasHiddenContent ? <><Text style={styles.postOverflowMark}>…</Text><Pressable accessibilityLabel="查看更多记录内容" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onPress(); }} style={({ pressed }) => [styles.postMoreButton, pressed && styles.feedPressed]}><Text style={styles.postMoreText}>查看更多</Text></Pressable></> : null}
+        <PostCommentPreview post={post} />
         <View style={[styles.postFooter, hasHiddenContent && styles.postFooterAfterMore]}>
           <Text numberOfLines={1} style={styles.postTime}>{post.locationName ? `${post.locationName} / ` : ''}{formatTime(post.createdAt)}{post.updatedAt !== post.createdAt ? ' / 修改过' : ''}</Text>
         </View>

@@ -83,13 +83,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async createPost(post: Post, personIds: string[] = []): Promise<void> {
     await this.withTransaction(async (transaction) => {
       await transaction.runAsync(
-        'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at, comments_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
         post.id,
         post.dayKey,
         post.bodyMarkdown,
         post.locationName,
         post.createdAt,
         post.updatedAt,
+        JSON.stringify(post.comments ?? []),
       );
       for (const personId of personIds) {
         await transaction.runAsync(
@@ -122,6 +123,24 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     });
   }
 
+  async savePostComment(postId: string, body: string | null, commentId?: string): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      const row = await transaction.getFirstAsync<PostRow>('SELECT * FROM posts WHERE id = ?', postId);
+      if (!row) throw new Error('记录不存在或已被删除');
+      const comments = mapPost(row).comments;
+      const existing = comments.find((comment) => comment.id === commentId);
+      if (commentId && !existing) throw new Error('评论不存在或已被删除');
+      if (body !== null && !body.trim()) throw new Error('评论不能为空');
+      const now = new Date().toISOString();
+      const next = body === null
+        ? comments.filter((comment) => comment.id !== commentId)
+        : existing
+          ? comments.map((comment) => comment.id === commentId ? { ...comment, body: body.trim(), updatedAt: now } : comment)
+          : [...comments, { id: createLocalId('comment'), body: body.trim(), createdAt: now, updatedAt: now }];
+      await transaction.runAsync('UPDATE posts SET comments_json = ? WHERE id = ?', JSON.stringify(next), postId);
+    });
+  }
+
   async deletePost(postId: string): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync('DELETE FROM posts WHERE id = ?', postId));
   }
@@ -136,14 +155,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPosts(): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      'SELECT id, day_key, body_markdown, location_name, created_at, updated_at FROM posts ORDER BY day_key DESC, created_at DESC',
+      'SELECT id, day_key, body_markdown, location_name, comments_json, created_at, updated_at FROM posts ORDER BY day_key DESC, created_at DESC',
     );
     return rows.map(mapPost);
   }
 
   async listPostsByDay(dayKey: DayKey): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      'SELECT id, day_key, body_markdown, location_name, created_at, updated_at FROM posts WHERE day_key = ? ORDER BY created_at DESC',
+      'SELECT id, day_key, body_markdown, location_name, comments_json, created_at, updated_at FROM posts WHERE day_key = ? ORDER BY created_at DESC',
       dayKey,
     );
     return rows.map(mapPost);
@@ -151,7 +170,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPostsByPerson(personId: string): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.created_at, posts.updated_at
+      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.comments_json, posts.created_at, posts.updated_at
        FROM posts
        INNER JOIN post_persons ON post_persons.post_id = posts.id
        WHERE post_persons.person_id = ?
@@ -1015,7 +1034,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     const preferences = await this.getPreferences();
     if (!preferences.globalMemoryEnabled) return null;
     const onThisDay = await this.db.getFirstAsync<PostRow>(
-      `SELECT id, day_key, body_markdown, location_name, created_at, updated_at
+      `SELECT id, day_key, body_markdown, location_name, comments_json, created_at, updated_at
        FROM posts
        WHERE substr(day_key, 6, 5) = substr(?, 6, 5) AND day_key < ?
        ORDER BY day_key DESC, created_at DESC
@@ -1027,7 +1046,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const personMemory = await this.db.getFirstAsync<PostRow & { person_id: string; person_name: string; person_nickname: string | null }>(
-      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.created_at, posts.updated_at,
+      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.comments_json, posts.created_at, posts.updated_at,
               persons.id AS person_id, persons.name AS person_name, persons.nickname AS person_nickname
        FROM posts
        INNER JOIN post_persons ON post_persons.post_id = posts.id
@@ -1199,8 +1218,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const post of snapshot.posts) {
         await transaction.runAsync(
-          'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          post.id, post.dayKey, post.bodyMarkdown, post.locationName, post.createdAt, post.updatedAt,
+          'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at, comments_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          post.id, post.dayKey, post.bodyMarkdown, post.locationName, post.createdAt, post.updatedAt, JSON.stringify(post.comments ?? []),
         );
       }
       for (const relation of snapshot.postPersons) {

@@ -42,7 +42,7 @@ export default function BackupScreen() {
   const estimatedBytes = media.reduce((total, item) => {
     const file = new File(item.localPath);
     return total + (file.exists ? file.size : 0);
-  }, posts.reduce((total, post) => total + post.bodyMarkdown.length * 2, 4096));
+  }, posts.reduce((total, post) => total + (post.bodyMarkdown.length + JSON.stringify(post.comments).length) * 2, 4096));
 
   const exportBackup = async () => {
     try {

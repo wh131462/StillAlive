@@ -61,10 +61,18 @@ export interface CheckIn {
   createdAt: string;
 }
 
+export interface PostComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Post {
   id: string;
   dayKey: DayKey;
   bodyMarkdown: string;
+  comments: PostComment[];
   locationName: string | null;
   createdAt: string;
   updatedAt: string;

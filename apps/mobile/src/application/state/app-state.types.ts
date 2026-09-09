@@ -39,6 +39,7 @@ export interface AppStateValue {
   updateCheckInCity(checkInId: string, city: string): Promise<void>;
   savePost(bodyMarkdown: string, personIds?: string[], dayKey?: DayKey, locationName?: string | null): Promise<Post>;
   updatePost(postId: string, bodyMarkdown: string, personIds?: string[], locationName?: string | null): Promise<void>;
+  savePostComment(postId: string, body: string | null, commentId?: string): Promise<void>;
   deletePost(postId: string): Promise<void>;
   getPersonIdsByPost(postId: string): Promise<string[]>;
   getPostsByPerson(personId: string): Promise<Post[]>;
