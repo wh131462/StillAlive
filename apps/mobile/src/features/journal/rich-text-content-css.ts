@@ -23,6 +23,7 @@ export function richTextContentCss(theme: EditorTheme): string {
     ul { list-style-type: disc; } ol { list-style-type: decimal; }
     li { margin: 0.2em 0; padding-left: 0.2em; }
     .task-list { padding-left: 0.25em; list-style: none; }
+    .task-list.mixed-task-list { padding-left: 1.45em; list-style: disc; }
     .task-list-item { position: relative; min-height: var(--rich-text-line-height); padding-left: 1.9em; list-style: none; }
     .task-list-item::marker { content: ""; }
     .task-list-item > input[type="checkbox"] { position: absolute; top: calc((var(--rich-text-line-height) - 18px) / 2); left: 0.2em; width: 18px; height: 18px; margin: 0; appearance: none; -webkit-appearance: none; border: 1.5px solid ${theme.inkFaint}; border-radius: 4px; background: transparent; font-size: inherit; line-height: inherit; opacity: 1; }

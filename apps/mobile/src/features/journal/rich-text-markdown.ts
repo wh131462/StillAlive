@@ -21,8 +21,14 @@ export function decorateRichTextContent(root: ParentNode, interactive: boolean):
   root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((checkbox) => {
     checkbox.disabled = !interactive;
     checkbox.contentEditable = 'false';
-    checkbox.parentElement?.classList.add('task-list-item');
+    const item = checkbox.closest('li');
+    const paragraph = checkbox.parentElement;
+    if (paragraph?.tagName === 'P' && paragraph.parentElement === item) paragraph.replaceWith(...paragraph.childNodes);
+    item?.classList.add('task-list-item');
     checkbox.closest('ul')?.classList.add('task-list');
+  });
+  root.querySelectorAll('ul.task-list').forEach((list) => {
+    list.classList.toggle('mixed-task-list', Array.from(list.children).some((item) => !item.classList.contains('task-list-item')));
   });
   root.querySelectorAll<HTMLTableCellElement>('th, td').forEach((cell) => {
     if (!cell.hasChildNodes()) cell.append(document.createElement('br'));
