@@ -1,4 +1,5 @@
 import MaskedView from '@react-native-masked-view/masked-view';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
 import { getActiveColorTheme, typography } from '@still-alive/tokens';
@@ -27,14 +28,17 @@ const IRIDESCENT_COLORS = {
 export function StyledName({ numberOfLines, style, value, variant }: StyledNameProps) {
   const theme = getActiveColorTheme();
   const palette = NAME_COLORS[theme];
+  const [maskSize, setMaskSize] = useState<{ width: number; height: number } | null>(null);
 
   if (variant === 'iridescent') {
     const textStyle = [style, nameTextStyle(variant)];
-    return <View accessibilityLabel={value} accessibilityRole="text" accessible style={styles.iridescentName}>
-      <Text accessible={false} numberOfLines={numberOfLines} style={[textStyle, styles.measureText]}>{value}</Text>
-      <MaskedView accessible={false} maskElement={<Text accessible={false} numberOfLines={numberOfLines} style={[textStyle, styles.maskText]}>{value}</Text>} pointerEvents="none" style={StyleSheet.absoluteFill}>
+    const textAlign = StyleSheet.flatten(style)?.textAlign;
+    const alignItems: 'flex-start' | 'center' | 'flex-end' = textAlign === 'right' ? 'flex-end' : textAlign === 'center' ? 'center' : 'flex-start';
+    return <View accessibilityLabel={value} accessibilityRole="text" accessible style={[styles.iridescentName, { alignItems }]}>
+      <Text accessible={false} numberOfLines={numberOfLines} onLayout={(event) => { const { width, height } = event.nativeEvent.layout; if (!maskSize || maskSize.width !== width || maskSize.height !== height) setMaskSize({ width, height }); }} style={[textStyle, styles.measureText]}>{value}</Text>
+      {maskSize ? <MaskedView accessible={false} pointerEvents="none" style={[styles.maskedText, maskSize]} maskElement={<Text accessible={false} numberOfLines={numberOfLines} style={[textStyle, styles.maskText]}>{value}</Text>}>
         <View style={styles.gradient}>{IRIDESCENT_COLORS[theme].map((color, index) => <View key={`${color}_${index}`} style={[styles.gradientBand, { backgroundColor: color }]} />)}</View>
-      </MaskedView>
+      </MaskedView> : null}
     </View>;
   }
 
@@ -53,6 +57,15 @@ export function StyledName({ numberOfLines, style, value, variant }: StyledNameP
   );
 }
 
+const styles = StyleSheet.create({
+  iridescentName: { maxWidth: '100%', alignSelf: 'flex-start' },
+  measureText: { opacity: 0 },
+  maskedText: { position: 'absolute', left: 0, top: 0 },
+  maskText: { color: '#000000' },
+  gradient: { flex: 1, flexDirection: 'row' },
+  gradientBand: { flex: 1 },
+});
+
 function createGradientBands(palette: readonly string[], count = 24): string[] {
   return Array.from({ length: count }, (_, index) => {
     const position = index / (count - 1) * (palette.length - 1);
@@ -68,11 +81,3 @@ function mixHexColors(start: string, end: string, amount: number): string {
   const channel = (shift: number) => Math.round(((startValue >> shift) & 255) * (1 - amount) + ((endValue >> shift) & 255) * amount).toString(16).padStart(2, '0');
   return `#${channel(16)}${channel(8)}${channel(0)}`;
 }
-
-const styles = StyleSheet.create({
-  iridescentName: { width: '100%', maxWidth: '100%' },
-  measureText: { opacity: 0 },
-  maskText: { color: '#000000' },
-  gradient: { flex: 1, flexDirection: 'row' },
-  gradientBand: { flex: 1 },
-});

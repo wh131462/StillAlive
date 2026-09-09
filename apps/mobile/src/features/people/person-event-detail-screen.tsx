@@ -9,6 +9,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
 import { personDisplayName } from './person-profile';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { StyledName } from './styled-name';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { feedback } from '../../shared/feedback';
 
@@ -16,7 +17,7 @@ export default function PersonEventDetailScreen() {
   const router = useRouter();
   const window = useWindowDimensions();
   const { id, eventId } = useLocalSearchParams<{ id?: string; eventId?: string }>();
-  const { deletePersonEvent, people, personEvents, ready, savePersonEvent } = useAppState();
+  const { deletePersonEvent, people, personEvents, preferences, ready, savePersonEvent } = useAppState();
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const event = useMemo(() => personEvents.find((item) => item.id === eventId), [eventId, personEvents]);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -37,11 +38,11 @@ export default function PersonEventDetailScreen() {
       <View style={styles.headerBlock}>
         <Text style={styles.eyebrow}>经历{event.pinned ? ' · 已置顶' : ''}</Text>
         <Text style={styles.title}>{event.title}</Text>
-        <Text style={styles.meta}>{event.timeText || '时间待补充'} · {personDisplayName(person)}</Text>
+        <View style={styles.metaRow}><Text style={styles.meta}>{event.timeText || '时间待补充'} · </Text><StyledName style={styles.metaName} value={personDisplayName(person)} variant={preferences.friendNameStyle} /></View>
       </View>
       <View style={styles.divider} />
       {event.description ? <Text style={styles.body}>{event.description}</Text> : <Text style={styles.emptyText}>还没有补充细节，可以从右上角“更多操作”进入编辑。</Text>}
-      <View style={styles.participantBlock}><Text style={styles.sectionLabel}>参与人物</Text><Text style={styles.participantText}>{event.participantIds.map((participantId) => people.find((item) => item.id === participantId)).filter((item): item is NonNullable<typeof item> => Boolean(item)).map(personDisplayName).join('、') || '未记录'}</Text></View>
+      <View style={styles.participantBlock}><Text style={styles.sectionLabel}>参与人物</Text><StyledName style={styles.participantText} value={event.participantIds.map((participantId) => people.find((item) => item.id === participantId)).filter((item): item is NonNullable<typeof item> => Boolean(item)).map(personDisplayName).join('、') || '未记录'} variant={preferences.friendNameStyle} /></View>
     </ScrollView>
     {moreOpen ? <><Pressable accessibilityLabel="关闭经历菜单" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} /><View accessibilityLabel="经历更多操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}><MoreMenuItem icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑经历" onPress={edit} /><MoreMenuItem icon={{ android: event.pinned ? 'push_pin' : 'push_pin', ios: event.pinned ? 'pin.slash' : 'pin', web: 'push_pin' }} label={event.pinned ? '取消置顶' : '置顶经历'} onPress={togglePin} /><MoreMenuItem destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除经历" onPress={confirmDelete} /></View></> : null}
   </SafeAreaView>;
@@ -52,7 +53,8 @@ function MoreMenuItem({ destructive = false, icon, label, onPress }: { destructi
 }
 
 const styles = createThemedStyles(() => ({
-  safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl }, metaRow: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  metaName: { flexShrink: 1, fontSize: 11 },
   headerBlock: { paddingVertical: spacing.lg }, eyebrow: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 }, title: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 25, lineHeight: 33 }, meta: { marginTop: spacing.md, color: colors.inkFaint, fontSize: 11 }, divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }, body: { marginTop: spacing.lg, color: colors.ink, fontSize: 15, lineHeight: 27 }, emptyText: { marginTop: spacing.lg, color: colors.inkFaint, fontSize: 12, lineHeight: 20 }, participantBlock: { marginTop: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }, sectionLabel: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 }, participantText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 20 },
   menuBackdrop: { position: 'absolute', inset: 0 }, moreMenu: { position: 'absolute', minWidth: 170, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 8 }, menuItem: { minHeight: 46, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, menuItemText: { color: colors.ink, fontSize: 11, fontWeight: '700' }, menuItemDanger: { color: colors.danger }, pressed: { opacity: 0.62 }, missing: { marginTop: spacing.xxl, padding: spacing.lg, color: colors.inkSoft, fontFamily: typography.display, fontSize: 17 },
 }));

@@ -9,9 +9,10 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { useAppState } from '../../application/state/app-state';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
-import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
+import { createThemedStyles } from '../../shared/theme/app-theme';
 import { personDisplayName } from './person-profile';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { StyledName } from './styled-name';
 
 export default function PeopleScreen() {
   const router = useRouter();
@@ -146,7 +147,7 @@ export default function PeopleScreen() {
                 <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${displayName}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{displayName.slice(0, 1)}</Text>}</View>
                 <View style={styles.personInfo}>
                   <View style={styles.personTitleRow}>
-                    <Text numberOfLines={1} style={[styles.personName, nameTextStyle(preferences.friendNameStyle)]}>{displayName}</Text>
+                    <StyledName numberOfLines={1} style={styles.personName} value={displayName} variant={preferences.friendNameStyle} />
                     {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
                   </View>
                   <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>

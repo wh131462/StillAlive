@@ -6,7 +6,7 @@ import type { PersonEvent } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
 import { personDisplayName } from './person-profile';
-import { createThemedStyles } from '../../shared/theme/app-theme';
+import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 import { feedback } from '../../shared/feedback';
@@ -14,7 +14,7 @@ import { feedback } from '../../shared/feedback';
 export default function PersonEventEditorScreen() {
   const router = useRouter();
   const { id, eventId } = useLocalSearchParams<{ id?: string; eventId?: string }>();
-  const { people, personEvents, ready, savePersonEvent } = useAppState();
+  const { people, personEvents, preferences, ready, savePersonEvent } = useAppState();
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const event = useMemo(() => eventId ? personEvents.find((item) => item.id === eventId) : undefined, [eventId, personEvents]);
   const [title, setTitle] = useState('');
@@ -110,7 +110,7 @@ export default function PersonEventEditorScreen() {
             return <Pressable key={member.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => setParticipantIds((current) => {
               if (member.id === person.id) return current.includes(member.id) ? current : [...current, member.id];
               return current.includes(member.id) ? current.filter((value) => value !== member.id) : [...current, member.id];
-            })} style={({ pressed }) => [styles.participant, selected && styles.participantSelected, pressed && styles.pressed]}><View style={[styles.dot, selected && styles.dotSelected]} /><Text style={[styles.participantText, selected && styles.participantTextSelected]}>{personDisplayName(member)}</Text></Pressable>;
+})} style={({ pressed }) => [styles.participant, selected && styles.participantSelected, pressed && styles.pressed]}><View style={[styles.dot, selected && styles.dotSelected]} /><Text style={[styles.participantText, selected && styles.participantTextSelected, nameTextStyle(preferences.friendNameStyle)]}>{personDisplayName(member)}</Text></Pressable>;
           })}</View>
         </View>
 

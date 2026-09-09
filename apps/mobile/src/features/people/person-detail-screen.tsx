@@ -13,13 +13,14 @@ import { useAppState } from '../../application/state/app-state';
 import { genderOption } from './gender-picker';
 import { extractAudioEmbeds } from '../journal/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, personDisplayName, toLocalDayKey, zodiacForBirthday } from './person-profile';
-import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
+import { createThemedStyles } from '../../shared/theme/app-theme';
 import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
 import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaThumbnail } from '../../shared/components/media-thumbnail';
 import { feedback } from '../../shared/feedback';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { StyledName } from './styled-name';
 
 export default function PersonScreen() {
   const router = useRouter();
@@ -115,7 +116,7 @@ export default function PersonScreen() {
               <View style={styles.identityRow}>
                 <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${displayName}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{displayName.slice(0, 1)}</Text>}</View>
                 <View style={styles.identityCopy}>
-                  <Text numberOfLines={2} style={[styles.name, nameTextStyle(preferences.friendNameStyle)]}>{displayName}</Text>
+                <StyledName numberOfLines={2} style={styles.name} value={displayName} variant={preferences.friendNameStyle} />
                   <View style={styles.relationPill}><Text numberOfLines={1} style={styles.relation}>{person.relationToMe ?? '暂时不定义关系'}</Text></View>
                 </View>
               </View>
