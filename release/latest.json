@@ -1,6 +1,6 @@
 {
-  "versionCode": 17,
-  "versionName": "1.1.8",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.8.apk",
-  "releaseNotes": "新增人物资料与经历管理：支持生日、重要日期、自定义资料、隐私保护、经历记录及人物合并，并优化编辑与详情页操作。\n新增多种名字样式和设置预览，支持个人与朋友分别定制显示风格。\n完善音乐导入、封面识别、播放与歌单管理，优化资料收集校验和隐私协议。"
+  "versionCode": 18,
+  "versionName": "1.1.9",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.9.apk",
+  "releaseNotes": "新增记录评论功能，支持文字与图片、编辑删除、快捷入口和备份恢复。\n优化评论预览、输入体验及富文本列表切换、换行与退格操作。\n修复评论数据同步和旧版本备份兼容问题。"
 }
