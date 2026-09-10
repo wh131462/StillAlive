@@ -33,10 +33,11 @@ export function StyledName({ numberOfLines, style, value, variant }: StyledNameP
   if (variant === 'iridescent') {
     const textStyle = [style, nameTextStyle(variant)];
     const textAlign = StyleSheet.flatten(style)?.textAlign;
-    const alignItems: 'flex-start' | 'center' | 'flex-end' = textAlign === 'right' ? 'flex-end' : textAlign === 'center' ? 'center' : 'flex-start';
-    return <View accessibilityLabel={value} accessibilityRole="text" accessible style={[styles.iridescentName, { alignItems }]}>
-      <Text accessible={false} numberOfLines={numberOfLines} onLayout={(event) => { const { width, height } = event.nativeEvent.layout; if (!maskSize || maskSize.width !== width || maskSize.height !== height) setMaskSize({ width, height }); }} style={[textStyle, styles.measureText]}>{value}</Text>
-      {maskSize ? <MaskedView accessible={false} pointerEvents="none" style={[styles.maskedText, maskSize]} maskElement={<Text accessible={false} numberOfLines={numberOfLines} style={[textStyle, styles.maskText]}>{value}</Text>}>
+    const alignSelf: 'flex-start' | 'center' | 'flex-end' = textAlign === 'right' ? 'flex-end' : textAlign === 'center' ? 'center' : 'flex-start';
+    const lines = numberOfLines ?? 1;
+    return <View accessibilityLabel={value} accessibilityRole="text" accessible style={[styles.iridescentName, { alignSelf }]}>
+      <Text accessible={false} numberOfLines={lines} onLayout={(event) => { const { width, height } = event.nativeEvent.layout; if (!maskSize || maskSize.width !== width || maskSize.height !== height) setMaskSize({ width, height }); }} style={[textStyle, styles.measureText]}>{value}</Text>
+      {maskSize ? <MaskedView accessible={false} pointerEvents="none" style={[styles.maskedText, maskSize]} maskElement={<Text accessible={false} numberOfLines={lines} style={[textStyle, styles.maskText]}>{value}</Text>}>
         <View style={styles.gradient}>{IRIDESCENT_COLORS[theme].map((color, index) => <View key={`${color}_${index}`} style={[styles.gradientBand, { backgroundColor: color }]} />)}</View>
       </MaskedView> : null}
     </View>;
@@ -58,10 +59,10 @@ export function StyledName({ numberOfLines, style, value, variant }: StyledNameP
 }
 
 const styles = StyleSheet.create({
-  iridescentName: { maxWidth: '100%', alignSelf: 'flex-start' },
-  measureText: { opacity: 0 },
+  iridescentName: { maxWidth: '100%', flexShrink: 0 },
+  measureText: { opacity: 0, flexShrink: 0 },
   maskedText: { position: 'absolute', left: 0, top: 0 },
-  maskText: { color: '#000000' },
+  maskText: { color: '#000000', flexShrink: 0 },
   gradient: { flex: 1, flexDirection: 'row' },
   gradientBand: { flex: 1 },
 });
