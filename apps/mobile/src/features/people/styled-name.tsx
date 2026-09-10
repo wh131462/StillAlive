@@ -31,11 +31,11 @@ export function StyledName({ numberOfLines, style, value, variant }: StyledNameP
   const [maskSize, setMaskSize] = useState<{ width: number; height: number } | null>(null);
 
   if (variant === 'iridescent') {
-    const textStyle = [style, nameTextStyle(variant)];
-    const textAlign = StyleSheet.flatten(style)?.textAlign;
-    const alignSelf: 'flex-start' | 'center' | 'flex-end' = textAlign === 'right' ? 'flex-end' : textAlign === 'center' ? 'center' : 'flex-start';
+    const flattenedStyle = StyleSheet.flatten(style) ?? {};
+    const { maxWidth: _maxWidth, ...unconstrainedStyle } = flattenedStyle;
+    const textStyle = [unconstrainedStyle, nameTextStyle(variant)];
     const lines = numberOfLines ?? 1;
-    return <View accessibilityLabel={value} accessibilityRole="text" accessible style={[styles.iridescentName, { alignSelf }]}>
+    return <View accessibilityLabel={value} accessibilityRole="text" accessible style={styles.iridescentName}>
       <Text accessible={false} numberOfLines={lines} onLayout={(event) => { const { width, height } = event.nativeEvent.layout; if (!maskSize || maskSize.width !== width || maskSize.height !== height) setMaskSize({ width, height }); }} style={[textStyle, styles.measureText]}>{value}</Text>
       {maskSize ? <MaskedView accessible={false} pointerEvents="none" style={[styles.maskedText, maskSize]} maskElement={<Text accessible={false} numberOfLines={lines} style={[textStyle, styles.maskText]}>{value}</Text>}>
         <View style={styles.gradient}>{IRIDESCENT_COLORS[theme].map((color, index) => <View key={`${color}_${index}`} style={[styles.gradientBand, { backgroundColor: color }]} />)}</View>
@@ -49,11 +49,17 @@ export function StyledName({ numberOfLines, style, value, variant }: StyledNameP
     </Text>;
   }
 
+  if (variant === 'colorful') {
+    const flattenedStyle = StyleSheet.flatten(style) ?? {};
+    const { maxWidth: _maxWidth, ...unconstrainedStyle } = flattenedStyle;
+    return <Text accessibilityLabel={value} numberOfLines={numberOfLines} style={[unconstrainedStyle, nameTextStyle(variant)]}>
+      {[...value].map((character, index) => <Text key={`${character}_${index}`} style={{ color: palette[index % palette.length] }}>{character}</Text>)}
+    </Text>;
+  }
+
   return (
     <Text accessibilityLabel={value} numberOfLines={numberOfLines} style={[style, nameTextStyle(variant)]}>
-      {variant === 'colorful'
-        ? [...value].map((character, index) => <Text key={`${character}_${index}`} style={{ color: palette[index % palette.length] }}>{character}</Text>)
-        : value}
+      {value}
     </Text>
   );
 }
