@@ -16,7 +16,7 @@ import { birthdayFromDateString, birthdaySolarDate, formatBirthday } from '../pe
 
 export default function DataScreen() {
   const router = useRouter();
-  const { albumMedia, albums, books, checkIns, media, musicCollectionEntries, musicPlaylists, people, posts, preferences, tagDefinitions } = useAppState();
+  const { albumMedia, albums, books, checkIns, media, musicCollectionEntries, musicPlaylists, posts, preferences, tagDefinitions } = useAppState();
   const [avatarFailed, setAvatarFailed] = useState(false);
   const avatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const avatarUri = avatar?.localPath ?? null;
@@ -26,9 +26,7 @@ export default function DataScreen() {
   const selfAlbumIds = new Set(selfAlbums.map((album) => album.id));
   const selfPhotos = albumMedia.filter((item) => selfAlbumIds.has(item.albumId));
   const selfMusicCount = musicCollectionEntries.filter((entry) => entry.targetType === 'self').length;
-  const imageCount = media.filter((item) => item.mimeType.startsWith('image/')).length;
-  const videoCount = media.filter((item) => item.mimeType.startsWith('video/')).length;
-  const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
+  const recordedDays = new Set([...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)]).size;
   const selfBirthday = birthdayFromDateString(preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth);
   const age = currentAge(selfBirthday);
   const profileValues = [age === null ? null : `${age} 岁`, preferences.profileGender ? formatGender(preferences.profileGender) : null, selfBirthday ? formatBirthday(selfBirthday) : null].filter((value): value is string => Boolean(value));
@@ -57,9 +55,9 @@ export default function DataScreen() {
         <View style={styles.statDivider} />
         <Stat label="打卡" value={checkIns.length} />
         <View style={styles.statDivider} />
-        <Stat label="人物" value={people.length} />
+        <Stat label="记录天数" value={recordedDays} />
         <View style={styles.statDivider} />
-        <Stat label="媒体" value={imageCount + videoCount + voiceCount} />
+        <Stat label="评论" value={posts.reduce((total, post) => total + post.comments.length, 0)} />
       </View>
 
       <Text style={styles.sectionLabel}>我的空间</Text>

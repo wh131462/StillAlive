@@ -190,6 +190,8 @@ export default function SpaceScreen() {
             <View style={styles.memoryTraceStats}>
               <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{recordedDays}</Text><Text style={styles.memoryTraceLabel}>记录天数</Text></View>
               <View style={styles.memoryTraceDivider} />
+              <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{posts.length}</Text><Text style={styles.memoryTraceLabel}>记录</Text></View>
+              <View style={styles.memoryTraceDivider} />
               <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{visualMediaCount}</Text><Text style={styles.memoryTraceLabel}>影像</Text></View>
               <View style={styles.memoryTraceDivider} />
               <View style={styles.memoryTraceStat}><Text style={styles.memoryTraceValue}>{voiceCount}</Text><Text style={styles.memoryTraceLabel}>语音</Text></View>
