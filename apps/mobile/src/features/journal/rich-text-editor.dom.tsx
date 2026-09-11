@@ -5,7 +5,7 @@ import DOMPurify from 'dompurify';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import type { DOMProps } from 'expo/dom';
-import type { EditorAudio, EditorCommand, EditorImage, EditorImageReplacement, EditorMediaSource, EditorTheme } from './rich-text-editor.types';
+import type { EditorAudio, EditorCommand, EditorDateCardUpdate, EditorImage, EditorImageReplacement, EditorMediaSource, EditorTheme } from './rich-text-editor.types';
 import { richTextSurfaceCss } from './rich-text-content-css';
 import { decorateRichTextContent, renderRichTextMarkdown, RICH_TEXT_AUDIO_ORIGIN, RICH_TEXT_MEDIA_ORIGIN } from './rich-text-markdown';
 import { createAudioEmbed, formatAudioDuration } from './embedded-media';
@@ -27,6 +27,7 @@ interface RichTextEditorProps {
   onMention(): void;
   onReplaceImage(mediaId: string): void;
   onStopRecording(): void;
+  onDateCardPress(value: string, kind: 'date' | 'datetime', index: number): void;
   dom?: DOMProps;
 }
 
@@ -44,6 +45,7 @@ export default function RichTextEditor({
   onMention,
   onReplaceImage,
   onStopRecording,
+  onDateCardPress,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
@@ -180,6 +182,21 @@ export default function RichTextEditor({
       onStopRecording();
       return;
     }
+    const dateCard = target?.closest<HTMLElement>('.date-card');
+    if (dateCard) {
+      event.preventDefault();
+      placeCursorAfterInlineCard(dateCard);
+      saveSelection(event.currentTarget, savedRangeRef);
+      const value = dateCard.dataset.dateValue;
+      const kind = dateCard.dataset.dateKind;
+      if (value && (kind === 'date' || kind === 'datetime')) {
+        const index = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('.date-card'))
+          .filter((card) => card.dataset.dateKind === kind && card.dataset.dateValue === value)
+          .indexOf(dateCard);
+        if (index >= 0) onDateCardPress(value, kind, index);
+      }
+      return;
+    }
     const videoControl = target?.closest<HTMLElement>('.video-controls');
     const videoFrame = target?.closest<HTMLElement>('.media-frame');
     const video = videoFrame?.querySelector<HTMLVideoElement>('video');
@@ -231,7 +248,19 @@ export default function RichTextEditor({
     const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
     if (!anchor || !editor.contains(anchor)) return;
 
-    if (event.key === 'Backspace') {
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      const previousInlineCard = elementImmediatelyBeforeCaret(selection);
+      const nextInlineCard = elementImmediatelyAfterCaret(selection);
+      const adjacentCard = event.key === 'Backspace' ? previousInlineCard : nextInlineCard;
+      if (adjacentCard?.classList.contains('date-card')) {
+        event.preventDefault();
+        adjacentCard.remove();
+        decorateEditor(editor, mediaRef.current);
+        saveSelection(editor, savedRangeRef);
+        commitEditorChange(editor);
+        return;
+      }
+      if (event.key === 'Delete') return;
       const listItem = anchor.closest('li') as HTMLLIElement | null;
       if (listItem) {
         if (!caretAtStart(listItem, selection)) return;
@@ -242,6 +271,13 @@ export default function RichTextEditor({
       } else {
         const block = anchor.closest<HTMLElement>('p, div, h1, h2, h3, h4, h5, h6');
         if (!block || block === editor || !caretAtStart(block, selection)) return;
+        const previousDateCard = block.previousElementSibling?.matches('.date-card') ? block.previousElementSibling : null;
+        if (previousDateCard) {
+          event.preventDefault();
+          previousDateCard.remove();
+          commitEditorChange(editor);
+          return;
+        }
         const previous = block.previousElementSibling;
         const target = previous?.matches('ul, ol') ? previous.lastElementChild : previous;
         if (!(target instanceof HTMLElement) || !target.matches('p, div, h1, h2, h3, h4, h5, h6, li') || target.contentEditable === 'false') return;
@@ -326,7 +362,7 @@ export default function RichTextEditor({
     if (!editor || disabled) return;
     const handleBeforeInput = (event: InputEvent) => {
       if (!event.cancelable || event.isComposing) return;
-      const key = event.inputType === 'deleteContentBackward' ? 'Backspace' : event.inputType === 'insertParagraph' ? 'Enter' : null;
+      const key = event.inputType === 'deleteContentBackward' ? 'Backspace' : event.inputType === 'deleteContentForward' ? 'Delete' : event.inputType === 'insertParagraph' ? 'Enter' : null;
       if (key === 'Enter') {
         const node = window.getSelection()?.anchorNode;
         const anchor = node instanceof Element ? node : node?.parentElement;
@@ -411,6 +447,14 @@ function createTurndownService(): TurndownService {
       const id = node.getAttribute('data-media-id') ?? '';
       const alt = (node.getAttribute('alt') ?? (node.nodeName === 'VIDEO' ? '视频' : '照片')).replaceAll('[', '\\[').replaceAll(']', '\\]');
       return `\n\n![${alt}](media://${id})\n\n`;
+    },
+  });
+  service.addRule('dateCard', {
+    filter: (node) => node.nodeName === 'SPAN' && node.classList.contains('date-card'),
+    replacement: (_content, node) => {
+      const value = node.getAttribute('data-date-value');
+      const kind = node.getAttribute('data-date-kind');
+      return value && (kind === 'date' || kind === 'datetime') ? `[[${kind}:${value}]]` : '';
     },
   });
   return service;
@@ -776,6 +820,15 @@ function runCommand(editor: HTMLDivElement, command: EditorCommand) {
     case 'audio':
       if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'durationMs' in command.value) insertAudio(editor, command.value);
       break;
+    case 'insertDate':
+      if (typeof command.value === 'string') insertDateCard(command.value, 'date');
+      break;
+    case 'insertDateTime':
+      if (typeof command.value === 'string') insertDateCard(command.value, 'datetime');
+      break;
+    case 'updateDateCard':
+      if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'from' in command.value) updateDateCard(editor, command.value as EditorDateCardUpdate);
+      break;
     case 'recordingStart': insertRecordingFrame(); break;
     case 'recordingCancel': editor.querySelector('.audio-recording-frame')?.remove(); break;
     case 'mention':
@@ -956,7 +1009,9 @@ function insertTaskListItem(taskItem: HTMLLIElement, selection: Selection) {
   const range = selection.getRangeAt(0).cloneRange();
   const trailingContent = range.cloneRange();
   trailingContent.selectNodeContents(taskItem);
-  trailingContent.setStart(range.endContainer, range.endOffset);
+  const previousDateCard = elementImmediatelyBeforeCaret(selection);
+  if (previousDateCard?.classList.contains('date-card') && taskItem.contains(previousDateCard)) trailingContent.setStartAfter(previousDateCard);
+  else trailingContent.setStart(range.endContainer, range.endOffset);
   const tail = trailingContent.extractContents();
 
   const nextItem = document.createElement('li');
@@ -1237,6 +1292,50 @@ function insertRecordingFrame() {
   insertBlockAtSelection(frame);
 }
 
+function insertDateCard(value: string, kind: 'date' | 'datetime') {
+  const card = createDateCard(value, kind);
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(card);
+  range.setStartAfter(card);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function createDateCard(value: string, kind: 'date' | 'datetime'): HTMLElement {
+  const card = document.createElement('span');
+  card.className = `date-card date-card-${kind}`;
+  card.contentEditable = 'false';
+  card.dataset.dateKind = kind;
+  card.dataset.dateValue = value;
+  card.textContent = formatDateCard(value, kind);
+  return card;
+}
+
+function updateDateCard(editor: HTMLDivElement, update: EditorDateCardUpdate) {
+  const card = Array.from(editor.querySelectorAll<HTMLElement>('.date-card')).filter((item) => item.dataset.dateValue === update.from && item.dataset.dateKind === update.kind)[update.index];
+  if (!card) return;
+  card.dataset.dateValue = update.to;
+  card.textContent = formatDateCard(update.to, update.kind);
+}
+
+function parseDateCardValue(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(value);
+  if (!match) return new Date(value);
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4] ?? 0), Number(match[5] ?? 0));
+}
+
+function formatDateCard(value: string, kind: 'date' | 'datetime'): string {
+  const date = parseDateCardValue(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const dateText = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+  if (kind === 'date') return dateText;
+  return `${new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)} · ${dateText}`;
+}
+
 function insertBlockAtSelection(element: HTMLElement) {
   const selection = window.getSelection();
   if (!selection?.rangeCount) return;
@@ -1248,6 +1347,44 @@ function insertBlockAtSelection(element: HTMLElement) {
   range.deleteContents();
   range.insertNode(fragment);
   placeCursorAtEnd(paragraph);
+}
+
+function placeCursorAfterInlineCard(card: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.setStartAfter(card);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function elementImmediatelyBeforeCaret(selection: Selection): HTMLElement | null {
+  if (!selection.isCollapsed) return null;
+  const { anchorNode, anchorOffset } = selection;
+  if (anchorNode instanceof Element && anchorOffset > 0) {
+    const node = anchorNode.childNodes[anchorOffset - 1];
+    return node instanceof HTMLElement ? node : null;
+  }
+  if (anchorNode?.nodeType === Node.TEXT_NODE && anchorOffset === 0) {
+    const node = anchorNode.previousSibling;
+    return node instanceof HTMLElement ? node : null;
+  }
+  return null;
+}
+
+function elementImmediatelyAfterCaret(selection: Selection): HTMLElement | null {
+  if (!selection.isCollapsed) return null;
+  const { anchorNode, anchorOffset } = selection;
+  if (anchorNode instanceof Element) {
+    const node = anchorNode.childNodes[anchorOffset];
+    return node instanceof HTMLElement ? node : null;
+  }
+  if (anchorNode?.nodeType === Node.TEXT_NODE && anchorOffset === anchorNode.textContent?.length) {
+    const node = anchorNode.nextSibling;
+    return node instanceof HTMLElement ? node : null;
+  }
+  return null;
 }
 
 function placeCursorAfterBlock(editor: HTMLDivElement, block: HTMLElement) {
@@ -1408,6 +1545,8 @@ const editorCss = (theme: EditorTheme) => `
   .media-frame.is-media-error::before { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; content: "媒体暂时无法显示 轻触替换"; color: ${theme.inkSoft}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; pointer-events: none; }
   .media-frame.is-media-error img, .media-frame.is-media-error video { visibility: hidden; }
   .mention { padding: 0.08em 0.22em; border-radius: 5px; background: ${theme.lifeLight}; color: ${theme.life}; }
+  .date-card { display: inline-flex; align-items: center; vertical-align: baseline; margin: 0 0.32em; padding: 0.08em 0.65em; border: 1px solid ${theme.line}; border-radius: 8px; background: ${theme.paper}; color: ${theme.ink}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.88em; line-height: 1.35; font-weight: 700; cursor: pointer; box-shadow: 0 2px 6px rgba(16, 24, 20, 0.08); }
+  .date-card-datetime { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; }
   .audio-frame, .audio-recording-frame { min-height: 72px; display: flex; align-items: center; margin: 1.25em 0; padding: 14px; border-radius: 4px 22px 4px 22px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
   .audio-frame { background: ${theme.lifeLight}; }
   .audio-recording-frame { background: ${theme.dangerLight}; }

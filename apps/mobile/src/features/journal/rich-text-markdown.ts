@@ -4,6 +4,20 @@ import { marked } from 'marked';
 export const RICH_TEXT_AUDIO_ORIGIN = 'https://still-alive.local/audio/';
 export const RICH_TEXT_MEDIA_ORIGIN = 'https://still-alive.local/media/';
 
+function parseDateCardValue(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(value);
+  if (!match) return new Date(value);
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4] ?? 0), Number(match[5] ?? 0));
+}
+
+function formatDateCard(value: string, kind: 'date' | 'datetime'): string {
+  const date = parseDateCardValue(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const dateText = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+  if (kind === 'date') return dateText;
+  return `${new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)} · ${dateText}`;
+}
+
 export function renderRichTextMarkdown(markdown: string): string {
   const audioSafeMarkdown = markdown.replace(
     /!\[语音\]\(audio:\/\/([^)?]+)(?:\?duration=(\d+))?\)/g,
@@ -13,7 +27,12 @@ export function renderRichTextMarkdown(markdown: string): string {
     /!\[([^\]]*)\]\(media:\/\/([^)]+)\)/g,
     (_match, alt: string, id: string) => `![${alt}](${RICH_TEXT_MEDIA_ORIGIN}${encodeURIComponent(id)})`,
   );
-  const html = marked.parse(mediaSafeMarkdown, { async: false, breaks: true, gfm: true }) as string;
+  const dateSafeMarkdown = mediaSafeMarkdown.replace(/\[\[(date|datetime):([^\]]+)\]\]/g, (_match, kind: 'date' | 'datetime', value: string) => {
+    const safeValue = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/.test(safeValue)) return _match;
+    return `<span class="date-card date-card-${kind}" data-date-kind="${kind}" data-date-value="${safeValue}" contenteditable="false">${formatDateCard(safeValue, kind)}</span>`;
+  });
+  const html = marked.parse(dateSafeMarkdown, { async: false, breaks: true, gfm: true }) as string;
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 }
 

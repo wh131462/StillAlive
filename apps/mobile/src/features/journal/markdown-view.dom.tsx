@@ -73,5 +73,7 @@ const viewCss = (theme: EditorTheme, maxHeight?: number, preview = false) => `
   ${preview ? '.rich-text-surface { --rich-text-line-height: 1.6em; font-size: 15px; line-height: 1.6; }' : ''}
   .markdown { ${maxHeight === undefined ? '' : `max-height: ${Math.max(0, maxHeight)}px; overflow: hidden;`} }
   .markdown .task-list-item > input[type="checkbox"] { opacity: 1; pointer-events: none; }
+  .markdown .date-card { display: inline-flex; align-items: center; vertical-align: baseline; margin: 0 0.32em; padding: 0.08em 0.65em; border: 1px solid ${theme.line}; border-radius: 8px; background: ${theme.paper}; color: ${theme.ink}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.88em; line-height: 1.35; font-weight: 700; box-shadow: 0 2px 6px rgba(16, 24, 20, 0.08); }
+  .markdown .date-card-datetime { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; }
   .markdown img { margin: 1.2em 0; border-radius: 4px; }
 `;

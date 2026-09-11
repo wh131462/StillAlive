@@ -558,6 +558,10 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'posts', 'comments_json', "TEXT NOT NULL DEFAULT '[]'");
     await db.execAsync('PRAGMA user_version = 35;');
   }
+  if (currentVersion < 36) {
+    await addColumnIfMissing(db, 'posts', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
+    await db.execAsync('CREATE INDEX IF NOT EXISTS posts_pinned_idx ON posts(pinned DESC, day_key DESC, created_at DESC); PRAGMA user_version = 36;');
+  }
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

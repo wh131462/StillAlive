@@ -38,7 +38,7 @@ export default function PostDetailScreen() {
     setCommentTarget({ commentId: editingCommentId });
   };
   useEffect(() => setCommentTarget(commentId ? { commentId } : null), [commentId, id]);
-  const { deletePost, media, posts, readingNoteSources, ready } = useAppState();
+  const { deletePost, media, posts, readingNoteSources, ready, setPostPinned } = useAppState();
   const post = useMemo(() => posts.find((item) => item.id === id), [id, posts]);
   const readingSource = useMemo(() => readingNoteSources.find((source) => source.postId === id) ?? null, [id, readingNoteSources]);
   const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
@@ -49,6 +49,7 @@ export default function PostDetailScreen() {
   const [shareContentReady, setShareContentReady] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const contentReady = Boolean(post && readyPostId === post.id);
+  const postPinned = post?.pinned ?? false;
   const centerShareContent = Boolean(post && !readingSource && extractMusicShares(post.bodyMarkdown).length === 0 && !/!\[[^\]]*\]\((?:media|audio):\/\//.test(post.bodyMarkdown) && postMarkdownToPlainText(post.bodyMarkdown).length <= 180);
   const handleContentReady = useCallback(() => {
     if (post) setReadyPostId(post.id);
@@ -79,6 +80,12 @@ export default function PostDetailScreen() {
   const deleteCurrentPost = () => {
     setMoreOpen(false);
     confirmDelete();
+  };
+
+  const togglePin = () => {
+    if (!post) return;
+    setMoreOpen(false);
+    void setPostPinned(post.id, !post.pinned).catch((cause: unknown) => feedback.alert('操作失败', cause instanceof Error ? cause.message : '请稍后重试。'));
   };
 
   const copyPost = async (includeMeta: boolean) => {
@@ -132,7 +139,7 @@ export default function PostDetailScreen() {
               onReady={handleContentReady}
               readingSource={readingSource}
             />
-            <View style={styles.commentBar}><Text style={styles.detailTime}>{post.locationName ? `${post.locationName} / ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text><PostCommentMenu onComment={() => openComment()} /></View>
+            <View style={styles.commentBar}><Text style={styles.detailTime}>{post.pinned ? '已置顶 / ' : ''}{post.locationName ? `${post.locationName} / ` : ''}记录于 {formatDate(post.dayKey)} {formatTime(post.createdAt)}</Text><PostCommentMenu onComment={() => openComment()} /></View>
             <PostComments key={post.id} post={post} onEdit={(comment) => openComment(comment.id)} />
           </ScrollView>
           {commentTarget ? <PostCommentComposer key={`${post.id}:${commentTarget.commentId ?? 'new'}`} post={post} comment={post.comments.find((comment) => comment.id === commentTarget.commentId)} onClose={() => setCommentTarget(null)} /> : null}
@@ -151,6 +158,7 @@ export default function PostDetailScreen() {
       {moreOpen ? <><Pressable accessibilityLabel="关闭记录菜单" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} /><View accessibilityLabel="记录更多操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}>
         <MoreMenuItem icon={{ android: 'chat_bubble_outline', ios: 'bubble.right', web: 'chat_bubble_outline' }} label="评论" onPress={() => { setMoreOpen(false); openComment(); }} />
         <MoreMenuItem icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑记录" onPress={editPost} />
+        <MoreMenuItem icon={{ android: 'push_pin', ios: postPinned ? 'pin.slash' : 'pin', web: 'push_pin' }} label={postPinned ? '取消置顶' : '置顶记录'} onPress={togglePin} />
         <MoreMenuItem icon={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} label="复制正文" onPress={() => void copyPost(false)} />
         <MoreMenuItem icon={{ android: 'copy_all', ios: 'doc.on.clipboard', web: 'copy_all' }} label="复制全文" onPress={() => void copyPost(true)} />
         <MoreMenuItem destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除记录" onPress={deleteCurrentPost} />

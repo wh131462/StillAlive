@@ -30,6 +30,9 @@ export type EditorCommandType =
   | 'replaceImage'
   | 'mention'
   | 'audio'
+  | 'insertDate'
+  | 'insertDateTime'
+  | 'updateDateCard'
   | 'recordingStart'
   | 'recordingCancel';
 
@@ -46,6 +49,8 @@ export interface EditorAudio {
   uri: string;
 }
 
+export interface EditorDateCardUpdate { from: string; to: string; kind: 'date' | 'datetime'; index: number; }
+
 export interface EditorImageReplacement extends EditorImage {
   previousId: string;
 }
@@ -53,7 +58,7 @@ export interface EditorImageReplacement extends EditorImage {
 export interface EditorCommand {
   id: number;
   type: EditorCommandType;
-  value?: string | EditorAudio | EditorImage[] | EditorImageReplacement;
+  value?: string | EditorAudio | EditorImage[] | EditorImageReplacement | EditorDateCardUpdate;
 }
 
 export interface EditorMediaSource {

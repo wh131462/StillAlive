@@ -2,7 +2,7 @@ import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSche
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
 
 export interface CheckInRow { id: string; day_key: string; city: string | null; created_at: string; }
-export interface PostRow { comments_json: string; id: string; day_key: string; body_markdown: string; location_name: string | null; created_at: string; updated_at: string; }
+export interface PostRow { comments_json: string; id: string; day_key: string; body_markdown: string; location_name: string | null; pinned: number; created_at: string; updated_at: string; }
 export interface DraftRow { id: string; day_key: string; body_markdown: string; updated_at: string; }
 export interface PersonRow {
   id: string; name: string; nickname: string | null; bio: string | null; avatar_media_id: string | null; gender: Gender | null; relation_to_me: string | null; impression: string | null;

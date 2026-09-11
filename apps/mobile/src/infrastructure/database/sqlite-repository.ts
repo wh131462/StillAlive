@@ -83,11 +83,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async createPost(post: Post, personIds: string[] = []): Promise<void> {
     await this.withTransaction(async (transaction) => {
       await transaction.runAsync(
-        'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at, comments_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO posts (id, day_key, body_markdown, location_name, pinned, created_at, updated_at, comments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         post.id,
         post.dayKey,
         post.bodyMarkdown,
         post.locationName,
+        post.pinned ? 1 : 0,
         post.createdAt,
         post.updatedAt,
         JSON.stringify(post.comments ?? []),
@@ -106,9 +107,10 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async updatePost(post: Post, personIds: string[] = []): Promise<void> {
     await this.withTransaction(async (transaction) => {
       await transaction.runAsync(
-        'UPDATE posts SET body_markdown = ?, location_name = ?, updated_at = ? WHERE id = ?',
+        'UPDATE posts SET body_markdown = ?, location_name = ?, pinned = ?, updated_at = ? WHERE id = ?',
         post.bodyMarkdown,
         post.locationName,
+        post.pinned ? 1 : 0,
         post.updatedAt,
         post.id,
       );
@@ -121,6 +123,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
         );
       }
     });
+  }
+
+  async setPostPinned(postId: string, pinned: boolean): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      'UPDATE posts SET pinned = ?, updated_at = ? WHERE id = ?',
+      pinned ? 1 : 0,
+      new Date().toISOString(),
+      postId,
+    ));
   }
 
   async savePostComment(postId: string, body: string | null, commentId?: string, mediaIds?: string[]): Promise<void> {
@@ -162,14 +173,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPosts(): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      'SELECT id, day_key, body_markdown, location_name, comments_json, created_at, updated_at FROM posts ORDER BY day_key DESC, created_at DESC',
+      'SELECT id, day_key, body_markdown, location_name, pinned, comments_json, created_at, updated_at FROM posts ORDER BY pinned DESC, day_key DESC, created_at DESC',
     );
     return rows.map(mapPost);
   }
 
   async listPostsByDay(dayKey: DayKey): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      'SELECT id, day_key, body_markdown, location_name, comments_json, created_at, updated_at FROM posts WHERE day_key = ? ORDER BY created_at DESC',
+      'SELECT id, day_key, body_markdown, location_name, pinned, comments_json, created_at, updated_at FROM posts WHERE day_key = ? ORDER BY pinned DESC, created_at DESC',
       dayKey,
     );
     return rows.map(mapPost);
@@ -177,11 +188,11 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async listPostsByPerson(personId: string): Promise<Post[]> {
     const rows = await this.db.getAllAsync<PostRow>(
-      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.comments_json, posts.created_at, posts.updated_at
+      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.pinned, posts.comments_json, posts.created_at, posts.updated_at
        FROM posts
        INNER JOIN post_persons ON post_persons.post_id = posts.id
        WHERE post_persons.person_id = ?
-       ORDER BY posts.day_key DESC, posts.created_at DESC`,
+       ORDER BY posts.pinned DESC, posts.day_key DESC, posts.created_at DESC`,
       personId,
     );
     return rows.map(mapPost);
@@ -1044,7 +1055,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     const preferences = await this.getPreferences();
     if (!preferences.globalMemoryEnabled) return null;
     const onThisDay = await this.db.getFirstAsync<PostRow>(
-      `SELECT id, day_key, body_markdown, location_name, comments_json, created_at, updated_at
+      `SELECT id, day_key, body_markdown, location_name, pinned, comments_json, created_at, updated_at
        FROM posts
        WHERE substr(day_key, 6, 5) = substr(?, 6, 5) AND day_key < ?
        ORDER BY day_key DESC, created_at DESC
@@ -1056,7 +1067,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const personMemory = await this.db.getFirstAsync<PostRow & { person_id: string; person_name: string; person_nickname: string | null }>(
-      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.comments_json, posts.created_at, posts.updated_at,
+      `SELECT posts.id, posts.day_key, posts.body_markdown, posts.location_name, posts.pinned, posts.comments_json, posts.created_at, posts.updated_at,
               persons.id AS person_id, persons.name AS person_name, persons.nickname AS person_nickname
        FROM posts
        INNER JOIN post_persons ON post_persons.post_id = posts.id
@@ -1228,8 +1239,8 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       }
       for (const post of snapshot.posts) {
         await transaction.runAsync(
-          'INSERT INTO posts (id, day_key, body_markdown, location_name, created_at, updated_at, comments_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          post.id, post.dayKey, post.bodyMarkdown, post.locationName, post.createdAt, post.updatedAt, JSON.stringify(post.comments ?? []),
+          'INSERT INTO posts (id, day_key, body_markdown, location_name, pinned, created_at, updated_at, comments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          post.id, post.dayKey, post.bodyMarkdown, post.locationName, post.pinned ? 1 : 0, post.createdAt, post.updatedAt, JSON.stringify(post.comments ?? []),
         );
       }
       for (const relation of snapshot.postPersons) {

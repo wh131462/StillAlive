@@ -39,6 +39,8 @@ import { createMusicShare, extractMusicShares, withMusicShare, withoutMusicShare
 import type { MusicShare } from '../../application/music-share';
 import { withReadingSourceQuote, withoutReadingSourceQuote } from '../../application/reading-share';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
+import { DatePickerField, TimePickerField } from '../people/date-time-picker';
+import type { DateParts } from '../people/date-time-picker';
 
 export default function EditorScreen() {
   const router = useRouter();
@@ -75,6 +77,10 @@ export default function EditorScreen() {
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('https://');
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [dateCardDraft, setDateCardDraft] = useState<{ value: string; kind: 'date' | 'datetime'; index: number } | null>(null);
+  const [dateCardParts, setDateCardParts] = useState<DateParts | null>(null);
+  const [dateCardHour, setDateCardHour] = useState(0);
+  const [dateCardMinute, setDateCardMinute] = useState(0);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [customLocation, setCustomLocation] = useState('');
   const [locating, setLocating] = useState<'address' | 'city' | null>(null);
@@ -272,6 +278,22 @@ export default function EditorScreen() {
   const sendCommand = (type: EditorCommandType, value?: EditorCommand['value']) => {
     commandIdRef.current += 1;
     setCommand({ id: commandIdRef.current, type, value });
+  };
+
+  const openDateCardPicker = (value: string, kind: 'date' | 'datetime', index: number) => {
+    const date = parseDateCardValue(value);
+    setDateCardDraft({ value, kind, index });
+    setDateCardParts({ year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() });
+    setDateCardHour(date.getHours());
+    setDateCardMinute(date.getMinutes());
+    Keyboard.dismiss();
+  };
+
+  const confirmDateCardPicker = () => {
+    if (!dateCardDraft || !dateCardParts) return;
+    const next = `${dateCardParts.year}-${pad2(dateCardParts.month)}-${pad2(dateCardParts.day)}${dateCardDraft.kind === 'datetime' ? `T${pad2(dateCardHour)}:${pad2(dateCardMinute)}` : ''}`;
+    if (dateCardDraft.value) sendCommand('updateDateCard', { from: dateCardDraft.value, to: next, kind: dateCardDraft.kind, index: dateCardDraft.index });
+    setDateCardDraft(null);
   };
 
   const setTextSize = (type: 'paragraph' | 'heading1' | 'heading2' | 'heading3') => {
@@ -608,6 +630,7 @@ export default function EditorScreen() {
             initialMarkdown={initialBodyRef.current}
             media={editorMedia}
             onChange={handleBodyChange}
+            onDateCardPress={openDateCardPicker}
             onFormatsChange={setActiveFormats}
             onMention={openPersonPicker}
             onReplaceImage={(mediaId) => void handleReplaceImage(mediaId)}
@@ -663,6 +686,8 @@ export default function EditorScreen() {
               {activeFormats.includes('link') ? <ToolButton androidIcon="link" icon="link" label="取消链接" onPress={() => sendCommand('unlink')} /> : null}
               <ToolButton androidIcon="horizontal_rule" icon="minus" label="分隔线" onPress={() => sendCommand('horizontalRule')} />
               <ToolButton androidIcon="table" icon="tablecells" label="表格" onPress={() => sendCommand('table')} />
+              <ToolButton androidIcon="calendar_month" icon="calendar" label="插入日期" onPress={() => sendCommand('insertDate', currentDateCardValue())} />
+              <ToolButton androidIcon="event" icon="calendar.badge.clock" label="插入时间和日历" onPress={() => sendCommand('insertDateTime', currentDateCardValue(true))} />
             </ScrollView>
           ) : null}
 
@@ -726,6 +751,16 @@ export default function EditorScreen() {
                   <Pressable accessibilityRole="button" disabled={!customLocation.trim()} onPress={useCustomLocation} style={[styles.customLocationApply, !customLocation.trim() && styles.saveButtonDisabled]}><Text style={styles.customLocationApplyText}>使用</Text></Pressable>
                 </View>
               </View>
+        </DraggableBottomSheet>
+
+        <DraggableBottomSheet keyboardAvoiding onClose={() => setDateCardDraft(null)} open={Boolean(dateCardDraft)} sheetStyle={styles.dateCardSheet}>
+          <View style={styles.dateCardHeader}>
+            <Pressable accessibilityRole="button" onPress={() => setDateCardDraft(null)} style={styles.dateCardHeaderAction}><Text style={styles.dateCardCancel}>取消</Text></Pressable>
+            <Text style={styles.dateCardTitle}>{dateCardDraft?.kind === 'datetime' ? '调整时间和日期' : '调整日期'}</Text>
+            <Pressable accessibilityRole="button" onPress={confirmDateCardPicker} style={styles.dateCardHeaderAction}><Text style={styles.dateCardConfirm}>完成</Text></Pressable>
+          </View>
+          {dateCardParts ? <DatePickerField defaultValue={dateCardParts} fieldStyle={styles.dateCardPickerField} label="日期" maximumDate={new Date(2100, 11, 31)} value={dateCardParts} onChange={(value) => setDateCardParts(value)} /> : null}
+          {dateCardDraft?.kind === 'datetime' ? <TimePickerField hour={dateCardHour} label="时间" minute={dateCardMinute} onChange={(hour, minute) => { setDateCardHour(hour); setDateCardMinute(minute); }} /> : null}
         </DraggableBottomSheet>
 
         <Modal animationType="fade" onRequestClose={() => setLinkPickerOpen(false)} transparent visible={linkPickerOpen}>
@@ -819,6 +854,20 @@ function validPastDay(value: string | undefined, today: DayKey): DayKey {
   return toDayKey(parsed) === value ? value as DayKey : today;
 }
 
+function pad2(value: number): string { return String(value).padStart(2, '0'); }
+
+function currentDateCardValue(withTime = false): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}${withTime ? `T${pad2(now.getHours())}:${pad2(now.getMinutes())}` : ''}`;
+}
+
+function parseDateCardValue(value: string): Date {
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour = 0, minute = 0] = (timePart ?? '').split(':').map(Number);
+  return new Date(year, month - 1, day, hour, minute);
+}
+
 function hasUnsavedContent(body: string, musicShare: MusicShare | null, readingSource: ReadingNoteSource | null, postId: string | undefined, initialBody: string, initialMusicShare: MusicShare | null, initialReadingSource: ReadingNoteSource | null, personIds: string[], initialPersonIds: string[], locationName: string | null, initialLocation: string | null): boolean {
   if (!postId) return body !== initialBody || Boolean(body.trim()) || JSON.stringify(musicShare) !== JSON.stringify(initialMusicShare) || JSON.stringify(readingSource) !== JSON.stringify(initialReadingSource);
   if (body !== initialBody) return true;
@@ -831,6 +880,7 @@ function hasUnsavedContent(body: string, musicShare: MusicShare | null, readingS
 function markdownTextLength(markdown: string): number {
   return markdown
     .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\[\[(?:date|datetime):[^\]]+\]\]/g, '')
     .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
     .replace(/\[[^\]]*\]\([^)]+\)/g, (value) => value.replace(/^\[|\]\([^)]+\)$/g, ''))
     .replace(/[#>*_~`|\[\]-]/g, '')
@@ -877,6 +927,13 @@ const styles = createThemedStyles(() => ({
   imageSourceCancelText: { color: colors.inkSoft, fontSize: 14, fontWeight: '600' },
   personSheet: { maxHeight: '72%', paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
   locationSheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  dateCardSheet: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },
+  dateCardHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateCardPickerField: { marginTop: spacing.md },
+  dateCardHeaderAction: { width: 56, minHeight: 44, justifyContent: 'center' },
+  dateCardTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
+  dateCardCancel: { color: colors.inkSoft, fontSize: 11 },
+  dateCardConfirm: { color: colors.life, fontSize: 11, fontWeight: '700', textAlign: 'right' },
   locationSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 24 },
   locationSheetHint: { marginTop: 5, marginBottom: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   locationOption: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },

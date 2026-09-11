@@ -12,6 +12,7 @@ export function mapPost(row: PostRow): Post {
     bodyMarkdown: row.body_markdown,
     comments: JSON.parse(row.comments_json),
     locationName: row.location_name,
+    pinned: row.pinned === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

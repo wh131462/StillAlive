@@ -359,7 +359,10 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onComment, onIm
       <ProfileAvatar name={authorName} uri={avatarUri} />
       <View style={styles.postContent}>
         <View style={styles.postHeader}>
-          <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
+          <View style={styles.postAuthorRow}>
+            <StyledName style={styles.postAuthor} value={authorName} variant={nameStyle} />
+            {post.pinned ? <Text style={styles.postPinned}>已置顶</Text> : null}
+          </View>
           {signature ? <Text numberOfLines={1} style={styles.postSignature}>{signature}</Text> : null}
         </View>
         {renderPostPreviewSegments({ displayMarkdown: orderedMarkdown, mediaById, onImagePress, onOverflowChange: setBodyOverflowed })}
@@ -475,7 +478,11 @@ function buildTimelineSections(posts: Post[], checkIns: CheckIn[]): TimelineSect
   for (const post of posts) itemsByDay.set(post.dayKey, [...(itemsByDay.get(post.dayKey) ?? []), { kind: 'post', post }]);
   for (const checkIn of checkIns) itemsByDay.set(checkIn.dayKey, [...(itemsByDay.get(checkIn.dayKey) ?? []), { kind: 'check-in', checkIn }]);
   return [...itemsByDay.entries()]
-    .sort(([left], [right]) => right.localeCompare(left))
+    .sort(([leftDay, leftItems], [rightDay, rightItems]) => {
+      const leftPinned = leftItems.some((item) => item.kind === 'post' && item.post.pinned);
+      const rightPinned = rightItems.some((item) => item.kind === 'post' && item.post.pinned);
+      return Number(rightPinned) - Number(leftPinned) || rightDay.localeCompare(leftDay);
+    })
     .map(([title, items]) => ({
       title,
       data: items.sort(compareTimelineItems),
@@ -483,6 +490,8 @@ function buildTimelineSections(posts: Post[], checkIns: CheckIn[]): TimelineSect
 }
 
 function compareTimelineItems(left: TimelineItem, right: TimelineItem): number {
+  const pinnedDifference = Number(right.kind === 'post' && right.post.pinned) - Number(left.kind === 'post' && left.post.pinned);
+  if (pinnedDifference !== 0) return pinnedDifference;
   const difference = timelineItemTime(right) - timelineItemTime(left);
   if (Number.isFinite(difference) && difference !== 0) return difference;
   return timelineItemId(right).localeCompare(timelineItemId(left));
@@ -668,8 +677,10 @@ const styles = createThemedStyles(() => ({
   postAvatarText: { color: colors.onLife, fontFamily: typography.display, fontSize: 17 },
   postContent: { flex: 1, minWidth: 0, marginLeft: spacing.md },
   postHeader: { minHeight: 24, alignItems: 'flex-start', justifyContent: 'center' },
+  postAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   postAuthor: { color: colors.life, fontFamily: typography.body, fontSize: 14, fontWeight: '700' },
   postSignature: { maxWidth: '100%', marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
+  postPinned: { color: colors.life, fontSize: typography.size.meta, fontWeight: '700' },
   postMarkdownFrame: { width: '100%', marginTop: spacing.sm },
   postMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
   musicShare: { marginTop: spacing.md },

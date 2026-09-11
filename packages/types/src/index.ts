@@ -75,6 +75,7 @@ export interface Post {
   bodyMarkdown: string;
   comments: PostComment[];
   locationName: string | null;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 }
