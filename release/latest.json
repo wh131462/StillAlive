@@ -1,6 +1,6 @@
 {
-  "versionCode": 19,
-  "versionName": "1.1.10",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.10.apk",
-  "releaseNotes": "新增记录评论功能，支持评论展示、图片内容和备份恢复。\n优化富文本编辑中的列表切换、换行与退格体验。\n统一人物名字样式渲染，新增炫彩名字展示并修复预览换行问题。\n完善首页与数据页的记录统计"
+  "versionCode": 20,
+  "versionName": "1.1.11",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.11.apk",
+  "releaseNotes": "新增记录评论、图片支持及评论备份功能，完善时间展示与记录统计。\n优化富文本编辑体验，修复列表切换、换行和退格问题。\n统一朋友名字样式渲染，修复炫彩名字预览换行与显示问题。"
 }
