@@ -35,6 +35,7 @@ type TimelineItem =
   | { kind: 'post'; post: Post };
 
 interface TimelineSection {
+  key: string;
   title: DayKey;
   data: TimelineItem[];
 }
@@ -474,24 +475,23 @@ function AudioPreviews({ audioEmbeds, mediaById }: { audioEmbeds: ReturnType<typ
 }
 
 function buildTimelineSections(posts: Post[], checkIns: CheckIn[]): TimelineSection[] {
+  const pinnedItemsByDay = new Map<DayKey, TimelineItem[]>();
   const itemsByDay = new Map<DayKey, TimelineItem[]>();
-  for (const post of posts) itemsByDay.set(post.dayKey, [...(itemsByDay.get(post.dayKey) ?? []), { kind: 'post', post }]);
+  for (const post of posts) {
+    itemsByDay.set(post.dayKey, [...(itemsByDay.get(post.dayKey) ?? []), { kind: 'post', post }]);
+    if (post.pinned) pinnedItemsByDay.set(post.dayKey, [...(pinnedItemsByDay.get(post.dayKey) ?? []), { kind: 'post', post }]);
+  }
   for (const checkIn of checkIns) itemsByDay.set(checkIn.dayKey, [...(itemsByDay.get(checkIn.dayKey) ?? []), { kind: 'check-in', checkIn }]);
-  return [...itemsByDay.entries()]
-    .sort(([leftDay, leftItems], [rightDay, rightItems]) => {
-      const leftPinned = leftItems.some((item) => item.kind === 'post' && item.post.pinned);
-      const rightPinned = rightItems.some((item) => item.kind === 'post' && item.post.pinned);
-      return Number(rightPinned) - Number(leftPinned) || rightDay.localeCompare(leftDay);
-    })
+  return [pinnedItemsByDay, itemsByDay].flatMap((items, groupIndex) => [...items.entries()]
+    .sort(([leftDay], [rightDay]) => rightDay.localeCompare(leftDay))
     .map(([title, items]) => ({
+      key: `${groupIndex === 0 ? 'pinned' : 'regular'}:${title}`,
       title,
       data: items.sort(compareTimelineItems),
-    }));
+    })));
 }
 
 function compareTimelineItems(left: TimelineItem, right: TimelineItem): number {
-  const pinnedDifference = Number(right.kind === 'post' && right.post.pinned) - Number(left.kind === 'post' && left.post.pinned);
-  if (pinnedDifference !== 0) return pinnedDifference;
   const difference = timelineItemTime(right) - timelineItemTime(left);
   if (Number.isFinite(difference) && difference !== 0) return difference;
   return timelineItemId(right).localeCompare(timelineItemId(left));
