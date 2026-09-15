@@ -1,6 +1,6 @@
 {
-  "versionCode": 21,
-  "versionName": "1.1.12",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.12.apk",
+  "versionCode": 22,
+  "versionName": "1.1.13",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.13.apk",
   "releaseNotes": "优化首页置顶展示，置顶记录独立分组并保留在原时间线位置，同日其他记录保持正常排序。\n修复重新编辑已保存记录时，日期卡片内容可被误改的问题。"
 }
