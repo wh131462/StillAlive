@@ -470,6 +470,10 @@ function decorateEditor(editor: HTMLDivElement, media: EditorMediaSource[]) {
   const mediaById = new Map(media.map((item) => [item.id, item]));
   const mediaUris = new Map(media.map((item) => [item.id, item.uri]));
   decorateRichTextContent(editor, true);
+  // HTML sanitization strips contenteditable when saved content is restored.
+  editor.querySelectorAll<HTMLElement>('.date-card').forEach((card) => {
+    card.contentEditable = 'false';
+  });
   editor.querySelectorAll<HTMLLIElement>('li.task-list-item').forEach(ensureEmptyTaskItemAnchor);
   editor.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
     if (image.src.startsWith(RICH_TEXT_AUDIO_ORIGIN)) {
