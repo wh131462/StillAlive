@@ -16,6 +16,7 @@ await rm(outputDir, { recursive: true, force: true });
 await mkdir(path.join(outputDir, 'assets'), { recursive: true });
 await mkdir(path.join(outputDir, 'collect'), { recursive: true });
 await mkdir(path.join(outputDir, 'receive'), { recursive: true });
+await mkdir(path.join(outputDir, 'privacy'), { recursive: true });
 
 const template = await readFile(path.join(sourceDir, 'index.html'), 'utf8');
 const html = template
@@ -25,12 +26,15 @@ const html = template
   .replaceAll('__RELEASE_NOTES__', escapeHtml(release.releaseNotes || '查看 GitHub Release 获取本次更新详情。'));
 const collectHtml = (await readFile(path.join(sourceDir, 'collect/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
 const receiveHtml = (await readFile(path.join(sourceDir, 'receive/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
+const privacyHtml = (await readFile(path.join(sourceDir, 'privacy/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
 
 await Promise.all([
   writeFile(path.join(outputDir, 'index.html'), html),
   writeFile(path.join(outputDir, 'collect/index.html'), collectHtml),
   writeFile(path.join(outputDir, 'receive/index.html'), receiveHtml),
+  writeFile(path.join(outputDir, 'privacy/index.html'), privacyHtml),
   cp(path.join(sourceDir, 'styles.css'), path.join(outputDir, 'styles.css')),
+  cp(path.join(sourceDir, 'privacy.css'), path.join(outputDir, 'privacy.css')),
   cp(path.join(sourceDir, 'app.js'), path.join(outputDir, 'app.js')),
   cp(path.join(sourceDir, 'collection.css'), path.join(outputDir, 'collection.css')),
   cp(path.join(sourceDir, 'collect.js'), path.join(outputDir, 'collect.js')),
