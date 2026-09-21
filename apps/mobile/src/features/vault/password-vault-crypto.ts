@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { strFromU8, strToU8 } from 'fflate';
 import type { PasswordVaultEntry, PasswordVaultPayloadV1 } from './password-vault';
 import { logPasswordVaultDiagnostic, passwordVaultErrorKind } from './password-vault-logging';
+import { derivePasswordVaultKeyNative } from './password-vault-native';
 
 export const PASSWORD_VAULT_AUTH_ERROR = '主密码不正确或密码本已损坏';
 export const PASSWORD_VAULT_MAX_FILE_BYTES = 4 * 1024 * 1024;
@@ -15,6 +16,7 @@ const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const DEK_BYTES = 32;
 const MAX_ENTRIES = 10_000;
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const WRAPPED_KEY_AAD = strToU8('still-alive/password-vault/wrapped-dek/v1');
 const PAYLOAD_AAD = strToU8('still-alive/password-vault/payload/v1');
 
@@ -103,6 +105,21 @@ export async function unlockPasswordVault(envelope: PasswordVaultEnvelopeV1, mas
   }
 }
 
+export async function unlockPasswordVaultKey(envelope: PasswordVaultEnvelopeV1, masterPassword: string): Promise<Uint8Array> {
+  let kek: Uint8Array | null = null;
+  try {
+    validatePasswordVaultEnvelope(envelope);
+    kek = await deriveKey(masterPassword, envelope.kdf);
+    const dek = await open(envelope.wrappedKey, kek, WRAPPED_KEY_AAD);
+    if (dek.byteLength !== DEK_BYTES) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
+    return dek;
+  } catch {
+    throw new Error(PASSWORD_VAULT_AUTH_ERROR);
+  } finally {
+    kek?.fill(0);
+  }
+}
+
 export async function unlockPasswordVaultWithKey(envelope: PasswordVaultEnvelopeV1, dek: Uint8Array): Promise<UnlockedPasswordVault> {
   logPasswordVaultDiagnostic('unlock-with-key.start');
   let stage = 'validate-envelope';
@@ -138,11 +155,11 @@ export async function encryptPasswordVaultPayload(session: UnlockedPasswordVault
 
 export async function changePasswordVaultMasterPassword(session: UnlockedPasswordVault, currentPassword: string, nextPassword: string): Promise<UnlockedPasswordVault> {
   logPasswordVaultDiagnostic('change-password.start');
-  const verified = await unlockPasswordVault(session.envelope, currentPassword);
+  const verified = await unlockPasswordVaultKey(session.envelope, currentPassword);
   try {
-    if (!equalBytes(verified.dek, session.dek)) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
+    if (!equalBytes(verified, session.dek)) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
   } finally {
-    verified.dek.fill(0);
+    verified.fill(0);
   }
   const salt = await Crypto.getRandomBytesAsync(SALT_BYTES);
   const kdf: KdfConfigV1 = { ...CURRENT_KDF, salt: encodeBase64(salt) };
@@ -204,10 +221,17 @@ export function decodePasswordVaultKey(value: string): Uint8Array {
 }
 
 async function deriveKey(masterPassword: string, kdf: KdfConfigV1): Promise<Uint8Array> {
+  const startedAt = Date.now();
   const password = strToU8(masterPassword);
   const salt = decodeBase64(kdf.salt, SALT_BYTES, SALT_BYTES);
   try {
-    return await argon2idAsync(password, salt, {
+    const nativeResult = derivePasswordVaultKeyNative(masterPassword, kdf.salt, kdf.memoryCostKiB, kdf.timeCost, kdf.parallelism, kdf.keyLength);
+    if (nativeResult) {
+      const key = decodeBase64(await nativeResult, DEK_BYTES, DEK_BYTES);
+      logPasswordVaultDiagnostic('kdf.derived', { implementation: 'android-native', durationMs: Date.now() - startedAt });
+      return key;
+    }
+    const key = await argon2idAsync(password, salt, {
       t: kdf.timeCost,
       m: kdf.memoryCostKiB,
       p: kdf.parallelism,
@@ -215,6 +239,8 @@ async function deriveKey(masterPassword: string, kdf: KdfConfigV1): Promise<Uint
       maxmem: kdf.memoryCostKiB * 256,
       asyncTick: 8,
     });
+    logPasswordVaultDiagnostic('kdf.derived', { implementation: 'js-fallback', durationMs: Date.now() - startedAt });
+    return key;
   } finally {
     password.fill(0);
     salt.fill(0);
@@ -327,26 +353,32 @@ function decodeBase64(value: unknown, minBytes: number, maxBytes: number): Uint8
     if (offset < byteLength) output[offset++] = (combined >>> 8) & 0xff;
     if (offset < byteLength) output[offset++] = combined & 0xff;
   }
-  if (encodeBase64(output) !== value) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
+  const lastQuartet = value.length - 4;
+  const third = value[lastQuartet + 2];
+  const fourth = value[lastQuartet + 3];
+  if (third === '=' && (fourth !== '=' || (base64Value(value[lastQuartet + 1]) & 15) !== 0)) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
+  if (fourth === '=' && third !== '=' && (base64Value(third) & 3) !== 0) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
   return output;
 }
 
 function encodeBase64(bytes: Uint8Array): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = '';
+  const result = new Array<string>(Math.ceil(bytes.length / 3) * 4);
+  let outputIndex = 0;
   for (let index = 0; index < bytes.length; index += 3) {
     const a = bytes[index];
     const b = index + 1 < bytes.length ? bytes[index + 1] : 0;
     const c = index + 2 < bytes.length ? bytes[index + 2] : 0;
     const combined = (a << 16) | (b << 8) | c;
-    result += alphabet[(combined >>> 18) & 63] + alphabet[(combined >>> 12) & 63] + (index + 1 < bytes.length ? alphabet[(combined >>> 6) & 63] : '=') + (index + 2 < bytes.length ? alphabet[combined & 63] : '=');
+    result[outputIndex++] = BASE64_ALPHABET[(combined >>> 18) & 63];
+    result[outputIndex++] = BASE64_ALPHABET[(combined >>> 12) & 63];
+    result[outputIndex++] = index + 1 < bytes.length ? BASE64_ALPHABET[(combined >>> 6) & 63] : '=';
+    result[outputIndex++] = index + 2 < bytes.length ? BASE64_ALPHABET[combined & 63] : '=';
   }
-  return result;
+  return result.join('');
 }
 
 function base64Value(character: string): number {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const value = alphabet.indexOf(character);
+  const value = BASE64_ALPHABET.indexOf(character);
   if (value < 0) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
   return value;
 }

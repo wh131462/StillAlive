@@ -12,6 +12,7 @@ import {
   createPasswordVault,
   encryptPasswordVaultPayload,
   unlockPasswordVault,
+  unlockPasswordVaultKey,
   unlockPasswordVaultWithKey,
 } from './password-vault-crypto';
 import type { UnlockedPasswordVault } from './password-vault-crypto';
@@ -277,8 +278,8 @@ export function PasswordVaultStateProvider({ children }: PropsWithChildren) {
   const deleteVault = useCallback(async (masterPassword: string) => {
     const lifecycleVersion = lifecycleVersionRef.current;
     const envelope = sessionRef.current?.envelope ?? await readPasswordVaultEnvelope();
-    const verified = await unlockPasswordVault(envelope, masterPassword);
-    verified.dek.fill(0);
+    const verified = await unlockPasswordVaultKey(envelope, masterPassword);
+    verified.fill(0);
     assertActiveLifecycle(lifecycleVersion);
     await forceDeleteVault();
   }, [assertActiveLifecycle, forceDeleteVault]);

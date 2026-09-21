@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
-import { strFromU8 } from 'fflate';
+import { strFromU8, strToU8 } from 'fflate';
 import {
   PASSWORD_VAULT_AUTH_ERROR,
   PASSWORD_VAULT_MAX_FILE_BYTES,
@@ -33,11 +33,9 @@ export function passwordVaultExists(): boolean {
 export async function readPasswordVaultEnvelope(): Promise<PasswordVaultEnvelopeV1> {
   logPasswordVaultDiagnostic('storage.read-envelope.start');
   try {
-    const file = await resolveReadableVaultFile();
-    const text = await file.text();
-    const envelope = parsePasswordVaultEnvelope(text);
-    logPasswordVaultDiagnostic('storage.read-envelope.success', { chars: text.length });
-    return envelope;
+    const readable = await resolveReadableVaultFile();
+    logPasswordVaultDiagnostic('storage.read-envelope.success', { chars: readable.text.length });
+    return readable.envelope;
   } catch (cause) {
     logPasswordVaultDiagnostic('storage.read-envelope.failed', { error: passwordVaultErrorKind(cause) });
     throw cause;
@@ -49,9 +47,8 @@ export async function readPasswordVaultBytes(): Promise<Uint8Array | null> {
     logPasswordVaultDiagnostic('storage.read-bytes.missing');
     return null;
   }
-  const file = await resolveReadableVaultFile();
-  const bytes = await file.bytes();
-  parsePasswordVaultEnvelope(strFromU8(bytes));
+  const { text } = await resolveReadableVaultFile();
+  const bytes = strToU8(text);
   logPasswordVaultDiagnostic('storage.read-bytes.success', { bytes: bytes.byteLength });
   return bytes;
 }
@@ -78,9 +75,7 @@ export async function writePasswordVaultEnvelope(
   try {
     logPasswordVaultDiagnostic('storage.write.stage', { stage: 'write-temp' });
     temporary.write(text);
-    const staged = parseWrittenEnvelope(await temporary.text(), text);
-    logPasswordVaultDiagnostic('storage.write.stage', { stage: 'verify-temp' });
-    await verify(staged);
+    parseWrittenEnvelope(await temporary.text(), text);
     if (backup.exists) backup.delete();
     if (file.exists) await file.copy(backup, { overwrite: true });
     replacementStarted = true;
@@ -173,19 +168,22 @@ function temporaryFile(): File { return new File(Paths.document, VAULT_TEMP_FILE
 function backupFile(): File { return new File(Paths.document, VAULT_BACKUP_FILE_NAME); }
 
 function parseWrittenEnvelope(text: string, expectedText: string): PasswordVaultEnvelopeV1 {
+  if (text !== expectedText) throw new Error('密码本文件校验失败');
   const envelope = parsePasswordVaultEnvelope(text);
-  if (serializePasswordVaultEnvelope(envelope) !== expectedText) throw new Error('密码本文件校验失败');
   return envelope;
 }
 
-async function resolveReadableVaultFile(): Promise<File> {
+async function resolveReadableVaultFile(): Promise<{ file: File; text: string; envelope: PasswordVaultEnvelopeV1 }> {
   const file = vaultFile();
   const backup = backupFile();
   if (file.exists) {
     let readable = false;
+    let text = '';
+    let envelope: PasswordVaultEnvelopeV1 | null = null;
     try {
       if (file.size > PASSWORD_VAULT_MAX_FILE_BYTES) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
-      parsePasswordVaultEnvelope(await file.text());
+      text = await file.text();
+      envelope = parsePasswordVaultEnvelope(text);
       readable = true;
     } catch (cause) {
       logPasswordVaultDiagnostic('storage.read.main-invalid', { error: passwordVaultErrorKind(cause) });
@@ -197,14 +195,16 @@ async function resolveReadableVaultFile(): Promise<File> {
         backup.delete();
       }
       logPasswordVaultDiagnostic('storage.read.main-valid');
-      return file;
+      return { file, text, envelope: envelope as PasswordVaultEnvelopeV1 };
     }
   }
   if (!backup.exists || backup.size > PASSWORD_VAULT_MAX_FILE_BYTES) throw new Error(PASSWORD_VAULT_AUTH_ERROR);
-  parsePasswordVaultEnvelope(await backup.text());
+  const backupText = await backup.text();
+  parsePasswordVaultEnvelope(backupText);
   logPasswordVaultDiagnostic('storage.read.fallback-rollback');
   await backup.copy(file, { overwrite: true });
-  parsePasswordVaultEnvelope(await file.text());
+  const restoredText = await file.text();
+  const restoredEnvelope = parsePasswordVaultEnvelope(restoredText);
   backup.delete();
-  return file;
+  return { file, text: restoredText, envelope: restoredEnvelope };
 }

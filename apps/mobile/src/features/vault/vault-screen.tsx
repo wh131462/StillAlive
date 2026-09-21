@@ -9,7 +9,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { usePasswordVaultState } from './password-vault-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { ToolPageHeader, ToolPageHeaderAction, ToolPageOverview } from '../../shared/components/tool-page-header';
+import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 
 export default function PasswordVaultScreen() {
   const router = useRouter();
@@ -51,7 +51,6 @@ export default function PasswordVaultScreen() {
       <ToolPageHeader onBack={() => router.back()} right={<><ToolPageHeaderAction accessibilityLabel="立即锁定密码本" onPress={vault.lock}><SymbolView name={{ android: 'lock', ios: 'lock', web: 'lock' }} size={20} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction><ToolPageHeaderAction accessibilityLabel="密码本安全设置" onPress={() => router.push('/vault/settings')}><SymbolView name={{ android: 'shield', ios: 'checkmark.shield', web: 'shield' }} size={20} tintColor={colors.life} type="hierarchical" /></ToolPageHeaderAction></>} title="我的密码本" />
       <AppKeyboardAvoidingView key="unlocked" mode="system" style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <ToolPageOverview eyebrow="本机加密" icon={<SymbolView name={{ android: 'key', ios: 'key.fill', web: 'key' }} size={26} tintColor={colors.life} type="hierarchical" />} subtitle="账号和密码只保存在本机，离开后立即锁定。" title={`${vault.entries.length} 条密码记录`} />
         <View style={[styles.searchField, searchFocused && styles.searchFieldFocused]}>
           <View style={styles.searchIcon}><SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} pointerEvents="none" size={17} tintColor={searchFocused ? colors.life : colors.inkFaint} type="hierarchical" /></View>
           <TextInput accessibilityLabel="搜索密码名称、账号或网址" autoCapitalize="none" autoCorrect={false} importantForAutofill="no" maxLength={256} onBlur={() => setSearchFocused(false)} onChangeText={setSearchQuery} onFocus={() => setSearchFocused(true)} placeholder="搜索名称、账号或网址" placeholderTextColor={colors.inkFaint} returnKeyType="search" style={styles.searchInput} textContentType="none" value={searchQuery} />

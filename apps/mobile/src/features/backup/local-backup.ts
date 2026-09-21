@@ -9,7 +9,7 @@ import type { MusicTrack, PersonRelationship, PersonRelationshipNode } from '@st
 import { PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH } from '@still-alive/types';
 import type { BackupSnapshot } from '../../infrastructure/database/database-models';
 import { createAudioEmbed, extractAudioEmbeds, formatAudioDuration } from '../journal/embedded-media';
-import { unlockPasswordVault } from '../vault/password-vault-crypto';
+import { unlockPasswordVaultKey, unlockPasswordVaultWithKey } from '../vault/password-vault-crypto';
 import { parsePasswordVaultBytes, passwordVaultExists, readPasswordVaultBytes, readPasswordVaultEnvelope, replacePasswordVaultEnvelope } from '../vault/password-vault-storage';
 import { logPasswordVaultDiagnostic, passwordVaultErrorKind } from '../vault/password-vault-logging';
 import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
@@ -292,16 +292,15 @@ export async function restorePasswordVaultFromBackup(parsed: ParsedBackup, backu
   const bytes = parsed.vaultEnvelope;
   if (!bytes) throw new Error('这个备份不包含密码本');
   const backupEnvelope = parsePasswordVaultBytes(bytes);
-  const backupSession = await unlockPasswordVault(backupEnvelope, backupMasterPassword);
+  const backupDek = await unlockPasswordVaultKey(backupEnvelope, backupMasterPassword);
   try {
     if (passwordVaultExists()) {
       if (currentMasterPassword === null) throw new Error('请输入当前密码本的主密码');
-      const currentSession = await unlockPasswordVault(await readPasswordVaultEnvelope(), currentMasterPassword);
-      currentSession.dek.fill(0);
+      const currentDek = await unlockPasswordVaultKey(await readPasswordVaultEnvelope(), currentMasterPassword);
+      currentDek.fill(0);
     }
     await replacePasswordVaultEnvelope(bytes, async (saved) => {
-      const verified = await unlockPasswordVault(saved, backupMasterPassword);
-      verified.dek.fill(0);
+      await unlockPasswordVaultWithKey(saved, backupDek);
     });
     logPasswordVaultDiagnostic('backup.restore-vault.success');
   } catch (cause) {
@@ -309,7 +308,7 @@ export async function restorePasswordVaultFromBackup(parsed: ParsedBackup, backu
     logPasswordVaultDiagnostic('backup.restore-vault.failed', { error: passwordVaultErrorKind(cause) });
     throw cause;
   } finally {
-    backupSession.dek.fill(0);
+    backupDek.fill(0);
   }
 }
 

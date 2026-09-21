@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { Animated, LayoutAnimation, PanResponder, Pressable, Text, useWindowDimensions, View } from 'react-native';
-import { feedback } from '../../shared/feedback';
 import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
@@ -482,13 +481,6 @@ function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: bo
     animatePosition(positionFor(edge, yRatio, false));
   }, [animatePosition, edge, onExpand, positionFor, yRatio]);
 
-  const requestClose = useCallback(() => {
-    feedback.alert('结束播放？', '当前播放队列会被清空。', [
-      { text: '取消', style: 'cancel' },
-      { text: '结束播放', style: 'destructive', onPress: close },
-    ]);
-  }, [close]);
-
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
@@ -558,7 +550,7 @@ function MiniPlayer({ collapsed, onCollapse, onExpand, onOpen }: { collapsed: bo
             <Pressable accessibilityLabel="下一首" hitSlop={5} onPress={() => void next()} style={({ pressed }) => [styles.skipAction, pressed && styles.pressed]}>
               <SymbolView name={{ android: 'skip_next', ios: 'forward.end.fill', web: 'skip_next' }} size={17} tintColor={colors.inkSoft} type="hierarchical" />
             </Pressable>
-            <Pressable accessibilityLabel="关闭音乐播放器" hitSlop={5} onPress={requestClose} style={({ pressed }) => [styles.closeAction, pressed && styles.pressed]}>
+            <Pressable accessibilityLabel="关闭音乐播放器" hitSlop={5} onPress={close} style={({ pressed }) => [styles.closeAction, pressed && styles.pressed]}>
               <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={16} tintColor={colors.danger} type="hierarchical" />
             </Pressable>
             <View pointerEvents="none" style={styles.miniProgressTrack}><View style={[styles.miniProgressFill, { width: `${progress * 100}%` }]} /></View>
