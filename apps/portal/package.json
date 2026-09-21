@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node ./scripts/serve.mjs",
     "build": "node ../../scripts/check-profile-collection-fields.mjs && node ./scripts/build.mjs",
-    "typecheck": "node ../../scripts/check-profile-collection-fields.mjs && node --check ./src/app.js && node --check ./src/collect.js && node --check ./src/receive.js && node --check ./scripts/build.mjs && node --check ./scripts/serve.mjs",
+    "typecheck": "node ../../scripts/check-profile-collection-fields.mjs && node --check ./src/app.js && node --check ./src/collect.js && node --check ./src/receive.js && node --check ./src/video.js && node --check ./scripts/build.mjs && node --check ./scripts/serve.mjs",
     "test": "echo 'No portal tests configured'"
   }
 }

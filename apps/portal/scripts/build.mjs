@@ -17,6 +17,8 @@ await mkdir(path.join(outputDir, 'assets'), { recursive: true });
 await mkdir(path.join(outputDir, 'collect'), { recursive: true });
 await mkdir(path.join(outputDir, 'receive'), { recursive: true });
 await mkdir(path.join(outputDir, 'privacy'), { recursive: true });
+await mkdir(path.join(outputDir, 'video'), { recursive: true });
+await mkdir(path.join(outputDir, 'assets/google-check'), { recursive: true });
 
 const template = await readFile(path.join(sourceDir, 'index.html'), 'utf8');
 const html = template
@@ -27,20 +29,26 @@ const html = template
 const collectHtml = (await readFile(path.join(sourceDir, 'collect/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
 const receiveHtml = (await readFile(path.join(sourceDir, 'receive/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
 const privacyHtml = (await readFile(path.join(sourceDir, 'privacy/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
+const videoHtml = (await readFile(path.join(sourceDir, 'video/index.html'), 'utf8')).replaceAll('__BASE__', escapeHtml(base));
 
 await Promise.all([
   writeFile(path.join(outputDir, 'index.html'), html),
   writeFile(path.join(outputDir, 'collect/index.html'), collectHtml),
   writeFile(path.join(outputDir, 'receive/index.html'), receiveHtml),
   writeFile(path.join(outputDir, 'privacy/index.html'), privacyHtml),
+  writeFile(path.join(outputDir, 'video/index.html'), videoHtml),
   cp(path.join(sourceDir, 'styles.css'), path.join(outputDir, 'styles.css')),
   cp(path.join(sourceDir, 'privacy.css'), path.join(outputDir, 'privacy.css')),
   cp(path.join(sourceDir, 'app.js'), path.join(outputDir, 'app.js')),
   cp(path.join(sourceDir, 'collection.css'), path.join(outputDir, 'collection.css')),
   cp(path.join(sourceDir, 'collect.js'), path.join(outputDir, 'collect.js')),
   cp(path.join(sourceDir, 'receive.js'), path.join(outputDir, 'receive.js')),
+  cp(path.join(sourceDir, 'video.js'), path.join(outputDir, 'video.js')),
+  cp(path.join(sourceDir, 'video.css'), path.join(outputDir, 'video.css')),
   cp(path.join(sourceDir, 'robots.txt'), path.join(outputDir, 'robots.txt')),
   cp(path.join(sourceDir, 'favicon.svg'), path.join(outputDir, 'assets/favicon.svg')),
+  cp(path.join(sourceDir, 'assets/google-check/音乐播放.mp4'), path.join(outputDir, 'assets/google-check/音乐播放.mp4')),
+  cp(path.join(sourceDir, 'assets/google-check/前台常驻.mp4'), path.join(outputDir, 'assets/google-check/前台常驻.mp4')),
   mkdir(path.join(outputDir, 'release'), { recursive: true }).then(() => cp(releasePath, path.join(outputDir, 'release/latest.json'))),
 ]);
 
