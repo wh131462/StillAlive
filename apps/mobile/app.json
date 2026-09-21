@@ -3,7 +3,7 @@
     "name": "仍在",
     "slug": "still-alive",
     "scheme": "stillalive",
-    "version": "1.1.13",
+    "version": "1.1.14",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -45,7 +45,10 @@
       [
         "expo-media-library",
         {
-          "granularPermissions": ["photo", "video"],
+          "granularPermissions": [
+            "photo",
+            "video"
+          ],
           "photosPermission": "允许“仍在”浏览照片和视频，以便在应用内图库中选择媒体。"
         }
       ],
@@ -79,7 +82,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "22",
+      "buildNumber": "23",
       "bundleIdentifier": "com.eternalheart.stillalive",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -87,7 +90,7 @@
     },
     "android": {
       "package": "com.eternalheart.stillalive",
-      "versionCode": 22,
+      "versionCode": 23,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
