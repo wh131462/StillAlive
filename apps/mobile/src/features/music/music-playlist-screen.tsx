@@ -2,7 +2,6 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
-import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -11,6 +10,7 @@ import type { Media, MusicQuality, MusicTrack } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
+import { pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { orderMusicTracksByCollectionEntries } from './music-library';
@@ -158,7 +158,7 @@ export default function MusicPlaylistScreen() {
   const choosePlaylistCover = async () => {
     if (!playlist) return;
     setManageVisible(false);
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromLibrary({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled || !result.assets[0]) return;
     const item = await persistPickedImage(result.assets[0]);
     try {
@@ -239,7 +239,7 @@ export default function MusicPlaylistScreen() {
   const showTrackCoverActions = (track: MusicTrack) => {
     setActionTrack(null);
     feedback.alert('歌曲封面', undefined, [
-      { text: '更换封面', onPress: async () => { const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 }); if (!result.canceled && result.assets[0]) { const item = await persistPickedImage(result.assets[0]); await setMusicTrackCover(track.id, item).catch(async (cause) => { await discardMedia(item).catch(() => undefined); feedback.alert('封面保存失败', cause instanceof Error ? cause.message : '请稍后重试。'); }); } } },
+      { text: '更换封面', onPress: async () => { const result = await pickMediaFromLibrary({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 }); if (!result.canceled && result.assets[0]) { const item = await persistPickedImage(result.assets[0]); await setMusicTrackCover(track.id, item).catch(async (cause) => { await discardMedia(item).catch(() => undefined); feedback.alert('封面保存失败', cause instanceof Error ? cause.message : '请稍后重试。'); }); } } },
       ...(track.coverMediaId ? [{ text: '恢复默认封面', style: 'destructive' as const, onPress: () => void setMusicTrackCover(track.id, null) }] : []),
       { text: '取消', style: 'cancel' },
     ]);

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -12,6 +11,7 @@ import { useAppState } from '../../application/state/app-state';
 import { bookFormatFromName, pickLocalBookAssets, pickLocalBooksFromDirectory } from '../../infrastructure/files/local-assets';
 import { extractBookCover, readBookFileMetadata } from '../../infrastructure/files/book-cover-thumbnail';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
+import { pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { pageFromBookLocation } from './book-reader';
 import { classifyReflowError, clearReflowBookCache, isReflowBookFormat, probeReflowBook, reflowErrorMessage } from './book-reflow-cache';
 import { createThemedStyles } from '../../shared/theme/app-theme';
@@ -100,7 +100,6 @@ export default function BookshelfScreen() {
     })();
   }, [books, coverBackfillTick, discardMedia, media, saveMedia, updateBook]);
 
-  const readableBookCount = books.filter((book) => book.parseStatus === 'ready').length;
   const continueBook = useMemo(() => books
     .filter((book) => book.parseStatus === 'ready' && book.progress > 0 && book.progress < 1)
     .sort((a, b) => compareDates(readingDate(b) ?? b.updatedAt, readingDate(a) ?? a.updatedAt))[0] ?? null, [books]);
@@ -263,7 +262,7 @@ export default function BookshelfScreen() {
     editMetadataRequestRef.current += 1;
     setReadingEditMetadata(false);
     setEditMetadataStatus(null);
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [3, 4], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromLibrary({ allowsEditing: true, aspect: [3, 4], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled || !result.assets[0]) return;
     try {
       const item = await persistPickedImage(result.assets[0]);
@@ -388,15 +387,6 @@ export default function BookshelfScreen() {
   };
 
   const listHeader = <>
-    <View style={styles.intro}>
-      <View style={styles.introCopy}>
-        <Text style={styles.eyebrow}>PERSONAL LIBRARY</Text>
-        <Text style={styles.heading}>把读过的书，留在身边。</Text>
-        <Text style={styles.subheading}>{books.length ? `${books.length} 本收藏，${readableBookCount} 本可阅读` : '导入书籍，保留阅读进度与书摘。'}</Text>
-      </View>
-      <View style={styles.introIcon}><SymbolView name={{ android: 'menu_book', ios: 'book.closed.fill', web: 'menu_book' }} size={26} tintColor={colors.life} type="hierarchical" /></View>
-    </View>
-
     {importProgress ? <View style={styles.importProgress}><ActivityIndicator color={colors.life} size="small" /><View style={styles.importProgressCopy}><Text style={styles.importProgressTitle}>正在导入 {importProgress.current} / {importProgress.total}</Text><View style={styles.importProgressTrack}><View style={[styles.importProgressFill, { width: `${Math.round(importProgress.current / importProgress.total * 100)}%` }]} /></View></View></View> : null}
     {continueBook ? <ContinueReading book={continueBook} media={media} onPress={() => openBook(continueBook)} /> : null}
 
@@ -581,12 +571,6 @@ function formatLocalPath(value: string | undefined): string { if (!value) return
 const styles = createThemedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  intro: { minHeight: 124, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },
-  introCopy: { flex: 1, paddingRight: spacing.md },
-  eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.4 },
-  heading: { marginTop: 7, color: colors.ink, fontFamily: typography.display, fontSize: 23, lineHeight: 30 },
-  subheading: { marginTop: 7, color: colors.inkFaint, fontSize: 11 },
-  introIcon: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.lifeLight },
   importProgress: { minHeight: 64, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.sheet },
   importProgressCopy: { flex: 1, marginLeft: spacing.md },
   importProgressTitle: { color: colors.inkSoft, fontSize: 11, fontWeight: '600' },

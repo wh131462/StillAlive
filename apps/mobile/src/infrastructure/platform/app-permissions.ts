@@ -1,17 +1,19 @@
 import { AudioModule } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Location from 'expo-location';
 import { Linking, Platform } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import type { FeedbackButton } from '../../shared/feedback';
 import { writePersistentError, writePersistentLog } from './persistent-log';
 
-type AppPermission = 'camera' | 'location' | 'microphone' | 'photos';
+export type AppPermission = 'camera' | 'location' | 'microphone' | 'photos';
 
-interface PermissionResponse {
+export interface AppPermissionStatus {
   canAskAgain: boolean;
   granted: boolean;
   status: 'denied' | 'granted' | 'undetermined';
+  accessPrivileges?: 'all' | 'limited' | 'none';
 }
 
 const permissionCopy: Record<AppPermission, { message: string; title: string }> = {
@@ -23,10 +25,11 @@ const permissionCopy: Record<AppPermission, { message: string; title: string }> 
 
 export async function ensureAppPermission(permission: AppPermission, extraActions: FeedbackButton[] = []): Promise<boolean> {
   writePersistentLog('INFO', 'permission.check.started', { permission });
-  // Android 和 Web 使用系统照片选择器，不需要申请整个照片库访问权限。
+  // Android 的应用内图库由 expo-media-library 自己按图片/视频粒度申请权限；
+  // 这里仅服务于 iOS 照片权限和仍使用原生裁剪器的选择流程。
   if (permission === 'photos' && Platform.OS !== 'ios') return true;
 
-  let response: PermissionResponse;
+  let response: AppPermissionStatus;
   try {
     const handler = permissionHandler(permission);
     response = await handler.get();
@@ -54,11 +57,24 @@ export async function ensureAppPermission(permission: AppPermission, extraAction
   return false;
 }
 
+export async function getAppPermissionStatus(permission: AppPermission): Promise<AppPermissionStatus> {
+  if (permission === 'photos' && Platform.OS !== 'web') {
+    const response = await MediaLibrary.getPermissionsAsync(false, ['photo', 'video']);
+    return {
+      accessPrivileges: response.accessPrivileges,
+      canAskAgain: response.canAskAgain,
+      granted: response.granted,
+      status: response.status,
+    };
+  }
+  return permissionHandler(permission).get();
+}
+
 export function openAppSettings(): Promise<void> {
   return Linking.openSettings();
 }
 
-function permissionHandler(permission: AppPermission): { get(): Promise<PermissionResponse>; request(): Promise<PermissionResponse> } {
+function permissionHandler(permission: AppPermission): { get(): Promise<AppPermissionStatus>; request(): Promise<AppPermissionStatus> } {
   if (permission === 'camera') return { get: () => ImagePicker.getCameraPermissionsAsync(), request: () => ImagePicker.requestCameraPermissionsAsync() };
   if (permission === 'photos') return { get: () => ImagePicker.getMediaLibraryPermissionsAsync(), request: () => ImagePicker.requestMediaLibraryPermissionsAsync() };
   if (permission === 'microphone') return { get: () => AudioModule.getRecordingPermissionsAsync(), request: () => AudioModule.requestRecordingPermissionsAsync() };

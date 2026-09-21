@@ -6,6 +6,7 @@ import { createThemedStyles } from '../theme/app-theme';
 
 interface ToolPageHeaderProps {
   backAccessibilityLabel?: string;
+  backLabel?: string;
   backDisabled?: boolean;
   onBack(): void;
   right?: ReactNode;
@@ -37,12 +38,12 @@ interface ToolPageOverviewProps {
   trailing?: ReactNode;
 }
 
-export function ToolPageHeader({ backAccessibilityLabel = '返回', backDisabled = false, onBack, right, subtitle, title }: ToolPageHeaderProps) {
+export function ToolPageHeader({ backAccessibilityLabel = '返回', backDisabled = false, backLabel, onBack, right, subtitle, title }: ToolPageHeaderProps) {
   return (
     <View style={styles.header}>
       <View style={styles.headerSide}>
-        <Pressable accessibilityLabel={backAccessibilityLabel} accessibilityRole="button" disabled={backDisabled} onPress={onBack} style={({ pressed }) => [styles.headerButton, backDisabled && styles.disabled, pressed && styles.pressed]}>
-          <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" />
+        <Pressable accessibilityLabel={backAccessibilityLabel} accessibilityRole="button" disabled={backDisabled} onPress={onBack} style={({ pressed }) => [backLabel ? styles.headerTextButton : styles.headerButton, backDisabled && styles.disabled, pressed && styles.pressed]}>
+          {backLabel ? <Text numberOfLines={1} style={styles.headerText}>{backLabel}</Text> : <SymbolView name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} size={22} tintColor={colors.inkSoft} type="hierarchical" />}
         </Pressable>
       </View>
       <View style={styles.headerCopy}><Text numberOfLines={1} style={styles.headerTitle}>{title}</Text>{subtitle ? <Text numberOfLines={1} style={styles.headerSubtitle}>{subtitle}</Text> : null}</View>

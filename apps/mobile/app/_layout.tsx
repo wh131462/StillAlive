@@ -17,6 +17,7 @@ import { LaunchScreen } from '../src/features/onboarding/launch-screen';
 import { installGlobalErrorLogging, writePersistentError, writePersistentLog } from '../src/infrastructure/platform/persistent-log';
 import { MusicPlayerProvider } from '../src/features/music/music-player-state';
 import { FeedbackProvider } from '../src/application/feedback-provider';
+import { MediaLibraryPickerProvider } from '../src/application/components/media-library-picker';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -55,15 +56,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <FeedbackProvider>
-        <SQLiteProvider databaseName="still-alive.db" onInit={initializeDatabase}>
-          <AppStateProvider>
-            <ReaderProvider>
-              <MusicPlayerProvider>
-                <ThemedNavigator />
-              </MusicPlayerProvider>
-            </ReaderProvider>
-          </AppStateProvider>
-        </SQLiteProvider>
+        <MediaLibraryPickerProvider>
+          <SQLiteProvider databaseName="still-alive.db" onInit={initializeDatabase}>
+            <AppStateProvider>
+              <ReaderProvider>
+                <MusicPlayerProvider>
+                  <ThemedNavigator />
+                </MusicPlayerProvider>
+              </ReaderProvider>
+            </AppStateProvider>
+          </SQLiteProvider>
+        </MediaLibraryPickerProvider>
       </FeedbackProvider>
     </GestureHandlerRootView>
   );

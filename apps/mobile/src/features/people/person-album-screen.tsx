@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -12,7 +11,7 @@ import { persistAlbumMedia } from '../../infrastructure/files/local-media';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview.types';
-import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
+import { pickMediaFromCamera, pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaThumbnail } from '../../shared/components/media-thumbnail';
@@ -53,15 +52,13 @@ export default function AlbumScreen() {
 
   const takePhoto = async () => {
     setImageSourcePickerOpen(false);
-    if (!await ensureAppPermission('camera')) return;
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 });
+    const result = await pickMediaFromCamera({ mediaTypes: ['images', 'videos'], quality: 0.9 });
     if (!result.canceled) await importMedia(result.assets);
   };
 
   const pickPhotos = async () => {
     setImageSourcePickerOpen(false);
-    if (!await ensureAppPermission('photos')) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsMultipleSelection: true, mediaTypes: ['images', 'videos'], quality: 0.9, selectionLimit: 20 });
+    const result = await pickMediaFromLibrary({ allowsMultipleSelection: true, mediaTypes: ['images', 'videos'], quality: 0.9, selectionLimit: 20 });
     if (!result.canceled) await importMedia(result.assets);
   };
 

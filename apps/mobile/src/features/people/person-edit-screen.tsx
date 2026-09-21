@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -20,7 +19,7 @@ import { MbtiPickerField } from './mbti-picker';
 import { RelationshipPicker } from './relationship-picker';
 import { birthdayForCalendar } from './person-profile';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
+import { pickMediaFromCamera, pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 
@@ -174,8 +173,7 @@ export default function EditPersonScreen() {
 
   const takeAvatarPhoto = async () => {
     setAvatarSourcePickerOpen(false);
-    if (!await ensureAppPermission('camera')) return;
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromCamera({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     setPickedAsset(result.assets[0]);
     setAvatarFailed(false);
@@ -183,8 +181,7 @@ export default function EditPersonScreen() {
 
   const pickAvatarPhoto = async () => {
     setAvatarSourcePickerOpen(false);
-    if (!await ensureAppPermission('photos')) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromLibrary({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     setPickedAsset(result.assets[0]);
     setAvatarFailed(false);

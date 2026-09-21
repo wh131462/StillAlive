@@ -8,7 +8,7 @@ import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { ToolPageHeader, ToolPageHeaderAction, ToolPageOverview } from '../../shared/components/tool-page-header';
+import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { personDisplayName } from './person-profile';
 
 export default function PersonAlbumsScreen() {
@@ -38,12 +38,6 @@ export default function PersonAlbumsScreen() {
       title={person ? `${displayName}的相册` : '我的相册'}
     />
     <ScrollView contentContainerStyle={styles.content}>
-      <ToolPageOverview
-        eyebrow={person ? '人物相册' : '私人相册'}
-        icon={<SymbolView name={{ android: 'photo_library', ios: 'photo.on.rectangle', web: 'photo_library' }} size={26} tintColor={colors.life} type="hierarchical" />}
-      subtitle={managing ? '使用箭头调整相册顺序。' : person ? `整理和 ${displayName} 有关的影像与共同经历。` : '按生活片段整理只属于你的照片和视频。'}
-        title={`${ownerAlbums.length} 个相册`}
-      />
       {ownerAlbums.length ? <View style={styles.grid}>{ownerAlbums.map((album, index) => {
         const relations = albumMedia.filter((item) => item.albumId === album.id).sort((a, b) => a.sortOrder - b.sortOrder);
         const coverId = album.coverMediaId ?? relations[0]?.mediaId;

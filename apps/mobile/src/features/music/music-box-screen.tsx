@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
-import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -14,6 +13,7 @@ import type { AudioFileFormat, AudioFileMetadata } from '../../infrastructure/fi
 import { readEmbeddedMusicMetadata } from '../../infrastructure/files/music-cover-metadata';
 import { pickLocalAudioAssetsWithFailures } from '../../infrastructure/files/local-assets';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
+import { pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { useMusicPlayer } from './music-player-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
@@ -253,7 +253,7 @@ export default function MusicBoxScreen() {
 
   const chooseTrackCover = async (track: MusicTrack) => {
     setActionTrack(null);
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromLibrary({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled || !result.assets[0]) return;
     const item = await persistPickedImage(result.assets[0]);
     try {
@@ -534,7 +534,7 @@ export default function MusicBoxScreen() {
               <ToolPageOverview
                 eyebrow="本地曲库"
                 icon={<MusicCover size={56} />}
-                subtitle={musicPlaylists.length ? `${musicPlaylists.length} 个歌单，音乐和封面都保存在本机。` : '收好喜欢的声音，按歌单慢慢整理。'}
+                subtitle={musicPlaylists.length ? `${musicPlaylists.length} 个歌单` : '收好喜欢的声音，按歌单慢慢整理。'}
                 title={`${displayTracks.length} 首音乐`}
                 trailing={<View style={styles.libraryActions}>
                   <Pressable accessibilityLabel="随机播放" accessibilityRole="button" disabled={!selfTracks.length} onPress={() => void shuffleAll()} style={({ pressed }) => [styles.shuffleAction, !selfTracks.length && styles.disabled, pressed && styles.pressed]}><SymbolView name={{ android: 'shuffle', ios: 'shuffle', web: 'shuffle' }} size={19} tintColor={colors.life} type="hierarchical" /></Pressable>

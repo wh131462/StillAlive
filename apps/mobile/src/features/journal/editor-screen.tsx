@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { SymbolView } from 'expo-symbols';
@@ -30,6 +29,7 @@ import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
 import { persistPickedMedia, persistVoiceRecording } from '../../infrastructure/files/local-media';
 import { resolveDeviceLocation } from '../../infrastructure/platform/device-location';
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
+import { pickMediaFromCamera, pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { extractEmbeddedMediaIds } from './embedded-media';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { personDisplayName } from '../people/person-profile';
@@ -496,9 +496,7 @@ export default function EditorScreen() {
     const remaining = remainingMediaSlots();
     if (!remaining) return;
 
-    if (!await ensureAppPermission('camera')) return;
-
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: [mediaType], quality: 0.9 });
+    const result = await pickMediaFromCamera({ mediaTypes: [mediaType], quality: 0.9 });
     if (result.canceled) return;
     await importPickedMedia(result.assets, remaining);
   };
@@ -509,9 +507,7 @@ export default function EditorScreen() {
     const remaining = remainingMediaSlots();
     if (!remaining) return;
 
-    if (!await ensureAppPermission('photos')) return;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const result = await pickMediaFromLibrary({
       allowsMultipleSelection: true,
       mediaTypes: ['images', 'videos'],
       quality: 0.9,
@@ -533,10 +529,9 @@ export default function EditorScreen() {
     setReplaceImageId(null);
     if (!mediaId || editorBusy) return;
     let replacement: Media | null = null;
-    if (!await ensureAppPermission(source)) return;
     const result = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: [mediaType], quality: 0.9 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.9 });
+      ? await pickMediaFromCamera({ mediaTypes: [mediaType], quality: 0.9 })
+      : await pickMediaFromLibrary({ mediaTypes: ['images', 'videos'], quality: 0.9 });
     if (result.canceled) return;
     try {
       setMediaSaving(true);

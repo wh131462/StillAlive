@@ -3,14 +3,14 @@ import { Animated, Easing, Image, Keyboard, Modal, Pressable, ScrollView, StyleS
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import * as ImagePicker from 'expo-image-picker';
+import type { ImagePickerAsset } from 'expo-image-picker';
 import type { Media, Post, PostComment } from '@still-alive/types';
 import { colors, spacing } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
 import { feedback } from '../../shared/feedback';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { MediaThumbnail } from '../../shared/components/media-thumbnail';
-import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
+import { pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { persistPickedImage } from '../../infrastructure/files/local-media';
 import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview.types';
 
@@ -121,7 +121,7 @@ export function PostCommentComposer({ post, comment, onClose }: { post: Post; co
   const { discardMedia, media, saveMedia, savePostComment } = useAppState();
   const [body, setBody] = useState(comment?.body ?? '');
   const [mediaIds, setMediaIds] = useState(comment?.mediaIds ?? []);
-  const [assets, setAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [assets, setAssets] = useState<ImagePickerAsset[]>([]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
@@ -136,8 +136,7 @@ export function PostCommentComposer({ post, comment, onClose }: { post: Post; co
     busyRef.current = true;
     setBusy(true);
     try {
-      if (!await ensureAppPermission('photos')) return;
-      const result = await ImagePicker.launchImageLibraryAsync({ allowsMultipleSelection: true, mediaTypes: ['images'], quality: 0.9 });
+      const result = await pickMediaFromLibrary({ allowsMultipleSelection: true, mediaTypes: ['images'], quality: 0.9 });
       if (!result.canceled) setAssets((current) => [...current, ...result.assets.filter((asset) => !current.some((item) => item.uri === asset.uri))]);
     } catch (cause) { feedback.alert('选择图片失败', cause instanceof Error ? cause.message : '请稍后重试。'); }
     finally { busyRef.current = false; setBusy(false); inputRef.current?.focus(); }

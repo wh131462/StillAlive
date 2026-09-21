@@ -43,6 +43,13 @@
         }
       ],
       [
+        "expo-media-library",
+        {
+          "granularPermissions": ["photo", "video"],
+          "photosPermission": "允许“仍在”浏览照片和视频，以便在应用内图库中选择媒体。"
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "允许“仍在”获取你当前所在的位置，用于记录地点和打卡城市。"

@@ -89,7 +89,7 @@ export default function SettingsScreen() {
 
       <Text style={styles.eyebrow}>PERMISSIONS</Text>
       <View style={styles.group}>
-        <Entry icon="lock.shield" androidIcon="shield" label="系统权限" hint="查看各权限用途和逐步开启方法" onPress={() => router.push('/permissions' as RelativePathString)} />
+        <Entry icon="lock.shield" androidIcon="shield" label="系统权限" hint="查看权限状态与处理方式" onPress={() => router.push('/permissions' as RelativePathString)} />
       </View>
 
       <Text style={styles.eyebrow}>DATA</Text>

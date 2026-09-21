@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { BirthdayCalendar, Media } from '@still-alive/types';
@@ -17,7 +16,7 @@ import { MbtiPickerField } from '../people/mbti-picker';
 import type { DateParts } from '../people/date-time-picker';
 import { birthdayForCalendar, birthdayFromDateString, constellationForBirthday, zodiacForBirthday } from '../people/person-profile';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
+import { pickMediaFromCamera, pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 
@@ -62,16 +61,14 @@ export default function ProfileScreen() {
 
   const takeAvatarPhoto = async () => {
     setAvatarSourcePickerOpen(false);
-    if (Platform.OS !== 'web' && !await ensureAppPermission('camera')) return;
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromCamera({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     setPickedAsset(result.assets[0]); setAvatarFailed(false);
   };
 
   const pickAvatarPhoto = async () => {
     setAvatarSourcePickerOpen(false);
-    if (Platform.OS !== 'web' && !await ensureAppPermission('photos')) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], mediaTypes: ['images'], quality: 0.9 });
+    const result = await pickMediaFromLibrary({ mediaTypes: ['images'], quality: 0.9 });
     if (result.canceled) return;
     setPickedAsset(result.assets[0]); setAvatarFailed(false);
   };
