@@ -1,6 +1,6 @@
 {
-  "versionCode": 23,
-  "versionName": "1.1.14",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.14.apk",
-  "releaseNotes": "新增应用内图库、媒体选择与权限状态管理，完善记录数据热力图。\n提升密码本加密、密钥处理及备份恢复安全性。"
+  "versionCode": 24,
+  "versionName": "1.1.15",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.15.apk",
+  "releaseNotes": "优化了分享的长图效果."
 }
