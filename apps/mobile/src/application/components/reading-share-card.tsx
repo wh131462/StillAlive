@@ -7,7 +7,7 @@ import { useAppState } from '../state/app-state';
 import { readingSourceQuote, readingSourceTitle } from '../reading-share';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 
-type ReadingShareVariant = 'composer' | 'detail' | 'feed';
+type ReadingShareVariant = 'composer' | 'detail' | 'feed' | 'share';
 
 export function ReadingShareCard({ compact = false, onRemove, source, variant = 'feed' }: { compact?: boolean; onRemove?: () => void; source: ReadingNoteSource; variant?: ReadingShareVariant }) {
   const router = useRouter();
@@ -33,7 +33,7 @@ export function ReadingShareCard({ compact = false, onRemove, source, variant = 
         event.stopPropagation();
         router.push({ pathname: '/reader', params: { id: interactive.id } } as never);
       }}
-      style={({ pressed }) => [styles.card, variant === 'composer' && styles.cardComposer, pressed && styles.cardPressed]}
+      style={({ pressed }) => [styles.card, variant === 'composer' && styles.cardComposer, variant === 'share' && styles.cardShare, pressed && styles.cardPressed]}
     >
       {showQuote && variant === 'composer' ? <ScrollView contentContainerStyle={styles.quoteBlock} nestedScrollEnabled showsVerticalScrollIndicator style={styles.composerQuoteScroll}>{quoteContent}</ScrollView> : null}
       {showQuote && variant !== 'composer' ? <View style={styles.quoteBlock}>{quoteContent}</View> : null}
@@ -48,7 +48,7 @@ export function ReadingShareCard({ compact = false, onRemove, source, variant = 
           <Pressable accessibilityLabel="移除阅读来源" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onRemove(); }} style={({ pressed }) => [styles.removeAction, pressed && styles.actionPressed]}>
             <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={18} tintColor={colors.inkSoft} type="hierarchical" />
           </Pressable>
-        ) : (
+        ) : variant === 'share' ? null : (
           <View style={styles.action}>
             <SymbolView name={{ android: readable ? 'chevron_right' : 'book_2', ios: readable ? 'chevron.right' : 'book.closed', web: readable ? 'chevron_right' : 'book_2' }} size={18} tintColor={readable ? colors.life : colors.inkFaint} type="hierarchical" />
           </View>
@@ -60,7 +60,7 @@ export function ReadingShareCard({ compact = false, onRemove, source, variant = 
 
 function BookCover({ book, media, title, variant }: { book: Book | null; media: Media[]; title: string; variant: ReadingShareVariant }) {
   const cover = book?.coverMediaId ? media.find((item) => item.id === book.coverMediaId) : null;
-  const size = variant === 'feed' ? styles.coverFeed : styles.coverLarge;
+  const size = variant === 'feed' ? styles.coverFeed : variant === 'share' ? styles.coverShare : styles.coverLarge;
   return (
     <View style={[styles.cover, size]}>
       {cover
@@ -80,10 +80,12 @@ function bookMeta(book: Book | null): string {
 const styles = createThemedStyles(() => ({
   card: { minHeight: 88, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
   cardComposer: { backgroundColor: colors.paper },
+  cardShare: { borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.paper },
   cardPressed: { opacity: 0.7 },
   cover: { flexShrink: 0, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.sheet },
   coverFeed: { width: 40, height: 54 },
   coverLarge: { width: 44, height: 60 },
+  coverShare: { width: 52, height: 70 },
   coverImage: { width: '100%', height: '100%' },
   coverFormat: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 7, letterSpacing: 0.5 },
   coverInitial: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18 },

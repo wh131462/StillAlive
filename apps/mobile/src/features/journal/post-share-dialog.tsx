@@ -20,7 +20,7 @@ interface PostShareDialogProps {
   onClose(): void;
 }
 
-const SHARE_CARD_MIN_HEIGHT = 480;
+const SHARE_CARD_MIN_HEIGHT = 420;
 
 export function PostShareDialog({ centerContent = false, children, contentReady, createdAt, dayKey, locationName, onClose }: PostShareDialogProps) {
   const scrollRef = useRef<ScrollView>(null);
@@ -28,7 +28,7 @@ export function PostShareDialog({ centerContent = false, children, contentReady,
   const [sharing, setSharing] = useState(false);
   const { height } = useWindowDimensions();
   const ready = contentReady && contentHeight > 0;
-  const previewHeight = Math.min(430, Math.max(240, height - 300));
+  const previewHeight = Math.min(430, Math.max(240, Math.round(height * 0.48)));
 
   const share = async () => {
     if (!ready || sharing) return;
@@ -131,11 +131,11 @@ const styles = createThemedStyles(() => ({
   dialogTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 21 },
   dialogHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   closeButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.paper },
-  previewFrame: { height: 430, marginTop: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
+  previewFrame: { height: 430, marginTop: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
   preview: { flex: 1, minHeight: 0, backgroundColor: colors.sheet },
-  shareCanvas: { padding: spacing.lg, backgroundColor: colors.sheet },
+  shareCanvas: { padding: spacing.xl, backgroundColor: colors.paper },
   cardBody: { width: '100%', flexGrow: 1 },
-  cardBodyCentered: { justifyContent: 'center' },
+  cardBodyCentered: { justifyContent: 'center', paddingVertical: spacing.lg },
   cardFooter: { marginTop: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   cardMeta: { color: colors.inkFaint, fontSize: 8, lineHeight: 14 },
   brandRow: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center' },

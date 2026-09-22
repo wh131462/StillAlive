@@ -215,7 +215,7 @@ function PostBody({ markdown, mediaById, onImagePress, onReady, readingSource, s
     if (readinessRef.current.readyKeys.size === requiredReadyCount) onReady();
   };
 
-  return <>{readingSource ? <View pointerEvents={sharing ? 'none' : 'auto'} style={styles.readingShare}><ReadingShareCard source={readingSource} variant="detail" /></View> : null}{musicShares.map((share, index) => <View key={`music_${share.trackId}_${index}`} pointerEvents={sharing ? 'none' : 'auto'} style={styles.musicShare}><MusicShareCard share={share} variant="detail" /></View>)}{segments.map((segment, index) => {
+  return <>{readingSource ? <View pointerEvents={sharing ? 'none' : 'auto'} style={styles.readingShare}><ReadingShareCard source={readingSource} variant={sharing ? 'share' : 'detail'} /></View> : null}{musicShares.map((share, index) => <View key={`music_${share.trackId}_${index}`} pointerEvents={sharing ? 'none' : 'auto'} style={styles.musicShare}><MusicShareCard share={share} variant={sharing ? 'share' : 'detail'} /></View>)}{segments.map((segment, index) => {
     if (segment.type === 'markdown') {
       if (!segment.value.trim()) return null;
       return (

@@ -7,7 +7,7 @@ import { MusicCover } from '../../features/music/music-cover';
 import { useSharedMusicPlayback } from '../use-shared-music-playback';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 
-export function MusicShareCard({ onRemove, share, variant = 'feed' }: { onRemove?: () => void; share: MusicShare; variant?: 'composer' | 'detail' | 'feed' }) {
+export function MusicShareCard({ onRemove, share, variant = 'feed' }: { onRemove?: () => void; share: MusicShare; variant?: 'composer' | 'detail' | 'feed' | 'share' }) {
   const { media, musicTracks } = useAppState();
   const playSharedMusic = useSharedMusicPlayback();
   const track = musicTracks.find((item) => item.id === share.trackId) ?? null;
@@ -29,9 +29,9 @@ export function MusicShareCard({ onRemove, share, variant = 'feed' }: { onRemove
         event.stopPropagation();
         void playSharedMusic(interactive);
       }}
-      style={({ pressed }) => [styles.card, variant === 'composer' && styles.cardComposer, pressed && styles.cardPressed]}
+      style={({ pressed }) => [styles.card, variant === 'composer' && styles.cardComposer, variant === 'share' && styles.cardShare, pressed && styles.cardPressed]}
     >
-      <MusicCover media={cover} size={variant === 'feed' ? 50 : 58} style={styles.cover} />
+      <MusicCover media={cover} size={variant === 'feed' ? 50 : variant === 'share' ? 66 : 58} style={styles.cover} />
       <View style={styles.copy}>
         <Text style={styles.label}>{label}</Text>
         <Text numberOfLines={1} style={styles.title}>{title}</Text>
@@ -41,7 +41,7 @@ export function MusicShareCard({ onRemove, share, variant = 'feed' }: { onRemove
         <Pressable accessibilityLabel="移除音乐分享" accessibilityRole="button" onPress={(event) => { event.stopPropagation(); onRemove(); }} style={({ pressed }) => [styles.removeAction, pressed && styles.actionPressed]}>
           <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={18} tintColor={colors.inkSoft} type="hierarchical" />
         </Pressable>
-      ) : (
+      ) : variant === 'share' ? null : (
         <View style={[styles.action, !playable && styles.actionUnavailable]}>
           <SymbolView name={{ android: playable ? 'play_arrow' : 'music_note', ios: playable ? 'play.fill' : 'music.note', web: playable ? 'play_arrow' : 'music_note' }} size={18} tintColor={playable ? colors.onLife : colors.inkFaint} type="hierarchical" />
         </View>
@@ -53,6 +53,7 @@ export function MusicShareCard({ onRemove, share, variant = 'feed' }: { onRemove
 const styles = createThemedStyles(() => ({
   card: { minHeight: 74, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
   cardComposer: { minHeight: 82, backgroundColor: colors.paper },
+  cardShare: { minHeight: 94, padding: spacing.md, borderTopRightRadius: 18, borderBottomLeftRadius: 18, backgroundColor: colors.paper },
   cardPressed: { opacity: 0.7 },
   cover: { borderRadius: 0 },
   copy: { flex: 1, minWidth: 0, marginLeft: spacing.md },
