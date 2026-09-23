@@ -1,21 +1,22 @@
 :root {
   color-scheme: light;
-  --paper: #f4f0e6;
-  --ink: #1c2821;
-  --soft: #617067;
-  --faint: #89928a;
-  --line: rgba(28, 40, 33, .16);
-  --green: #1d6848;
-  --gold: #c89e4b;
-  --white: #f8f8f1;
-  --display: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  --paper: #eef0e8;
+  --ink: #20231f;
+  --soft: #586158;
+  --faint: #707970;
+  --line: rgba(32, 35, 31, .17);
+  --green: #1d6b49;
+  --gold: #d4a84f;
+  --white: #f4f6ef;
+  --display: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", serif;
   --body: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
+body { position: relative; margin: 0; background: radial-gradient(circle at 90% 0, rgba(212,168,79,.16), transparent 20rem), var(--paper); color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
+body::before { position: fixed; z-index: 20; inset: 0; pointer-events: none; background-image: repeating-radial-gradient(circle at 0 0, rgba(32,35,31,.055) 0 1px, transparent 1px 4px); background-size: 5px 5px; mix-blend-mode: multiply; opacity: .08; content: ""; }
 a { color: inherit; text-decoration: none; }
 svg { display: block; }
 :focus-visible { outline: 3px solid rgba(200, 158, 75, .75); outline-offset: 4px; }

@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#F4F0E6" />
+    <meta name="theme-color" content="#eef0e8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#18251e" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="仍在是一款安静的个人生活记录应用。打卡、写下片段、关联重要的人，让生活沿着时间慢慢形成自己的脉络。" />
-    <meta property="og:title" content="仍在 — 给生活留一个位置" />
+    <meta property="og:title" content="仍在 - 给生活留一个位置" />
     <meta property="og:description" content="每天留下一点，慢慢得到一份属于自己的生命档案。" />
-    <title>仍在 — 给生活留一个位置</title>
+    <title>仍在 - 给生活留一个位置</title>
     <link rel="icon" type="image/svg+xml" href="__BASE__assets/favicon.svg" />
     <link rel="stylesheet" href="__BASE__styles.css" />
   </head>
@@ -15,7 +16,7 @@
     <a class="skip-link" href="#main">跳到主要内容</a>
 
     <header class="site-header">
-      <a class="brand" href="#top" aria-label="仍在首页">
+      <a class="brand" href="#top" aria-label="仍在 Still Alive 首页">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="89 18" transform="rotate(-35 32 32)"/><circle cx="32" cy="32" r="3.5" fill="currentColor"/><circle cx="46" cy="22" r="4" class="brand-sun"/></svg>
         </span>
@@ -34,16 +35,14 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-copy">
-          <p class="eyebrow hero-enter hero-enter-1"><span></span>给生活一个安静的存放处</p>
-          <h1 class="hero-enter hero-enter-2">仍在<small>Still Alive</small></h1>
-          <p class="hero-statement hero-enter hero-enter-3">不必每天写日记。<br /><em>只是别让生活悄悄经过。</em></p>
+          <p class="eyebrow hero-enter hero-enter-1">给生活一个安静的存放处</p>
+          <h1 class="hero-enter hero-enter-2">不必每天写日记。<em>只是别让生活<br />悄悄经过。</em></h1>
           <p class="hero-lead hero-enter hero-enter-3">点一下，确认今天也在。想说的时候，再留下一句话、一张照片、一段声音，或一个与你有关的人。</p>
           <div class="hero-actions hero-enter hero-enter-4">
             <a class="button button-primary" href="__APK_URL__">
-              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7.4 6.1-1.2-2M16.6 6.1l1.2-2M6.5 9.5h11M7 9.5V18a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 17 18V9.5M7.2 9.5a4.8 4.8 0 0 1 9.6 0M4 11v5.5M20 11v5.5M9.5 19.5V22M14.5 19.5V22"/><circle cx="9.5" cy="7.7" r=".7" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7.7" r=".7" fill="currentColor" stroke="none"/></svg>
-              <span>下载 Android 版 <small>v__VERSION__</small></span>
+              <span>下载 Android 版</span>
             </a>
-            <a class="text-link" href="#record">先看看它如何工作 <svg class="inline-arrow" aria-hidden="true" viewBox="0 0 16 16"><path d="M8 2.5v10M4.5 9.5 8 13l3.5-3.5"/></svg></a>
+            <a class="text-link" href="#record">先看看它如何工作 <span class="inline-arrow" aria-hidden="true">&darr;</span></a>
           </div>
           <ul class="hero-trust hero-enter hero-enter-5" aria-label="产品特点">
             <li>无需注册</li>
@@ -52,67 +51,38 @@
           </ul>
         </div>
 
-        <div class="hero-scene hero-enter hero-enter-3" aria-label="仍在应用首页示意">
-          <div class="scene-orbit orbit-one" aria-hidden="true"></div>
-          <div class="scene-orbit orbit-two" aria-hidden="true"></div>
-          <p class="scene-note scene-note-top"><span>今天</span><b>给此刻留下坐标</b></p>
-          <article class="phone">
-            <div class="phone-status"><span>9:41</span><span>● ● ▰</span></div>
-            <div class="phone-heading"><div><small>STILL ALIVE / SPACE</small><strong>空间</strong></div><span class="phone-avatar">在</span></div>
-            <div class="check-card">
-              <div class="check-meta"><span>TODAY</span><span>01 / 02</span></div>
-              <span class="life-mark" aria-hidden="true"><i></i><b></b></span>
-              <h2>为今天留一个坐标</h2>
-              <p>不需要写什么，点一下就好。</p>
-              <button type="button" tabindex="-1">今天也在</button>
-            </div>
-            <div class="prompt-card">
-              <span class="prompt-label">那年今日</span>
-              <strong>两年前，你记下了一场傍晚的雨。</strong>
-              <small>重新看看那一天&nbsp;&nbsp;&rarr;</small>
-            </div>
-            <div class="phone-feed">
-              <div><span></span><span></span></div>
-              <i></i><i></i><i></i>
-            </div>
-          </article>
-          <p class="scene-note scene-note-side"><span>记忆追踪</span><b>126 个留下过的日子</b></p>
-          <p class="scene-counter" aria-hidden="true">01</p>
+        <div class="hero-visual hero-enter hero-enter-3">
+          <div class="app-window" aria-hidden="true">
+            <header class="app-window-header"><div><small>STILL ALIVE / SPACE</small><strong>空间</strong><p>所有留下的片段，都在这里慢慢生长。</p></div><time datetime="2026-09-20">2026.09.20<br />周日</time></header>
+            <article class="check-in-card"><div class="check-in-meta"><span>TODAY 09.20</span><i aria-hidden="true"></i></div><h2>今天，已经在北京留下坐标</h2><p>就这样也很好。或者，留下一点今天。</p><span class="check-in-link">写一条记录</span></article>
+            <div class="app-window-footer"><span>MY MOMENTS</span><b>把今天放回自己的时间里</b></div>
+          </div>
         </div>
       </section>
 
       <section class="record" id="record">
-        <div class="section-label" data-reveal><span>01</span><p>如何记录</p></div>
+        <p class="section-label" data-reveal>如何记录</p>
         <div class="record-intro" data-reveal>
-          <p class="eyebrow"><span></span>从一次轻轻的确认开始</p>
           <h2>记录不该是另一件<br />需要坚持的事。</h2>
           <p>没有最低字数，没有断签惩罚，也不要求每天都有值得讲述的故事。有时一个坐标已经足够；想写的时候，再认真写。</p>
         </div>
         <div class="record-steps" data-reveal>
           <article>
-            <b>01</b>
-            <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12.2 2.3 2.3 4.8-5"/><circle class="icon-accent" cx="17.8" cy="6.2" r="1.5"/></svg></span>
             <small>几秒钟</small>
             <h3>确认今天也在</h3>
             <p>一次点击，给今天留下存在过的标记。</p>
           </article>
           <article>
-            <b>02</b>
-            <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.5 4.5h6.8l3.2 3.2v11.8h-10z"/><path d="M14 4.7V8h3.3M10 11h5M10 14h5M10 17h3"/><circle class="icon-accent" cx="6.5" cy="18.5" r="1.5"/></svg></span>
             <small>想说的时候</small>
             <h3>留下一点此刻</h3>
             <p>文字、照片、语音和地点，都可以成为记录。</p>
           </article>
           <article>
-            <b>03</b>
-            <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="2.8"/><path d="M3.8 18.5c.5-3.1 2.2-4.7 5.2-4.7s4.7 1.6 5.2 4.7"/><circle cx="16.5" cy="10" r="2.2"/><path d="M14.8 14.3c3.2-.8 5.1.6 5.5 3.5"/><circle class="icon-accent" cx="17.8" cy="6.2" r="1.5"/></svg></span>
             <small>故事里的人</small>
             <h3>把片段与人相连</h3>
             <p>写到谁，就顺手关联谁，共同经历会自然聚在一起。</p>
           </article>
           <article>
-            <b>04</b>
-            <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 8.2H3.8V5.5"/><path d="M4.1 8.1a8 8 0 1 1 .4 8.5"/><path d="M12 7.8V12l3 1.8"/><circle class="icon-accent" cx="18.2" cy="17.6" r="1.5"/></svg></span>
             <small>很久以后</small>
             <h3>让过去重新出现</h3>
             <p>那年今日与人物回忆，会把旧片段带回合适的时刻。</p>
@@ -121,7 +91,7 @@
       </section>
 
       <section class="archive" id="archive">
-        <div class="section-label section-label-light" data-reveal><span>02</span><p>如何回看</p></div>
+        <p class="section-label section-label-light" data-reveal>如何回看</p>
         <div class="archive-heading" data-reveal>
           <h2>零散的片段，<br />会慢慢长出脉络。</h2>
           <p>仍在会沿着日期和人物整理内容。你不需要先想好分类，只管把当下留下，回看的路径会随着记录一起形成。</p>
@@ -129,21 +99,11 @@
         <div class="archive-grid">
           <article class="archive-card timeline-card" data-reveal>
             <div class="card-copy"><small>空间</small><h3>今天与过去，在同一条时间里</h3><p>打卡、日记和回忆按日期排在一起。最近发生的事在前面，久远的片段也随时可以回去。</p></div>
-            <div class="mini-timeline" aria-hidden="true">
-              <section><b>今天</b><span>为今天留下一个坐标</span><i></i></section>
-              <section><b>8 月 24 日</b><span>终于在雨停之前走到了江边。</span><i></i></section>
-              <section><b>8 月 19 日</b><span>和妈妈吃了一顿很慢的晚饭。</span><i></i></section>
-            </div>
           </article>
           <article class="archive-card calendar-card" data-reveal>
-            <div class="calendar-top"><span>2026 / 08</span><b>八月</b></div>
-            <div class="calendar-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
-            <div class="calendar-days"><i></i><i></i><i></i><i></i><i></i><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i class="has-record">6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i class="has-memory">12</i><i>13</i><i>14</i><i>15</i><i>16</i><i>17</i><i>18</i><i>19</i><i>20</i><i>21</i><i>22</i><i>23</i><i>24</i><i>25</i><i class="is-today">26</i><i>27</i><i>28</i><i>29</i><i>30</i><i>31</i></div>
             <div class="card-copy"><small>日历</small><h3>看见生活留下的痕迹</h3><p>按月回看记录、生日和那些真正发生过的日子。</p></div>
           </article>
           <article class="archive-card people-card" data-reveal>
-            <div class="people-portrait" aria-hidden="true"><span>林</span><span>陈</span><span>周</span><i></i></div>
-            <div class="memory-paper" aria-hidden="true"><small>共同记录 / 28</small><p>那天我们坐在窗边，聊了很久以前的事。</p><span>2025.10.04</span></div>
             <div class="card-copy"><small>人物</small><h3>每个人，都有一页共同的过去</h3><p>人物资料、生日、相册、喜欢的音乐，以及所有相关记录，都会聚在属于彼此的页面里。</p></div>
           </article>
         </div>
@@ -151,61 +111,61 @@
 
       <section class="spaces" id="spaces">
         <div class="spaces-heading" data-reveal>
-          <div class="section-label"><span>03</span><p>我的空间</p></div>
-          <div><p class="eyebrow"><span></span>记录之外，也收藏生活</p><h2>喜欢过什么，<br />也值得被记住。</h2></div>
+          <p class="section-label">我的空间</p>
+          <div><h2>喜欢过什么，<br />也值得被记住。</h2></div>
           <p>有些回忆写在日记里，有些藏在一首歌、一本书和一张照片中。它们都可以留在同一个属于你的空间。</p>
         </div>
         <div class="space-list" data-reveal>
           <article class="space-item space-album">
-            <span class="space-number">01</span>
-            <div class="space-art album-art" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="8" y="11" width="27" height="23" rx="2"/><path d="m11 30 7.5-8 5.5 5 3.5-3.5L35 31"/><circle class="icon-accent" cx="28.5" cy="17.5" r="2.5"/><path d="M14 38h24V17"/></svg></div>
             <div><small>相册</small><h3>整理属于自己和重要人物的影像</h3><p>创建相册，把照片与视频放回它们真正属于的人和时刻。</p></div>
           </article>
           <article class="space-item space-music">
-            <span class="space-number">02</span>
-            <div class="space-art music-art" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="23" cy="25" r="14"/><circle cx="23" cy="25" r="4"/><path d="M23 11a14 14 0 0 1 14 14M31 25a8 8 0 0 0-8-8"/><path d="M34 12v13.5"/><path d="M34 12 41 10v4.5l-7 2"/><circle class="icon-accent" cx="31" cy="28" r="2"/></svg></div>
             <div><small>音乐盒</small><h3>保存喜欢的声音与歌单</h3><p>听自己的音乐，也为重要的人留下一份喜欢的歌。</p></div>
           </article>
           <article class="space-item space-books">
-            <span class="space-number">03</span>
-            <div class="space-art book-art" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M8 37.5h32M11 11h8v26.5h-8zM19 14h9v23.5h-9zM30.5 10l7.5 1.5-5.2 26-7.3-1.5z"/><path class="icon-accent-line" d="M13.5 16h3M21.5 20h4M32.5 16l3 .6"/><circle class="icon-accent" cx="14.8" cy="32.5" r="1.7"/></svg></div>
             <div><small>书架</small><h3>让阅读也成为生命记录</h3><p>收藏电子书、保留阅读进度，把摘抄与感受写进自己的记录。</p></div>
           </article>
           <article class="space-item space-vault">
-            <span class="space-number">04</span>
-            <div class="space-art vault-art" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="8" y="9" width="32" height="30" rx="3"/><circle cx="24" cy="24" r="8"/><path d="M24 19v5l3 2M8 15h-3M8 33h-3M40 15h3M40 33h3"/><circle class="icon-accent" cx="24" cy="24" r="2.2"/></svg></div>
             <div><small>密码本</small><h3>给重要信息一个私密的位置</h3><p>将账号与密码单独收好，需要时再打开，离开后重新锁定。</p></div>
           </article>
+        </div>
+        <div class="spaces-media" data-reveal>
+          <div class="music-window" aria-hidden="true">
+            <header><span aria-hidden="true">⌄</span><div><strong>播放详情</strong><small>1 / 71</small></div><span aria-hidden="true">⋮</span></header>
+            <div class="record-disc" aria-hidden="true"><i></i><b>♪</b></div>
+            <div class="music-title"><h3>漠河舞厅</h3><p>柳爽 / 1st.星球</p></div>
+            <div class="music-progress"><span></span></div><div class="music-times"><span>0:16</span><span>5:34</span></div>
+            <div class="music-controls"><span>↗</span><span>l◀</span><b>▶</b><span>▶l</span><span>≡</span></div>
+          </div>
+          <p class="spaces-media-caption"><span>音乐盒</span><b>喜欢过的声音，也属于你的故事</b></p>
         </div>
       </section>
 
       <section class="care" id="care">
         <div class="care-copy" data-reveal>
-          <p class="eyebrow eyebrow-light"><span></span>不打扰，也不占有</p>
+          <p class="eyebrow eyebrow-light">不打扰，也不占有</p>
           <h2>你的生活，<br />不需要被评价。</h2>
           <p>仍在不把生活变成连续天数，也不把私密表达变成公开内容。它只负责安静地接住，然后在你需要的时候还给你。</p>
         </div>
         <div class="care-points" data-reveal>
-          <article><span>01</span><div><h3>想停就停，回来继续</h3><p>中断不会失去什么。再次打开时，今天依然可以重新开始。</p></div></article>
-          <article><span>02</span><div><h3>记录默认只留给自己</h3><p>没有公开主页，也没有社交关系带来的表达压力。</p></div></article>
-          <article><span>03</span><div><h3>随时带走完整内容</h3><p>日记、人物、媒体和收藏可以完整备份，也可以从备份恢复。</p></div></article>
+          <article><div><h3>想停就停，回来继续</h3><p>中断不会失去什么。再次打开时，今天依然可以重新开始。</p></div></article>
+          <article><div><h3>记录默认只留给自己</h3><p>没有公开主页，也没有社交关系带来的表达压力。</p></div></article>
+          <article><div><h3>随时带走完整内容</h3><p>日记、人物、媒体和收藏可以完整备份，也可以从备份恢复。</p></div></article>
         </div>
       </section>
 
       <section class="download" id="download">
         <div class="download-copy" data-reveal>
-          <p class="eyebrow"><span></span>从今天开始</p>
           <h2>给生活留一个<br />以后还能回来看的位置。</h2>
           <p>当前提供 Android 版本。安装后无需注册，可以直接从今天的第一个坐标开始。</p>
         </div>
         <div class="download-panel" data-reveal>
           <article class="download-primary">
             <div class="platform-heading">
-              <span class="platform-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7.4 6.1-1.2-2M16.6 6.1l1.2-2M6.5 9.5h11M7 9.5V18a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 17 18V9.5M7.2 9.5a4.8 4.8 0 0 1 9.6 0M4 11v5.5M20 11v5.5M9.5 19.5V22M14.5 19.5V22"/><circle cx="9.5" cy="7.7" r=".7" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7.7" r=".7" fill="currentColor" stroke="none"/></svg></span>
               <span class="available">现已提供</span>
             </div>
             <div class="platform-copy"><small>Android</small><h3>仍在 v__VERSION__</h3><p>下载后即可安装使用</p></div>
-            <a class="download-button" href="__APK_URL__">下载 Android 版 <svg class="inline-arrow" aria-hidden="true" viewBox="0 0 16 16"><path d="M8 2.5v10M4.5 9.5 8 13l3.5-3.5"/></svg></a>
+            <a class="download-button" href="__APK_URL__">下载 Android 版 <span class="inline-arrow" aria-hidden="true">&darr;</span></a>
             <details><summary>查看本次更新</summary><p>__RELEASE_NOTES__</p></details>
           </article>
           <article class="download-secondary">

@@ -7,18 +7,19 @@
   --ink-faint: #707970;
   --line: rgba(32, 35, 31, .15);
   --life: #1d6b49;
-  --life-deep: #164d37;
+  --life-deep: #2f5e48;
   --life-light: #d8e8dc;
   --sun: #d4a84f;
   --sun-light: #f1e8ca;
   --white: #f4f6ef;
   --danger: #9b493f;
-  --display: "Kaiti SC", "STKaiti", "Songti SC", serif;
+  --display: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", serif;
   --body: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
 
 * { box-sizing: border-box; }
-body { min-height: 100vh; margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
+body { position: relative; min-height: 100vh; margin: 0; background: radial-gradient(circle at 90% 0, rgba(212,168,79,.16), transparent 20rem), var(--paper); color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
+body::before { position: fixed; z-index: 20; inset: 0; pointer-events: none; background-image: repeating-radial-gradient(circle at 0 0, rgba(32,35,31,.055) 0 1px, transparent 1px 4px); background-size: 5px 5px; mix-blend-mode: multiply; opacity: .08; content: ""; }
 button, input, select { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -33,7 +34,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .collection-mark svg { width: 31px; }
 .mark-sun { fill: var(--sun); }
 
-.collection-card { position: relative; margin-top: 58px; padding: 42px; overflow: hidden; border: 1px solid var(--line); background: var(--sheet); box-shadow: 0 28px 90px rgba(23,54,39,.12); }
+.collection-card { position: relative; margin-top: 58px; padding: 42px; overflow: hidden; border: 1px solid var(--line); border-radius: 18px 3px 18px 3px; background: var(--sheet); box-shadow: 0 28px 90px rgba(47,94,72,.12); }
 .collection-card::after { content: ""; position: absolute; top: -110px; right: -120px; width: 260px; height: 260px; border: 1px solid rgba(29,107,73,.13); border-radius: 50%; box-shadow: inset 0 0 0 38px rgba(216,232,220,.38); pointer-events: none; }
 .collection-number { position: absolute; top: 28px; right: 34px; color: var(--sun); font: 52px/1 var(--display); opacity: .55; }
 .collection-eyebrow { margin: 0; color: var(--life); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
