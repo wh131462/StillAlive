@@ -20,7 +20,7 @@ import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview
 import { TabPageHeader } from '../../shared/components/tab-page-header';
 import { extractAudioEmbeds, formatAudioDuration } from '../journal/embedded-media';
 import { birthdayForCalendar, birthdayFromDateString, nextBirthday } from '../people/person-profile';
-import { resolveDeviceLocation } from '../../infrastructure/platform/device-location';
+import { resolveDeviceLocation, warmDeviceLocation } from '../../infrastructure/platform/device-location';
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
 import { writePersistentError } from '../../infrastructure/platform/persistent-log';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
@@ -122,6 +122,7 @@ export default function SpaceScreen() {
       try {
         checkInActionInProgressRef.current = true;
         setCheckingIn(true);
+        warmDeviceLocation('city');
         const checkIn = await checkInToday();
         void resolveCheckInCity(checkIn.id);
       } catch (cause: unknown) {
@@ -339,7 +340,7 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
     <View accessibilityLabel={`${checkIn.dayKey} ${checkIn.city ? `${checkIn.city} ` : ''}${formatTime(checkIn.createdAt)} 留下坐标`} style={styles.checkInRow}>
       <View style={styles.checkInMarker}><View style={styles.checkInDot}><View style={styles.checkInDotCore} /></View></View>
       <View style={styles.checkInContent}>
-        <Text style={styles.checkInTitle}>今天也在</Text>
+        <Text style={styles.checkInTitle}>在{checkIn.city || '这里'}留下记录</Text>
         <Text style={styles.checkInMeta}>{checkIn.city ? `${checkIn.city} / ` : ''}{formatTime(checkIn.createdAt)}</Text>
       </View>
     </View>

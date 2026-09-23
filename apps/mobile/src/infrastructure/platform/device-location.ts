@@ -1,3 +1,4 @@
+import { requireOptionalNativeModule } from 'expo';
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 import { writePersistentError, writePersistentLog } from './persistent-log';
@@ -9,155 +10,140 @@ export interface ResolvedDeviceLocation {
 
 export type DeviceLocationDetail = 'address' | 'city';
 
-interface LocationProfile {
-  cacheMaxAgeMs: number;
-  lastKnownMaxAgeMs: number;
-  lastKnownRequiredAccuracy: number;
-  accuracy: Location.Accuracy;
-  maxAccuracy: number;
-  timeoutMs: number;
-}
-
-const LOCATION_PROFILES: Record<DeviceLocationDetail, LocationProfile> = {
-  city: {
-    cacheMaxAgeMs: 5 * 60 * 1000,
-    lastKnownMaxAgeMs: 5 * 60 * 1000,
-    lastKnownRequiredAccuracy: 3_000,
-    accuracy: Location.Accuracy.Balanced,
-    maxAccuracy: 5_000,
-    timeoutMs: 10_000,
-  },
-  address: {
-    cacheMaxAgeMs: 60 * 1000,
-    lastKnownMaxAgeMs: 60 * 1000,
-    lastKnownRequiredAccuracy: 500,
-    accuracy: Location.Accuracy.High,
-    maxAccuracy: 500,
-    timeoutMs: 15_000,
-  },
-};
-
-const currentPositionTasks = new Map<DeviceLocationDetail, Promise<Location.LocationObject>>();
+const LOCATION_TIMEOUT_MS = 3_000;
+const CITY_TIMEOUT_MS = 3_000;
+const MAX_ACCURACY = 5_000;
+const ADDRESS_DETAIL_ACCURACY = 2_000;
+const MAX_POSITION_AGE_MS = { city: 24 * 60 * 60 * 1000, address: 60 * 1000 };
+const nativeLocation = Platform.OS === 'android' ? requireOptionalNativeModule<{
+  getPositionAsync(id: number, maxAge: number, maxAccuracy: number, highAccuracy: boolean): Promise<Location.LocationObject>;
+  cancelAsync(id: number): Promise<void>;
+}>('StillAliveDeviceLocation') : null;
 const resolveLocationTasks = new Map<DeviceLocationDetail, Promise<ResolvedDeviceLocation>>();
-const resolvedLocationCaches = new Map<DeviceLocationDetail, { resolvedAt: number; accuracy: number | null; value: ResolvedDeviceLocation }>();
+let resolvedLocationCache: { timestamp: number; value: ResolvedDeviceLocation } | null = null;
+let nextRequestId = 0;
+
+export function warmDeviceLocation(detail: DeviceLocationDetail = 'city'): void {
+  if (Platform.OS !== 'web') void resolveDeviceLocation(detail).catch(() => undefined);
+}
 
 export async function resolveDeviceLocation(detail: DeviceLocationDetail = 'address'): Promise<ResolvedDeviceLocation> {
-  writePersistentLog('INFO', 'location.resolve.started', { detail, platform: Platform.OS, cached: resolvedLocationCaches.has(detail) });
   if (Platform.OS === 'web') throw new Error('网页端暂不支持记录实际地址');
+  const existing = resolveLocationTasks.get(detail);
+  if (existing) return existing;
 
-  let resolveLocationTask = resolveLocationTasks.get(detail);
-  if (!resolveLocationTask) {
-    const task = resolveDeviceLocationOnce(detail);
-    resolveLocationTasks.set(detail, task);
-    void task.finally(() => {
-      if (resolveLocationTasks.get(detail) === task) resolveLocationTasks.delete(detail);
-    }).catch(() => undefined);
-    resolveLocationTask = task;
-  }
-  return resolveLocationTask.then((value) => {
-    writePersistentLog('INFO', 'location.resolve.finished', { address: value.address, city: value.city, detail });
+  const startedAt = Date.now();
+  const timeoutMs = detail === 'city' ? CITY_TIMEOUT_MS : LOCATION_TIMEOUT_MS;
+  const controller = new AbortController();
+  writePersistentLog('INFO', 'location.resolve.started', { detail, provider: nativeLocation ? 'android-system' : 'expo' });
+  // 定位、缓存读取与地址解析共用预算，不能把各阶段超时相加。
+  const task = new Promise<ResolvedDeviceLocation>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('暂未获取到位置，可手动填写'));
+      controller.abort();
+    }, timeoutMs);
+    void resolveDeviceLocationOnce(detail, controller.signal).then(resolve, reject).finally(() => clearTimeout(timer));
+  }).then((value) => {
+    writePersistentLog('INFO', 'location.resolve.finished', { detail, elapsedMs: Date.now() - startedAt });
     return value;
   }, (cause) => {
-    writePersistentError('location.resolve.failed', cause);
+    writePersistentError('location.resolve.failed', cause, { detail, elapsedMs: Date.now() - startedAt });
     throw cause;
+  }).finally(() => {
+    controller.abort();
+    if (resolveLocationTasks.get(detail) === task) resolveLocationTasks.delete(detail);
   });
+  resolveLocationTasks.set(detail, task);
+  return task;
 }
 
-async function resolveDeviceLocationOnce(detail: DeviceLocationDetail): Promise<ResolvedDeviceLocation> {
-  const profile = LOCATION_PROFILES[detail];
+async function resolveDeviceLocationOnce(detail: DeviceLocationDetail, signal: AbortSignal): Promise<ResolvedDeviceLocation> {
+  const startedAt = Date.now();
   const permission = await Location.getForegroundPermissionsAsync();
+  if (signal.aborted) throw new Error('定位已取消');
   if (!permission.granted) throw new Error('定位权限未开启');
   if (!await Location.hasServicesEnabledAsync()) throw new Error('系统定位服务未开启');
-  const providerStatus = await Location.getProviderStatusAsync();
-  writePersistentLog('INFO', 'location.providers.status', providerStatus);
+  if (signal.aborted) throw new Error('定位已取消');
+  const maxAge = MAX_POSITION_AGE_MS[detail];
+  if (resolvedLocationCache && isFreshTimestamp(resolvedLocationCache.timestamp, maxAge)) return resolvedLocationCache.value;
 
-  const resolvedLocationCache = resolvedLocationCaches.get(detail);
-  if (resolvedLocationCache && Date.now() - resolvedLocationCache.resolvedAt <= profile.cacheMaxAgeMs && isAccurateEnough(resolvedLocationCache.accuracy, profile.maxAccuracy)) {
-    return resolvedLocationCache.value;
+  let position: Location.LocationObject;
+  if (nativeLocation) {
+    const id = ++nextRequestId;
+    const cancel = () => { void nativeLocation.cancelAsync(id).catch(() => undefined); };
+    signal.addEventListener('abort', cancel, { once: true });
+    try {
+      position = await nativeLocation.getPositionAsync(id, maxAge, MAX_ACCURACY, detail === 'address');
+    } finally {
+      signal.removeEventListener('abort', cancel);
+    }
+  } else {
+    const cached = await Location.getLastKnownPositionAsync({ maxAge, requiredAccuracy: MAX_ACCURACY }).catch(() => null);
+    if (signal.aborted) throw new Error('定位已取消');
+    position = cached && isUsablePosition(cached, maxAge) ? cached : await watchPosition(detail, signal);
   }
-
-  const cachedPosition = await withTimeout(
-    Location.getLastKnownPositionAsync({ maxAge: profile.lastKnownMaxAgeMs, requiredAccuracy: profile.lastKnownRequiredAccuracy }),
-    800,
-    '缓存位置读取超时',
-  ).catch(() => null);
-  const position = cachedPosition && isUsablePosition(cachedPosition, profile.maxAccuracy)
-    ? cachedPosition
-    : await getCurrentPosition(detail);
-  if (!isUsablePosition(position, profile.maxAccuracy)) {
-    throw new Error(detail === 'city' ? '系统未返回有效城市定位，请稍后重试' : '系统未返回足够精确的位置，请移到室外后重试');
-  }
-  const [place] = await withTimeout(Location.reverseGeocodeAsync({
-    latitude: position.coords.latitude,
-    longitude: position.coords.longitude,
-  }), 4_000, '位置解析超时，请稍后重试');
+  if (signal.aborted) throw new Error('定位已取消');
+  if (!isUsablePosition(position, maxAge)) throw new Error('暂未获取到位置，可手动填写');
+  writePersistentLog('INFO', 'location.position.received', {
+    detail, elapsedMs: Date.now() - startedAt, ageMs: Date.now() - position.timestamp, accuracy: position.coords.accuracy,
+  });
+  const geocodeTask = Location.reverseGeocodeAsync({ latitude: position.coords.latitude, longitude: position.coords.longitude }).catch(() => []);
+  const place = await Promise.race([
+    geocodeTask.then(([result]) => result ?? null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), Math.max(0, (detail === 'city' ? CITY_TIMEOUT_MS : LOCATION_TIMEOUT_MS) - (Date.now() - startedAt)))),
+  ]);
+  if (signal.aborted) throw new Error('定位已取消');
   if (!place) throw new Error('暂时无法识别当前位置');
 
   const city = formatCityLabel(place);
   const address = appendCountry(place.formattedAddress?.trim() || joinUnique([
-    place.region,
-    place.city,
-    place.district,
-    place.street,
-    place.streetNumber,
-    place.name,
-    place.country,
+    place.region, place.city, place.district, place.street, place.streetNumber, place.name, place.country,
   ]), place);
-  if (!city || !address) throw new Error('暂时无法识别当前位置');
-  const value = { address: address.slice(0, 80), city: city.slice(0, 40) };
-  resolvedLocationCaches.set(detail, { resolvedAt: Date.now(), accuracy: position.coords.accuracy ?? null, value });
+  if (!city) throw new Error('暂时无法识别当前位置');
+  const addressValue = (position.coords.accuracy ?? Infinity) <= ADDRESS_DETAIL_ACCURACY ? address : city;
+  const value = { address: (addressValue || city).slice(0, 80), city: city.slice(0, 40) };
+  resolvedLocationCache = { timestamp: position.timestamp, value };
   return value;
 }
 
-function isUsablePosition(position: Location.LocationObject, maxAccuracy: number): boolean {
-  const { latitude, longitude } = position.coords;
-  return Number.isFinite(latitude)
-    && Number.isFinite(longitude)
-    && Math.abs(latitude) > 0.0001
-    && Math.abs(longitude) > 0.0001
-    && isAccurateEnough(position.coords.accuracy ?? null, maxAccuracy);
+function isFreshTimestamp(timestamp: number, maxAge: number): boolean {
+  const age = Date.now() - timestamp;
+  return Number.isFinite(age) && age >= 0 && age <= maxAge;
 }
 
-function isAccurateEnough(accuracy: number | null, maxAccuracy: number): boolean {
-  return accuracy === null || (Number.isFinite(accuracy) && accuracy <= maxAccuracy);
+function isUsablePosition(position: Location.LocationObject, maxAge: number): boolean {
+  const { latitude, longitude, accuracy } = position.coords;
+  return Number.isFinite(latitude) && Math.abs(latitude) <= 90
+    && Number.isFinite(longitude) && Math.abs(longitude) <= 180
+    && !(latitude === 0 && longitude === 0)
+    && accuracy !== null && Number.isFinite(accuracy) && accuracy >= 0 && accuracy <= MAX_ACCURACY
+    && isFreshTimestamp(position.timestamp, maxAge);
 }
 
-function getCurrentPosition(detail: DeviceLocationDetail): Promise<Location.LocationObject> {
-  let currentPositionTask = currentPositionTasks.get(detail);
-  if (!currentPositionTask) {
-    const task = getCurrentPositionWithTimeout(detail);
-    currentPositionTasks.set(detail, task);
-    void task.finally(() => {
-      if (currentPositionTasks.get(detail) === task) currentPositionTasks.delete(detail);
-    }).catch(() => undefined);
-    currentPositionTask = task;
-  }
-  return currentPositionTask;
-}
-
-function getCurrentPositionWithTimeout(detail: DeviceLocationDetail): Promise<Location.LocationObject> {
-  const profile = LOCATION_PROFILES[detail];
-  if (detail === 'city') return getCurrentPositionAttempt(profile.accuracy, profile.timeoutMs);
-
-  // 详细地址先使用系统融合定位；精度不足或超时时再请求 GPS，避免室内设备无谓等待。
-  return getCurrentPositionAttempt(Location.Accuracy.Balanced, 7_000)
-    .then((position) => isUsablePosition(position, profile.maxAccuracy) ? position : getHighAccuracyFallback(position, profile))
-    .catch((cause) => getHighAccuracyFallback(cause, profile));
-}
-
-function getCurrentPositionAttempt(accuracy: Location.Accuracy, timeoutMs: number): Promise<Location.LocationObject> {
-  return withTimeout(
-    Location.getCurrentPositionAsync({ accuracy, mayShowUserSettingsDialog: true }),
-    timeoutMs,
-    '定位超时，请稍后重试',
-  );
-}
-
-function getHighAccuracyFallback(cause: unknown, profile: LocationProfile): Promise<Location.LocationObject> {
-  writePersistentLog('WARN', 'location.resolve.high-accuracy-fallback', {
-    cause: cause instanceof Error ? cause.message : '平衡定位精度不足',
+function watchPosition(detail: DeviceLocationDetail, signal: AbortSignal): Promise<Location.LocationObject> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let subscription: Location.LocationSubscription | undefined;
+    const finish = (result: Location.LocationObject | Error) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', cancel);
+      subscription?.remove();
+      if (result instanceof Error) reject(result);
+      else resolve(result);
+    };
+    const cancel = () => finish(new Error('定位已取消'));
+    if (signal.aborted) { cancel(); return; }
+    signal.addEventListener('abort', cancel, { once: true });
+    void Location.watchPositionAsync(
+      { accuracy: detail === 'city' ? Location.Accuracy.Balanced : Location.Accuracy.High, timeInterval: 500, distanceInterval: 0, mayShowUserSettingsDialog: false },
+      (position) => { if (isUsablePosition(position, MAX_POSITION_AGE_MS[detail])) finish(position); },
+      (reason) => finish(new Error(reason || '定位失败')),
+    ).then((value) => {
+      subscription = value;
+      if (settled) subscription.remove();
+    }, (cause) => finish(cause instanceof Error ? cause : new Error('定位失败')));
   });
-  return getCurrentPositionAttempt(Location.Accuracy.High, profile.timeoutMs - 7_000);
 }
 
 function formatCityLabel(place: Location.LocationGeocodedAddress): string {
@@ -192,11 +178,4 @@ function joinUnique(values: Array<string | null>): string {
     if (part && !parts.some((existing) => existing === part || existing.includes(part))) parts.push(part);
   }
   return parts.join(' ');
-}
-
-function withTimeout<T>(task: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-    void task.then(resolve, reject).finally(() => clearTimeout(timer));
-  });
 }

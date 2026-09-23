@@ -27,7 +27,7 @@ import type { EditorCommand, EditorCommandType, EditorMediaSource } from './rich
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
 import { persistPickedMedia, persistVoiceRecording } from '../../infrastructure/files/local-media';
-import { resolveDeviceLocation } from '../../infrastructure/platform/device-location';
+import { resolveDeviceLocation, warmDeviceLocation } from '../../infrastructure/platform/device-location';
 import { ensureAppPermission } from '../../infrastructure/platform/app-permissions';
 import { pickMediaFromCamera, pickMediaFromLibrary } from '../../infrastructure/platform/media-picker';
 import { extractEmbeddedMediaIds } from './embedded-media';
@@ -52,6 +52,7 @@ export default function EditorScreen() {
   const initialBodyRef = useRef('');
   const initialPersonIdsRef = useRef<string[]>([]);
   const initialLocationRef = useRef<string | null>(null);
+  const locationRequestRef = useRef(0);
   const initialMusicShareRef = useRef<MusicShare | null>(null);
   const initialReadingSourceRef = useRef<ReadingNoteSource | null>(null);
   const createdMediaRef = useRef<Media[]>([]);
@@ -110,7 +111,9 @@ export default function EditorScreen() {
   }, [postId, readingNoteSources, readingSourceRemoved, sourceBook, sourceExcerpt, sourceExcerptId]);
   const readingSourceBook = sourceBook ?? (readingSource?.bookId ? books.find((book) => book.id === readingSource.bookId) ?? null : null);
   const headerSubtitle = draftStatus || (readingSource ? '写下这段阅读留给你的感受' : musicShare ? '写下这首歌留给你的感受' : postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
-  const editorBusy = saving || audioSaving || mediaSaving || Boolean(locating) || relationsLoading;
+  const editorBusy = saving || audioSaving || mediaSaving || relationsLoading;
+
+  useEffect(() => () => { locationRequestRef.current += 1; }, []);
 
   useEffect(() => {
     if (!ready || initializedRef.current) return;
@@ -309,6 +312,7 @@ export default function EditorScreen() {
       return;
     }
     const savedBody = withReadingSourceQuote(withMusicShare(value, musicShare), readingSource, readingSourceBook);
+    closeLocationPicker();
     try {
       setSaving(true);
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
@@ -571,20 +575,31 @@ export default function EditorScreen() {
   const openLocationPicker = () => {
     Keyboard.dismiss();
     setCustomLocation(locationName ?? '');
+    warmDeviceLocation('city');
     setLocationPickerOpen(true);
   };
 
+  const closeLocationPicker = () => {
+    locationRequestRef.current += 1;
+    setLocating(null);
+    setLocationPickerOpen(false);
+  };
+
   const useCurrentLocation = async (detail: 'address' | 'city') => {
+    const requestId = ++locationRequestRef.current;
     try {
       setLocating(detail);
       if (!await ensureAppPermission('location')) return;
+      if (requestId !== locationRequestRef.current) return;
       const location = await resolveDeviceLocation(detail);
+      if (requestId !== locationRequestRef.current) return;
       setLocationName(detail === 'city' ? location.city : location.address);
-      setLocationPickerOpen(false);
+      closeLocationPicker();
     } catch (cause: unknown) {
+      if (requestId !== locationRequestRef.current) return;
       feedback.alert('暂时无法定位', cause instanceof Error ? cause.message : '请稍后重试。');
     } finally {
-      setLocating(null);
+      if (requestId === locationRequestRef.current) setLocating(null);
     }
   };
 
@@ -592,7 +607,7 @@ export default function EditorScreen() {
     const value = customLocation.trim();
     if (!value) return;
     setLocationName(value);
-    setLocationPickerOpen(false);
+    closeLocationPicker();
   };
 
   const confirmDeleteTable = () => {
@@ -733,10 +748,10 @@ export default function EditorScreen() {
               </View>
         </DraggableBottomSheet>
 
-        <DraggableBottomSheet keyboardAvoiding onClose={() => setLocationPickerOpen(false)} open={locationPickerOpen} sheetStyle={styles.locationSheet}>
+        <DraggableBottomSheet keyboardAvoiding onClose={closeLocationPicker} open={locationPickerOpen} sheetStyle={styles.locationSheet}>
               <Text style={styles.locationSheetTitle}>所在位置</Text>
-              <Text style={styles.locationSheetHint}>默认只记录城市；详细地址需要主动选择。地点只保存在本地，不会保存经纬度。</Text>
-              <LocationOption androidIcon="location_off" icon="location.slash" label="不记录位置" onPress={() => { setLocationName(null); setLocationPickerOpen(false); }} />
+              <Text style={styles.locationSheetHint}>默认记录城市，详细地址需主动选择。</Text>
+              <LocationOption androidIcon="location_off" icon="location.slash" label="不记录位置" onPress={() => { setLocationName(null); closeLocationPicker(); }} />
               <LocationOption androidIcon="location_city" disabled={Boolean(locating)} icon="building.2.fill" label={locating === 'city' ? '正在获取当前城市…' : '使用当前城市'} onPress={() => void useCurrentLocation('city')} />
               <LocationOption androidIcon="my_location" disabled={Boolean(locating)} icon="location.fill" label={locating === 'address' ? '正在获取详细地址…' : '使用详细地址'} onPress={() => void useCurrentLocation('address')} />
               <View style={styles.customLocationBlock}>
