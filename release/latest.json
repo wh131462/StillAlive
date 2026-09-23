@@ -1,6 +1,6 @@
 {
-  "versionCode": 24,
-  "versionName": "1.1.15",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.15.apk",
-  "releaseNotes": "优化了分享的长图效果."
+  "versionCode": 25,
+  "versionName": "1.1.16",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.16.apk",
+  "releaseNotes": "活跃热力图支持展示从首次记录至今的完整历程。\n优化签到与记录定位，定位等待不再阻碍保存，关闭位置选择后不再回填结果。\n统一卡片、按钮与弹窗圆角，简化分享预览和权限摘要。"
 }
