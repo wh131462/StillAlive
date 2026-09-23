@@ -109,7 +109,7 @@ function Stat({ label, value }: { label: string; value: number }) { return <View
 interface HeatmapCell {
   count: number;
   dayKey: DayKey;
-  inRange: boolean;
+  isFuture: boolean;
 }
 
 interface ActivityHeatmapData {
@@ -127,7 +127,7 @@ function ActivityHeatmap({ activeDays, monthLabels, weeks }: ActivityHeatmapData
         <View style={styles.heatmapRow}>
           <View style={styles.weekdayLabels}>{['日', '', '二', '', '四', '', '六'].map((label, index) => <Text key={index} style={styles.weekdayLabel}>{label}</Text>)}</View>
           <View style={styles.heatmapGrid}>
-            {weeks.map((week, weekIndex) => <View key={weekIndex} style={styles.heatmapWeek}>{week.map((cell) => <View key={cell.dayKey} style={[styles.heatmapCell, { backgroundColor: activityCellColor(cell.count) }, !cell.inRange && styles.heatmapCellOutside]} />)}</View>)}
+            {weeks.map((week, weekIndex) => <View key={weekIndex} style={styles.heatmapWeek}>{week.map((cell) => <View key={cell.dayKey} style={[styles.heatmapCell, { backgroundColor: activityCellColor(cell.count) }, cell.isFuture && styles.heatmapCellOutside]} />)}</View>)}
           </View>
         </View>
       </View>
@@ -140,16 +140,19 @@ function buildActivityHeatmap(today: DayKey, posts: Post[], checkIns: CheckIn[])
   const counts = new Map<DayKey, number>();
   for (const item of [...posts, ...checkIns]) counts.set(item.dayKey, (counts.get(item.dayKey) ?? 0) + 1);
   const end = dateFromDayKey(today);
-  const start = addDays(end, -364);
+  const firstRecordedDay = [...counts.keys()].sort()[0];
+  const start = firstRecordedDay ? dateFromDayKey(firstRecordedDay) : end;
   const gridStart = addDays(start, -start.getDay());
+  const gridEnd = addDays(end, 6 - end.getDay());
+  const weekCount = Math.round((gridEnd.getTime() - gridStart.getTime()) / (7 * DAY_MS)) + 1;
   let activeDays = 0;
-  const weeks = Array.from({ length: 53 }, (_, weekIndex) => Array.from({ length: 7 }, (_, dayIndex) => {
+  const weeks = Array.from({ length: weekCount }, (_, weekIndex) => Array.from({ length: 7 }, (_, dayIndex) => {
     const date = addDays(gridStart, weekIndex * 7 + dayIndex);
     const dayKey = toDayKey(date);
     const inRange = date >= start && date <= end;
     const count = inRange ? counts.get(dayKey) ?? 0 : 0;
     if (count > 0) activeDays += 1;
-    return { count, dayKey, inRange };
+    return { count, dayKey, isFuture: date > end };
   }));
   const monthLabels = weeks.map((week, index) => {
     const month = week[0].dayKey.slice(0, 7);
@@ -168,6 +171,8 @@ function addDays(date: Date, amount: number): Date {
   next.setDate(next.getDate() + amount);
   return next;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function activityCellColor(count: number): string {
   if (count === 0) return colors.lineSoft;
