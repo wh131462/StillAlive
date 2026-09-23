@@ -134,17 +134,13 @@ function notificationState(permission: 'granted' | 'denied' | 'undetermined'): P
 function summarizePermissions(states: Partial<Record<PermissionKey, PermissionState>>): string {
   const values = permissionGuides.map(({ key }) => states[key]).filter((state): state is PermissionState => Boolean(state));
   const granted = values.filter((state) => state.granted).length;
-  const denied = values.filter((state) => state.status === 'denied').length;
-  const pending = permissionGuides.length - values.length - denied - granted;
-  if (denied) return `${denied} 项需要处理`;
-  if (pending) return `${granted} 项已允许 · ${pending} 项尚未使用`;
   return `${granted} 项已允许`;
 }
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  intro: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', borderRadius: radius.lg, backgroundColor: colors.lifeLight },
+  intro: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', borderRadius: 6, backgroundColor: colors.lifeLight },
   introIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.sheet },
   introCopy: { flex: 1, marginLeft: spacing.md },
   introTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
@@ -153,7 +149,7 @@ const styles = createThemedStyles(() => ({
   eyebrow: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
   sectionTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 },
   summary: { maxWidth: '48%', color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17, textAlign: 'right' },
-  permissionList: { marginTop: spacing.lg, overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.sheet },
+  permissionList: { marginTop: spacing.lg, overflow: 'hidden', borderRadius: 6, backgroundColor: colors.sheet },
   permissionRow: { minHeight: 88, padding: spacing.md, flexDirection: 'row', alignItems: 'center' },
   permissionIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.lifeLight },
   permissionCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
@@ -168,9 +164,9 @@ const styles = createThemedStyles(() => ({
   permissionAction: { marginLeft: spacing.sm, flexDirection: 'row', alignItems: 'center' },
   permissionActionText: { color: colors.life, fontSize: typography.size.meta, fontWeight: '800' },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 72, backgroundColor: colors.line },
-  retry: { minHeight: 44, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.sheet },
+  retry: { minHeight: 44, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: colors.sheet },
   retryText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
-  note: { padding: spacing.md, flexDirection: 'row', alignItems: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: radius.md },
+  note: { padding: spacing.md, flexDirection: 'row', alignItems: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 6 },
   noteText: { flex: 1, marginLeft: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   pressed: { opacity: 0.7 },
 }));

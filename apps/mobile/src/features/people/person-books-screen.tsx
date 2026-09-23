@@ -123,7 +123,7 @@ const styles = createThemedStyles(() => ({
   sheet: { maxHeight: '78%', padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.sheet },
   sheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
   sheetHint: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 10 },
-  searchBar: { minHeight: 46, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
+  searchBar: { minHeight: 46, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: 6, backgroundColor: colors.paper },
   searchInput: { flex: 1, paddingHorizontal: spacing.sm, color: colors.ink, fontSize: 12 },
   bookList: { marginTop: spacing.sm },
   choice: { minHeight: 64, paddingHorizontal: spacing.xs, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },

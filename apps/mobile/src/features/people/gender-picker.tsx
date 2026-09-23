@@ -47,8 +47,8 @@ export function formatGender(gender: Gender | null): string {
 const styles = createThemedStyles(() => ({
   field: { marginTop: spacing.lg },
   label: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
-  segmented: { flexDirection: 'row', padding: 3, borderRadius: radius.md, backgroundColor: colors.sheet },
-  segment: { flex: 1, minHeight: 42, flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  segmented: { flexDirection: 'row', padding: 3, borderRadius: 6, backgroundColor: colors.sheet },
+  segment: { flex: 1, minHeight: 42, flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   segmentActive: { backgroundColor: colors.paper },
   segmentText: { color: colors.inkFaint, fontSize: 11 },
   symbolFallback: { width: 15, color: colors.inkFaint, fontSize: 15, lineHeight: 18, textAlign: 'center' },

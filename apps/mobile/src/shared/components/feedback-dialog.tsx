@@ -31,5 +31,5 @@ export function FeedbackDialog({ children, onBackdropPress, onRequestClose }: Fe
 const styles = createThemedStyles(() => ({
   backdrop: { flex: 1, justifyContent: 'center', padding: spacing.lg, backgroundColor: colors.backdropStrong },
   keyboardView: { width: '100%', alignItems: 'center' },
-  surface: { width: '100%', maxWidth: 420, padding: spacing.xl, borderRadius: radius.xl, backgroundColor: colors.sheet, shadowColor: colors.ink, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 20 },
+  surface: { width: '100%', maxWidth: 420, padding: spacing.xl, borderRadius: 6, backgroundColor: colors.sheet, shadowColor: colors.ink, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 20 },
 }));

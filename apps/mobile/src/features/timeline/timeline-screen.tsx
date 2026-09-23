@@ -238,7 +238,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                 <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor('check-in') }]} /></View>
                 <View style={styles.selectedEntryContent}>
                   <Text style={styles.selectedEntryMeta}>打卡 / {selectedCheckIn.city ? `${selectedCheckIn.city} / ` : ''}{formatTime(selectedCheckIn.createdAt)}</Text>
-                  <Text style={styles.selectedCheckInTitle}>今天也在</Text>
+                  <Text style={styles.selectedCheckInTitle}>在{selectedCheckIn.city || '这里'}留下记录</Text>
                 </View>
               </View>
             ) : null}
@@ -416,7 +416,7 @@ const styles = createThemedStyles(() => ({
   container: { padding: spacing.lg, paddingBottom: spacing.xxl },
   calendarSection: { marginTop: 0 },
   calendarHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  monthJump: { borderRadius: radius.sm },
+  monthJump: { borderRadius: 6 },
   monthJumpPressed: { opacity: 0.55 },
   calendarYear: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
@@ -425,7 +425,7 @@ const styles = createThemedStyles(() => ({
   weekRow: { flexDirection: 'row', marginTop: spacing.md, paddingBottom: spacing.sm },
   weekLabel: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 0.3, textAlign: 'center' },
   weekLabelWeekend: { color: colors.sun },
-  calendarGrid: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
+  calendarGrid: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 6, backgroundColor: colors.sheet },
   calendarWeek: { flexDirection: 'row' },
   calendarCell: { flex: 1, aspectRatio: 0.72, paddingTop: 8, paddingHorizontal: 5, alignItems: 'center', overflow: 'hidden', backgroundColor: colors.sheet },
   calendarCellColumnDivider: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.line },
@@ -450,7 +450,7 @@ const styles = createThemedStyles(() => ({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendText: { color: colors.inkFaint, fontSize: typography.size.meta },
   legendMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
-  almanacCard: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
+  almanacCard: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 6, backgroundColor: colors.sheet },
   almanacHeader: { minHeight: 76, paddingHorizontal: spacing.lg, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   almanacEyebrow: { color: colors.sun, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.1 },
   almanacTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18, lineHeight: 24 },
@@ -480,7 +480,7 @@ const styles = createThemedStyles(() => ({
   writeButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
   selectedList: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   selectedEntry: { minHeight: 72, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  selectedEntryPressed: { marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  selectedEntryPressed: { marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6, backgroundColor: colors.lifeLight },
   selectedEntryRail: { width: 20, alignSelf: 'stretch', alignItems: 'flex-start', paddingTop: 7 },
   selectedEntryDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.life },
   selectedEntryContent: { flex: 1 },

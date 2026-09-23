@@ -581,7 +581,7 @@ function animateMiniPlayerLayout(): void {
 const styles = createThemedStyles(() => ({
   miniDismissLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 1 },
   mini: { position: 'absolute', left: 0, zIndex: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.sheet, shadowColor: colors.ink, shadowOpacity: 0.14, shadowRadius: 12, elevation: 6 },
-  miniExpanded: { padding: spacing.xs, overflow: 'hidden', borderWidth: 1, borderColor: colors.lineSoft, borderRadius: radius.lg },
+  miniExpanded: { padding: spacing.xs, overflow: 'hidden', borderWidth: 1, borderColor: colors.lineSoft, borderRadius: 6 },
   miniCollapsed: { justifyContent: 'center', borderWidth: 1, borderColor: colors.lifeLine, backgroundColor: colors.lifeDeep, shadowOpacity: 0.18, shadowRadius: 8, elevation: 5 },
   miniCollapsedLeft: { borderTopLeftRadius: 0, borderTopRightRadius: 22, borderBottomRightRadius: 22, borderBottomLeftRadius: 0 },
   miniCollapsedRight: { borderTopLeftRadius: 22, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderBottomLeftRadius: 22 },

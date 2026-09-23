@@ -67,9 +67,6 @@ export function PostShareDialog({ centerContent = false, children, contentReady,
           <Text style={styles.dialogEyebrow}>SHARE AS IMAGE</Text>
           <Text style={styles.dialogTitle}>分享完整长图</Text>
         </View>
-        <Pressable accessibilityLabel="关闭分享预览" accessibilityRole="button" disabled={sharing} onPress={onClose} style={({ pressed }) => [styles.closeButton, sharing && styles.disabled, pressed && styles.pressed]}>
-          <SymbolView name={{ android: 'close', ios: 'xmark', web: 'close' }} size={19} tintColor={colors.inkSoft} type="hierarchical" />
-        </Pressable>
       </View>
       <Text style={styles.dialogHint}>预览可上下滚动，分享时会生成一张包含全部内容的图片。</Text>
 
@@ -130,8 +127,7 @@ const styles = createThemedStyles(() => ({
   dialogEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 8, fontWeight: '700', letterSpacing: 1.2 },
   dialogTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 21 },
   dialogHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
-  closeButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.paper },
-  previewFrame: { height: 430, marginTop: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, backgroundColor: colors.sheet },
+  previewFrame: { height: 430, marginTop: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
   preview: { flex: 1, minHeight: 0, backgroundColor: colors.sheet },
   shareCanvas: { padding: spacing.xl, backgroundColor: colors.paper },
   cardBody: { width: '100%', flexGrow: 1 },
@@ -142,9 +138,9 @@ const styles = createThemedStyles(() => ({
   brandMark: { width: 6, height: 6, marginRight: spacing.xs, borderRadius: 3, backgroundColor: colors.life },
   brand: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: 7, fontWeight: '700', letterSpacing: 0.8 },
   actions: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm },
-  cancelButton: { minHeight: 48, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
+  cancelButton: { minHeight: 48, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: colors.paper },
   cancelText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
-  shareButton: { minHeight: 48, flex: 1.6, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.life },
+  shareButton: { minHeight: 48, flex: 1.6, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: colors.life },
   shareText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '700' },
   disabled: { opacity: 0.4 },
   pressed: { opacity: 0.66 },
