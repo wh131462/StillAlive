@@ -142,10 +142,10 @@ function buildActivityHeatmap(today: DayKey, posts: Post[], checkIns: CheckIn[])
   const end = dateFromDayKey(today);
   const firstRecordedDay = [...counts.keys()].sort()[0];
   const start = firstRecordedDay ? dateFromDayKey(firstRecordedDay) : end;
+  const gridStart = addDays(start, -start.getDay());
   const gridEnd = addDays(end, 6 - end.getDay());
-  const actualWeekCount = Math.round((gridEnd.getTime() - addDays(start, -start.getDay()).getTime()) / (7 * DAY_MS)) + 1;
+  const actualWeekCount = Math.round((gridEnd.getTime() - gridStart.getTime()) / (7 * DAY_MS)) + 1;
   const weekCount = Math.max(53, actualWeekCount);
-  const gridStart = addDays(gridEnd, -(weekCount - 1) * 7);
   let activeDays = 0;
   const weeks = Array.from({ length: weekCount }, (_, weekIndex) => Array.from({ length: 7 }, (_, dayIndex) => {
     const date = addDays(gridStart, weekIndex * 7 + dayIndex);
