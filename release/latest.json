@@ -1,6 +1,6 @@
 {
-  "versionCode": 27,
-  "versionName": "1.1.18",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.18.apk",
-  "releaseNotes": "做了一些优化"
+  "versionCode": 28,
+  "versionName": "1.1.19",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.19.apk",
+  "releaseNotes": "优化个人资料卡信息展示与人物列表布局。\n改进记录热力图，支持完整历史数据并自适应屏幕宽度。\n新增账本功能,可以开始记账啦~"
 }
