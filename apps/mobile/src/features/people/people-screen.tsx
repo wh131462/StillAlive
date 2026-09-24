@@ -141,7 +141,6 @@ export default function PeopleScreen() {
             {visiblePeople.length ? <View style={styles.list}>
             {visiblePeople.map((person, index) => {
               const avatar = person.avatarMediaId ? media.find((item) => item.id === person.avatarMediaId) : null;
-              const summary = summaries[person.id];
               const displayName = personDisplayName(person);
               return <Pressable key={person.id} accessibilityLabel={`查看${displayName}的人物详情`} accessibilityRole="button" onPress={() => router.push(`/person/${person.id}`)} style={({ pressed }) => [styles.personRow, index === visiblePeople.length - 1 && styles.personRowLast, pressed && styles.personRowPressed]}>
                 <View style={styles.avatar}>{avatar ? <Image accessibilityLabel={`${displayName}的头像`} resizeMode="cover" source={{ uri: avatar.localPath }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{displayName.slice(0, 1)}</Text>}</View>
@@ -151,7 +150,6 @@ export default function PeopleScreen() {
                     {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
                   </View>
                   <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>
-                  <Text style={styles.personStats}>{summary?.count ?? 0} 条共同记录 / {summary?.latestDay ? `最近 ${formatDay(summary.latestDay)}` : '还没有共同记录'}</Text>
                 </View>
                 <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
               </Pressable>;
@@ -172,11 +170,6 @@ export default function PeopleScreen() {
       </DraggableBottomSheet>
     </SafeAreaView>
   );
-}
-
-function formatDay(dayKey: string): string {
-  const [, month, day] = dayKey.split('-');
-  return `${Number(month)}月${Number(day)}日`;
 }
 
 const styles = createThemedStyles(() => ({
@@ -234,7 +227,6 @@ const styles = createThemedStyles(() => ({
   personName: { maxWidth: '64%', color: colors.ink, fontFamily: typography.display, fontSize: 17 },
   personRelation: { maxWidth: '34%', marginLeft: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden', borderRadius: 9, backgroundColor: colors.lifeLight, color: colors.life, fontSize: typography.size.meta },
   personMeta: { marginTop: 5, marginRight: spacing.md, color: colors.inkFaint, fontSize: 11, lineHeight: 17 },
-  personStats: { marginTop: 5, color: colors.life, fontFamily: typography.mono, fontSize: 10 },
   noResults: { padding: spacing.lg, borderRadius: 6, backgroundColor: colors.sheet },
   noResultsText: { color: colors.inkSoft, fontSize: 12 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },

@@ -1,38 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
-import type { Birthday, CheckIn, DayKey, Post } from '@still-alive/types';
+import type { CheckIn, DayKey, Post } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { toDayKey } from '../../shared/core/day-key';
-import { formatGender } from '../people/gender-picker';
 import { StyledName } from '../people/styled-name';
 import { TabPageHeader } from '../../shared/components/tab-page-header';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { birthdayFromDateString, birthdaySolarDate, formatBirthday } from '../people/person-profile';
 
 export default function DataScreen() {
   const router = useRouter();
-  const { albumMedia, albums, books, checkIns, media, musicCollectionEntries, musicPlaylists, posts, preferences, tagDefinitions, today } = useAppState();
+  const { width } = useWindowDimensions();
+  const { albumMedia, albums, books, checkIns, media, musicCollectionEntries, musicPlaylists, posts, preferences, today } = useAppState();
   const [avatarFailed, setAvatarFailed] = useState(false);
   const avatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const avatarUri = avatar?.localPath ?? null;
-  const customTags = preferences.profileCustomTagIds.map((id) => tagDefinitions.find((tag) => tag.id === id)?.name).filter((name): name is string => Boolean(name));
-  const tags = [preferences.profileMbti, ...customTags].filter(Boolean).slice(0, 4);
   const selfAlbums = albums.filter((album) => album.personId === null);
   const selfAlbumIds = new Set(selfAlbums.map((album) => album.id));
   const selfPhotos = albumMedia.filter((item) => selfAlbumIds.has(item.albumId));
   const selfMusicCount = musicCollectionEntries.filter((entry) => entry.targetType === 'self').length;
   const recordedDays = new Set([...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)]).size;
-  const activityHeatmap = useMemo(() => buildActivityHeatmap(today, posts, checkIns), [checkIns, posts, today]);
-  const selfBirthday = birthdayFromDateString(preferences.birthDate, preferences.birthDateCalendar, preferences.birthDateIsLeapMonth);
-  const age = currentAge(selfBirthday);
-  const profileValues = [age === null ? null : `${age} 岁`, preferences.profileGender ? formatGender(preferences.profileGender) : null, selfBirthday ? formatBirthday(selfBirthday) : null].filter((value): value is string => Boolean(value));
-
+  const visibleHeatmapWeeks = Math.max(1, Math.floor((width - spacing.lg * 2 - spacing.md * 2 - HEATMAP_WEEKDAY_WIDTH) / HEATMAP_WEEK_STEP));
+  const activityHeatmap = useMemo(() => buildActivityHeatmap(today, posts, checkIns, visibleHeatmapWeeks), [checkIns, posts, today, visibleHeatmapWeeks]);
   useEffect(() => setAvatarFailed(false), [avatarUri]);
 
   return <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -46,8 +40,8 @@ export default function DataScreen() {
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/profile')} style={({ pressed }) => [styles.profileCard, pressed && styles.pressed]}>
         <View pointerEvents="none" style={styles.profileCardAccent} />
-        <View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="我的头像" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{(preferences.nickname || preferences.profileName).trim().slice(0, 1) || '我'}</Text>}</View>
-        <View style={styles.profileCopy}><StyledName numberOfLines={1} style={styles.name} value={preferences.nickname || preferences.profileName || '未设置姓名'} variant={preferences.selfNameStyle} />{preferences.profileSignature ? <Text numberOfLines={2} style={styles.profileSignature}>{preferences.profileSignature}</Text> : null}{profileValues.length ? <View style={styles.profileDetails}><Text style={styles.profileMeta}>{profileValues.join(' ')}</Text></View> : null}{tags.length ? <View style={styles.tags}>{tags.map((tag) => <View key={tag} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>)}</View> : null}</View>
+        <View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image accessibilityLabel="我的头像" onError={() => setAvatarFailed(true)} resizeMode="cover" source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{preferences.nickname.trim().slice(0, 1) || '我'}</Text>}</View>
+        <View style={styles.profileCopy}><StyledName numberOfLines={1} style={styles.name} value={preferences.nickname.trim() || '未设置昵称'} variant={preferences.selfNameStyle} />{preferences.profileSignature ? <Text numberOfLines={2} style={styles.profileSignature}>{preferences.profileSignature}</Text> : null}</View>
         <View style={styles.editIcon}><SymbolView name={{ android: 'edit', ios: 'pencil', web: 'edit' }} size={18} tintColor={colors.life} type="hierarchical" /></View>
       </Pressable>
 
@@ -119,9 +113,8 @@ interface ActivityHeatmapData {
 }
 
 function ActivityHeatmap({ activeDays, monthLabels, weeks }: ActivityHeatmapData) {
-  const heatmapRef = useRef<ScrollView>(null);
-  return <View accessibilityLabel={`记录热力，过去一年有 ${activeDays} 天留下记录`} accessible style={styles.activityCard}>
-    <ScrollView ref={heatmapRef} horizontal onContentSizeChange={(width) => heatmapRef.current?.scrollTo({ x: width, animated: false })} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heatmapContent}>
+  return <View accessibilityLabel={`记录热力，有 ${activeDays} 天留下记录`} accessible style={styles.activityCard}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heatmapContent}>
       <View>
         <View style={styles.monthLabels}><View style={styles.weekdaySpacer} />{monthLabels.map((label, index) => <View key={index} style={styles.monthLabelCell}><Text style={styles.monthLabel}>{label}</Text></View>)}</View>
         <View style={styles.heatmapRow}>
@@ -136,7 +129,7 @@ function ActivityHeatmap({ activeDays, monthLabels, weeks }: ActivityHeatmapData
   </View>;
 }
 
-function buildActivityHeatmap(today: DayKey, posts: Post[], checkIns: CheckIn[]): ActivityHeatmapData {
+function buildActivityHeatmap(today: DayKey, posts: Post[], checkIns: CheckIn[], minimumWeekCount: number): ActivityHeatmapData {
   const counts = new Map<DayKey, number>();
   for (const item of [...posts, ...checkIns]) counts.set(item.dayKey, (counts.get(item.dayKey) ?? 0) + 1);
   const end = dateFromDayKey(today);
@@ -145,7 +138,7 @@ function buildActivityHeatmap(today: DayKey, posts: Post[], checkIns: CheckIn[])
   const gridStart = addDays(start, -start.getDay());
   const gridEnd = addDays(end, 6 - end.getDay());
   const actualWeekCount = Math.round((gridEnd.getTime() - gridStart.getTime()) / (7 * DAY_MS)) + 1;
-  const weekCount = Math.max(53, actualWeekCount);
+  const weekCount = Math.max(minimumWeekCount, actualWeekCount);
   let activeDays = 0;
   const weeks = Array.from({ length: weekCount }, (_, weekIndex) => Array.from({ length: 7 }, (_, dayIndex) => {
     const date = addDays(gridStart, weekIndex * 7 + dayIndex);
@@ -174,6 +167,8 @@ function addDays(date: Date, amount: number): Date {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HEATMAP_WEEKDAY_WIDTH = 22;
+const HEATMAP_WEEK_STEP = 14;
 
 function activityCellColor(count: number): string {
   if (count === 0) return colors.lineSoft;
@@ -187,18 +182,9 @@ function SpaceCard({ accessibilityLabel, icon, meta, onPress, title, warm = fals
   return <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.spaceCard, pressed && styles.pressed]}><View style={[styles.spaceIcon, warm && styles.spaceIconWarm]}><SymbolView name={icon} pointerEvents="none" size={24} tintColor={colors.life} type="hierarchical" /></View><SymbolView name={{ android: 'arrow_outward', ios: 'arrow.up.right', web: 'arrow_outward' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /><View style={styles.spaceCopy}><Text style={styles.spaceTitle}>{title}</Text><Text numberOfLines={2} style={styles.spaceMeta}>{meta}</Text></View></Pressable>;
 }
 
-function currentAge(value: Birthday | null, today = new Date()): number | null {
-  if (!value) return null;
-  const birthday = birthdaySolarDate(value);
-  const year = birthday.getFullYear();
-  const month = birthday.getMonth() + 1;
-  const day = birthday.getDate();
-  return today.getFullYear() - year - (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day) ? 1 : 0);
-}
-
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: spacing.xxl }, settingsButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.sheet },
-  profileCard: { marginTop: 0, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet }, profileCardAccent: { position: 'absolute', top: 0, right: spacing.lg, width: 58, height: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: colors.lifeLine, borderRadius: 38, backgroundColor: colors.lifeLight }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md, paddingRight: spacing.xl }, name: { fontFamily: typography.display, fontSize: 22 }, profileSignature: { marginTop: 5, color: colors.inkSoft, fontFamily: typography.display, fontSize: typography.size.caption, lineHeight: 17 }, profileDetails: { marginTop: spacing.sm }, profileMeta: { color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 16 }, tags: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: 5 }, tag: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: colors.lifeLight }, tagText: { color: colors.life, fontSize: typography.size.meta }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.lifeLight },
+  profileCard: { marginTop: 0, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet }, profileCardAccent: { position: 'absolute', top: 0, right: spacing.lg, width: 58, height: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: colors.lifeLine, borderRadius: 38, backgroundColor: colors.lifeLight }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md, paddingRight: spacing.xl }, name: { fontFamily: typography.display, fontSize: 22 }, profileSignature: { marginTop: 5, color: colors.inkSoft, fontFamily: typography.display, fontSize: typography.size.caption, lineHeight: 17 }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.lifeLight },
   sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   recordPanel: { overflow: 'hidden', borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet }, stats: { minHeight: 82, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent' }, stat: { flex: 1, alignItems: 'center' }, statValue: { color: colors.ink, fontFamily: typography.display, fontSize: 23 }, statLabel: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta }, statDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.line }, activityCard: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft }, heatmapContent: { paddingTop: spacing.md }, monthLabels: { height: 16, paddingLeft: 22, flexDirection: 'row' }, monthLabelCell: { width: 11, marginRight: 3 }, monthLabel: { width: 28, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 }, heatmapRow: { flexDirection: 'row', alignItems: 'center' }, weekdaySpacer: { width: 22 }, weekdayLabels: { width: 18, height: 95, marginRight: spacing.xs, justifyContent: 'space-between' }, weekdayLabel: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, lineHeight: 9, textAlign: 'right' }, heatmapGrid: { height: 95, flexDirection: 'row' }, heatmapWeek: { width: 11, marginRight: 3, rowGap: 3 }, heatmapCell: { width: 11, height: 11, borderRadius: 2 }, heatmapCellFuture: { backgroundColor: '#FFFFFF' }, heatmapLegend: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }, heatmapLegendText: { color: colors.inkFaint, fontSize: 9 }, legendCell: { width: 9, height: 9, borderRadius: 2 },
   spaceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
