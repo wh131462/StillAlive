@@ -314,6 +314,7 @@ export async function restorePasswordVaultFromBackup(parsed: ParsedBackup, backu
 
 export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSnapshot): BackupSnapshot {
   const media = mergeMedia(current.media, incoming.media);
+  const ledgerTransactions = mergeUpdatedById(current.ledgerTransactions ?? [], incoming.ledgerTransactions ?? []);
   const mediaIds = new Set(media.map((item) => item.id));
   const tagGroups = mergeUpdatedEntities(current.tagGroups ?? [], incoming.tagGroups ?? [], (item) => item.name.toLocaleLowerCase());
   const incomingTags = (incoming.tagDefinitions ?? []).map((tag) => {
@@ -366,6 +367,7 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
 
   return {
     checkIns: mergeCheckIns(current.checkIns, incoming.checkIns),
+    ledgerTransactions,
     posts,
     drafts: mergeUpdatedByKey(current.drafts, incoming.drafts, (item) => item.dayKey),
     people,
@@ -561,6 +563,7 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   const albums = value.albums ?? [];
   const albumMedia = value.albumMedia ?? [];
   const personBooks = value.personBooks ?? [];
+  const ledgerTransactions = value.ledgerTransactions ?? [];
   const personEvents = value.personEvents ?? [];
   const musicTracks = value.musicTracks ?? [];
   const musicCollectionEntries = value.musicCollectionEntries ?? [];
@@ -579,6 +582,10 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   assertUniqueIds(bookLists, '书单');
   assertUniqueIds(books, '书籍');
   assertUniqueIds(bookExcerpts, '摘抄');
+  assertUniqueIds(ledgerTransactions, '账单');
+  for (const transaction of ledgerTransactions) {
+    if (!['expense', 'income'].includes(transaction.type) || !Number.isSafeInteger(transaction.amountCents) || transaction.amountCents <= 0 || typeof transaction.category !== 'string' || !transaction.category.trim() || transaction.category.length > 40 || !/^\d{4}-\d{2}-\d{2}$/.test(transaction.dayKey) || !isValidDate(transaction.createdAt) || !isValidDate(transaction.updatedAt) || (transaction.note !== null && (typeof transaction.note !== 'string' || transaction.note.length > 200))) throw new Error('备份中的账单无效');
+  }
   const tagSystems = new Set<string>();
   for (const setting of tagSystemSettings) {
     if (!['mbti', 'constellation', 'zodiac', 'custom'].includes(setting.system) || typeof setting.enabled !== 'boolean' || !Number.isInteger(setting.sortOrder) || tagSystems.has(setting.system)) throw new Error('备份中的标签体系设置无效');
@@ -744,6 +751,7 @@ function migrateSnapshot(value: BackupSnapshot): void {
     { system: 'custom', enabled: true, sortOrder: 3 },
   ];
   value.personTags ??= [];
+  value.ledgerTransactions ??= [];
   for (const person of value.people) {
     person.customFields ??= {};
     person.importantDates ??= [];

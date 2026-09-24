@@ -1,4 +1,17 @@
 export type DayKey = `${number}-${number}-${number}`;
+export type LedgerTransactionType = 'expense' | 'income';
+
+export interface LedgerTransaction {
+  id: string;
+  type: LedgerTransactionType;
+  amountCents: number;
+  category: string;
+  dayKey: DayKey;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type BirthdayCalendar = 'solar' | 'lunar';
 export type BirthdayReminderMode = BirthdayCalendar | 'both';
 export type BuiltInTagSystem = 'mbti' | 'constellation' | 'zodiac' | 'custom';

@@ -1,9 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from './repository-contract';
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, Gender, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
-import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
-import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapMedia, mapMusicTrack, mapPerson, mapPersonEvent, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
+import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, LedgerTransactionRow, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
+import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapLedgerTransaction, mapMedia, mapMusicTrack, mapPerson, mapPersonEvent, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
 import { writePersistentError } from '../platform/persistent-log';
 
 function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
@@ -78,6 +78,29 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       'SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key DESC',
     );
     return rows.map(mapCheckIn);
+  }
+
+  async listLedgerTransactions(): Promise<LedgerTransaction[]> {
+    const rows = await this.db.getAllAsync<LedgerTransactionRow>('SELECT id, type, amount_cents, category, day_key, note, created_at, updated_at FROM ledger_transactions ORDER BY day_key DESC, created_at DESC');
+    return rows.map(mapLedgerTransaction);
+  }
+
+  async createLedgerTransaction(transaction: LedgerTransaction): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      'INSERT INTO ledger_transactions (id, type, amount_cents, category, day_key, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      transaction.id, transaction.type, transaction.amountCents, transaction.category, transaction.dayKey, transaction.note, transaction.createdAt, transaction.updatedAt,
+    ));
+  }
+
+  async updateLedgerTransaction(transaction: LedgerTransaction): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      'UPDATE ledger_transactions SET type = ?, amount_cents = ?, category = ?, day_key = ?, note = ?, updated_at = ? WHERE id = ?',
+      transaction.type, transaction.amountCents, transaction.category, transaction.dayKey, transaction.note, transaction.updatedAt, transaction.id,
+    ));
+  }
+
+  async deleteLedgerTransaction(transactionId: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM ledger_transactions WHERE id = ?', transactionId));
   }
 
   async createPost(post: Post, personIds: string[] = []): Promise<void> {
@@ -1152,13 +1175,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
     });
   }
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
-    const [checkInRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, personRelationshipNodes, personRelationships, personEvents, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, bookLists, bookListEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
+    const [checkInRows, ledgerTransactionRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, personRelationshipNodes, personRelationships, personEvents, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, bookLists, bookListEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
       this.db.getAllAsync<CheckInRow>('SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key'),
+      this.db.getAllAsync<LedgerTransactionRow>('SELECT id, type, amount_cents, category, day_key, note, created_at, updated_at FROM ledger_transactions ORDER BY day_key, created_at'),
       this.listPosts(),
       this.db.getAllAsync<DraftRow>('SELECT id, day_key, body_markdown, updated_at FROM drafts ORDER BY day_key'),
       this.listPeople(),
@@ -1187,6 +1211,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     ]);
     return {
       checkIns: checkInRows.map(mapCheckIn),
+      ledgerTransactions: ledgerTransactionRows.map(mapLedgerTransaction),
       posts,
       drafts: draftRows.map(mapDraft),
       people,
@@ -1217,9 +1242,12 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
+      }
+      for (const item of snapshot.ledgerTransactions ?? []) {
+        await transaction.runAsync('INSERT INTO ledger_transactions (id, type, amount_cents, category, day_key, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', item.id, item.type, item.amountCents, item.category, item.dayKey, item.note ?? null, item.createdAt, item.updatedAt);
       }
       for (const person of snapshot.people) {
         await transaction.runAsync(

@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 14;
+export const BACKUP_SCHEMA_VERSION = 15;
 
 export interface BackupManifest {
   schemaVersion: number;

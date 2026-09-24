@@ -1,10 +1,14 @@
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
   updateCheckInCity(checkInId: string, city: string): Promise<void>;
   getCheckIn(dayKey: DayKey): Promise<CheckIn | null>;
   listCheckIns(): Promise<CheckIn[]>;
+  listLedgerTransactions(): Promise<LedgerTransaction[]>;
+  createLedgerTransaction(transaction: LedgerTransaction): Promise<void>;
+  updateLedgerTransaction(transaction: LedgerTransaction): Promise<void>;
+  deleteLedgerTransaction(transactionId: string): Promise<void>;
   createPost(post: Post, personIds?: string[]): Promise<void>;
   updatePost(post: Post, personIds?: string[]): Promise<void>;
   setPostPinned(postId: string, pinned: boolean): Promise<void>;

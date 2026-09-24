@@ -562,6 +562,20 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'posts', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
     await db.execAsync('CREATE INDEX IF NOT EXISTS posts_pinned_idx ON posts(pinned DESC, day_key DESC, created_at DESC); PRAGMA user_version = 36;');
   }
+  if (currentVersion < 37) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS ledger_transactions (
+      id TEXT PRIMARY KEY NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('expense', 'income')),
+      amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+      category TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ledger_transactions_day_idx ON ledger_transactions(day_key DESC, created_at DESC);
+    PRAGMA user_version = 37;
+  `);
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

@@ -16,7 +16,7 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 export default function DataScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { albumMedia, albums, books, checkIns, media, musicCollectionEntries, musicPlaylists, posts, preferences, today } = useAppState();
+  const { albumMedia, albums, books, checkIns, ledgerTransactions, media, musicCollectionEntries, musicPlaylists, posts, preferences, today } = useAppState();
   const [avatarFailed, setAvatarFailed] = useState(false);
   const avatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const avatarUri = avatar?.localPath ?? null;
@@ -61,32 +61,45 @@ export default function DataScreen() {
       </View>
 
       <Text style={styles.sectionLabel}>我的空间</Text>
-      <View style={styles.spaceGrid}>
-        <SpaceCard
+      <View style={styles.spacePanel}>
+        <SpaceEntry
           accessibilityLabel="打开我的相册"
           icon={{ android: 'photo_library', ios: 'photo.on.rectangle', web: 'photo_library' }}
+          index="01"
           meta={selfAlbums.length ? `${selfAlbums.length} 个相册，${selfPhotos.length} 个媒体` : '照片、视频与生活片段'}
           onPress={() => router.push('/person/albums')}
           title="相册"
         />
-        <SpaceCard
+        <SpaceEntry
           accessibilityLabel="打开我的音乐盒"
           icon={{ android: 'music_note', ios: 'music.note', web: 'music_note' }}
+          index="02"
           meta={selfMusicCount || musicPlaylists.length ? `${selfMusicCount} 首音乐，${musicPlaylists.length} 个歌单` : '喜欢的声音与歌单'}
           onPress={() => router.push('/music-box' as RelativePathString)}
           title="音乐盒"
         />
-        <SpaceCard
+        <SpaceEntry
           accessibilityLabel="打开我的书架"
           icon={{ android: 'menu_book', ios: 'book.closed.fill', web: 'menu_book' }}
+          index="03"
           meta={books.length ? `${books.length} 本书` : '书籍、书摘与阅读进度'}
           onPress={() => router.push('/bookshelf' as RelativePathString)}
           title="书架"
           warm
         />
-        <SpaceCard
+        <SpaceEntry
+          accessibilityLabel="打开我的账本"
+          icon={{ android: 'account_balance_wallet', ios: 'wallet.pass', web: 'account_balance_wallet' }}
+          index="04"
+          meta={ledgerTransactions.length ? `${ledgerTransactions.length} 笔账单` : '记录日常支出与收入'}
+          onPress={() => router.push('/ledger' as RelativePathString)}
+          title="账本"
+        />
+        <SpaceEntry
           accessibilityLabel="打开我的密码本"
           icon={{ android: 'key', ios: 'key.fill', web: 'key' }}
+          index="05"
+          last
           meta="本机加密，离开即锁定"
           onPress={() => router.push('/vault')}
           title="密码本"
@@ -178,8 +191,8 @@ function activityCellColor(count: number): string {
   return colors.life;
 }
 
-function SpaceCard({ accessibilityLabel, icon, meta, onPress, title, warm = false }: { accessibilityLabel: string; icon: ComponentProps<typeof SymbolView>['name']; meta: string; onPress(): void; title: string; warm?: boolean }) {
-  return <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.spaceCard, pressed && styles.pressed]}><View style={[styles.spaceIcon, warm && styles.spaceIconWarm]}><SymbolView name={icon} pointerEvents="none" size={24} tintColor={colors.life} type="hierarchical" /></View><SymbolView name={{ android: 'arrow_outward', ios: 'arrow.up.right', web: 'arrow_outward' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /><View style={styles.spaceCopy}><Text style={styles.spaceTitle}>{title}</Text><Text numberOfLines={2} style={styles.spaceMeta}>{meta}</Text></View></Pressable>;
+function SpaceEntry({ accessibilityLabel, icon, index, last = false, meta, onPress, title, warm = false }: { accessibilityLabel: string; icon: ComponentProps<typeof SymbolView>['name']; index: string; last?: boolean; meta: string; onPress(): void; title: string; warm?: boolean }) {
+  return <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.spaceEntry, last && styles.spaceEntryLast, pressed && styles.pressed]}><Text style={[styles.spaceIndex, warm && styles.spaceIndexWarm]}>{index}</Text><View style={[styles.spaceIcon, warm && styles.spaceIconWarm]}><SymbolView name={icon} pointerEvents="none" size={21} tintColor={warm ? colors.sun : colors.life} type="hierarchical" /></View><Text style={styles.spaceTitle}>{title}</Text><Text numberOfLines={1} style={styles.spaceMeta}>{meta}</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>;
 }
 
 const styles = createThemedStyles(() => ({
@@ -187,12 +200,14 @@ const styles = createThemedStyles(() => ({
   profileCard: { marginTop: 0, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet }, profileCardAccent: { position: 'absolute', top: 0, right: spacing.lg, width: 58, height: 4, borderBottomLeftRadius: 2, borderBottomRightRadius: 2, backgroundColor: colors.life }, avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: colors.lifeLine, borderRadius: 38, backgroundColor: colors.lifeLight }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: colors.life, fontFamily: typography.display, fontSize: 30 }, profileCopy: { flex: 1, marginLeft: spacing.md, paddingRight: spacing.xl }, name: { fontFamily: typography.display, fontSize: 22 }, profileSignature: { marginTop: 5, color: colors.inkSoft, fontFamily: typography.display, fontSize: typography.size.caption, lineHeight: 17 }, editIcon: { position: 'absolute', top: spacing.md, right: spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.lifeLight },
   sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   recordPanel: { overflow: 'hidden', borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet }, stats: { minHeight: 82, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent' }, stat: { flex: 1, alignItems: 'center' }, statValue: { color: colors.ink, fontFamily: typography.display, fontSize: 23 }, statLabel: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta }, statDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.line }, activityCard: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft }, heatmapContent: { paddingTop: spacing.md }, monthLabels: { height: 16, paddingLeft: 22, flexDirection: 'row' }, monthLabelCell: { width: 11, marginRight: 3 }, monthLabel: { width: 28, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 }, heatmapRow: { flexDirection: 'row', alignItems: 'center' }, weekdaySpacer: { width: 22 }, weekdayLabels: { width: 18, height: 95, marginRight: spacing.xs, justifyContent: 'space-between' }, weekdayLabel: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, lineHeight: 9, textAlign: 'right' }, heatmapGrid: { height: 95, flexDirection: 'row' }, heatmapWeek: { width: 11, marginRight: 3, rowGap: 3 }, heatmapCell: { width: 11, height: 11, borderRadius: 2 }, heatmapCellFuture: { backgroundColor: '#FFFFFF' }, heatmapLegend: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }, heatmapLegendText: { color: colors.inkFaint, fontSize: 9 }, legendCell: { width: 9, height: 9, borderRadius: 2 },
-  spaceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  spaceCard: { width: '47%', minHeight: 132, padding: spacing.md, flexGrow: 1, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet },
-  spaceIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.lifeLight },
+  spacePanel: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet },
+  spaceEntry: { minHeight: 66, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  spaceEntryLast: { borderBottomWidth: 0 },
+  spaceIndex: { width: 25, color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.5 },
+  spaceIndexWarm: { color: colors.sun },
+  spaceIcon: { width: 30, height: 30, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center', borderTopRightRadius: radius.sm, borderBottomLeftRadius: radius.sm, backgroundColor: colors.lifeLight },
   spaceIconWarm: { backgroundColor: colors.sunLight },
-  spaceCopy: { position: 'absolute', right: spacing.md, bottom: spacing.md, left: spacing.md },
   spaceTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17 },
-  spaceMeta: { minHeight: 30, marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
+  spaceMeta: { flexShrink: 1, marginLeft: 'auto', marginRight: spacing.xs, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, textAlign: 'right' },
   pressed: { opacity: 0.68, transform: [{ scale: 0.985 }] },
 }));

@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { Birthday, BirthdayCalendar, CheckIn, DayKey, Person, Post } from '@still-alive/types';
+import type { Birthday, BirthdayCalendar, CheckIn, DayKey, LedgerTransaction, Person, Post } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { SolarDay } from 'tyme4ts';
@@ -15,13 +15,13 @@ import { createThemedStyles } from '../../shared/theme/app-theme';
 import { extractMusicShares } from '../../application/music-share';
 import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 
-type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio';
+type CalendarMarkerKind = 'check-in' | 'text' | 'image' | 'audio' | 'ledger';
 
 const birthdayCakeSource = require('../../../assets/birthday-cake.png');
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const { checkIns, people, posts, preferences, readingNoteSources, today, todayCheckIn } = useAppState();
+  const { checkIns, ledgerTransactions, people, posts, preferences, readingNoteSources, today, todayCheckIn } = useAppState();
   const [activeMonth, setActiveMonth] = useState(today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState<DayKey>(today);
   const checkInDays = useMemo(() => new Set(checkIns.map((item) => item.dayKey)), [checkIns]);
@@ -60,6 +60,7 @@ export default function CalendarScreen() {
         <CalendarView
           activeMonth={activeMonth}
           checkInDays={checkInDays}
+          ledgerTransactions={ledgerTransactions}
           onChangeMonth={changeMonth}
           onOpenPost={(postId) => router.push(`/post/${postId}`)}
           onSelectDay={selectDay}
@@ -81,6 +82,7 @@ export default function CalendarScreen() {
 interface CalendarViewProps {
   activeMonth: string;
   checkInDays: Set<DayKey>;
+  ledgerTransactions: LedgerTransaction[];
   onChangeMonth(offset: number): void;
   onOpenPost(postId: string): void;
   onSelectDay(dayKey: DayKey): void;
@@ -99,7 +101,7 @@ function BirthdayCakeIcon({ size }: { size: number }) {
   return <Image accessibilityIgnoresInvertColors accessible={false} resizeMode="contain" source={birthdayCakeSource} style={{ width: size, height: size, tintColor: colors.sun }} />;
 }
 
-function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, readingNoteSources, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
+function CalendarView({ activeMonth, checkInDays, ledgerTransactions, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, readingNoteSources, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
   const weeks = useMemo(() => {
     const cells = calendarCells(activeMonth);
     return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
@@ -121,9 +123,13 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
     }
     return values;
   }, [people, selfBirthday, weeks]);
+  const ledgerDays = useMemo(() => new Set(ledgerTransactions.map((item) => item.dayKey)), [ledgerTransactions]);
   const selectedLunarDate = lunarDateInfo(selectedDay);
   const selectedAlmanac = almanacInfo(selectedDay);
   const selectedBirthdays = birthdaysByDay.get(selectedDay) ?? [];
+  const selectedLedger = ledgerTransactions.filter((item) => item.dayKey === selectedDay);
+  const selectedLedgerExpense = selectedLedger.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amountCents, 0);
+  const selectedLedgerIncome = selectedLedger.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amountCents, 0);
   const selectedItemCount = selectedPosts.length + Number(Boolean(selectedCheckIn));
   const [year, month] = activeMonth.split('-');
 
@@ -149,6 +155,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               const dayBirthdays = birthdaysByDay.get(dayKey) ?? [];
               const itemCount = dayPosts.length + Number(checkInDays.has(dayKey));
               const markers: CalendarMarkerKind[] = [
+                ...(ledgerDays.has(dayKey) ? ['ledger' as const] : []),
                 ...(checkInDays.has(dayKey) ? ['check-in' as const] : []),
                 ...dayPosts.map((post) => postMarkerKind(post.bodyMarkdown)),
               ].slice(0, 3);
@@ -159,7 +166,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               return (
                 <Pressable
                   key={dayKey}
-                  accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}${dayBirthdays.length ? `，有 ${dayBirthdays.length} 个生日` : ''}${itemCount ? `，有 ${itemCount} 条内容` : ''}`}
+                  accessibilityLabel={`${dayKey}${lunarDate ? `，农历${lunarDate.fullLabel}` : ''}${dayBirthdays.length ? `，有 ${dayBirthdays.length} 个生日` : ''}${itemCount ? `，有 ${itemCount} 条内容` : ''}${ledgerDays.has(dayKey) ? '，有账本记录' : ''}`}
                   accessibilityRole="button"
                   onPress={() => onSelectDay(dayKey)}
                   style={[styles.calendarCell, ...dividers, outsideMonth && styles.calendarCellOutsideMonth, selected && styles.calendarCellSelected]}
@@ -187,6 +194,7 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
         <LegendItem kind="text" label="文字" />
         <LegendItem kind="image" label="影像" />
         <LegendItem kind="audio" label="录音" />
+        <LegendItem kind="ledger" label="账本" />
         <View style={styles.legendItem}><BirthdayCakeIcon size={11} /><Text style={styles.legendText}>生日</Text></View>
         <Text style={styles.legendText}>内容最多 3 个</Text>
       </View>
@@ -218,18 +226,18 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
           <View style={styles.selectedDateBlock}>
             <Text style={styles.selectedDate}>{selectedDay.replaceAll('-', '.')} {chineseWeekdayLabel(selectedDay)}</Text>
             {selectedLunarDate ? <Text style={styles.selectedLunar}>农历 {selectedLunarDate.fullLabel}{selectedLunarDate.term ? ` ${selectedLunarDate.term}` : ''}</Text> : null}
-            <Text style={styles.selectedHint}>{selectedItemCount ? `这一天留下了 ${selectedItemCount} 个片段` : '这一天还没有内容'}</Text>
+            <Text style={styles.selectedHint}>{selectedItemCount ? `这一天留下了 ${selectedItemCount} 个片段` : selectedLedger.length ? '这一天有账本记录' : '这一天还没有内容'}</Text>
           </View>
           {selectedDay <= today ? <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable> : null}
         </View>
-        {selectedBirthdays.length || selectedItemCount ? (
+        {selectedBirthdays.length || selectedItemCount || selectedLedger.length ? (
           <View style={styles.selectedList}>
             {selectedBirthdays.map((birthday) => (
               <View key={`${birthday.personId}_${birthday.calendar}`} style={styles.selectedEntry}>
                 <View style={styles.selectedEntryRail}><BirthdayCakeIcon size={14} /></View>
                 <View style={styles.selectedEntryContent}>
                   <Text style={styles.selectedEntryMeta}>{birthday.personId === 'self' ? '我的生日' : '人物生日'}</Text>
-                  <Text style={styles.selectedBirthdayTitle}>{selectedDay === today ? '今天' : '这一天'}是{birthday.personName}的{birthdayCalendarLabel(birthday.calendar)}生日</Text>
+                  <Text style={styles.selectedEntryTitle}>{selectedDay === today ? '今天' : '这一天'}是{birthday.personName}的{birthdayCalendarLabel(birthday.calendar)}生日</Text>
                 </View>
               </View>
             ))}
@@ -237,8 +245,17 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
               <View style={styles.selectedEntry}>
                 <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor('check-in') }]} /></View>
                 <View style={styles.selectedEntryContent}>
-                  <Text style={styles.selectedEntryMeta}>打卡 / {selectedCheckIn.city ? `${selectedCheckIn.city} / ` : ''}{formatTime(selectedCheckIn.createdAt)}</Text>
-                  <Text style={styles.selectedCheckInTitle}>在{selectedCheckIn.city || '这里'}留下记录</Text>
+                  <Text style={styles.selectedEntryMeta}>打卡/{selectedCheckIn.city ? `${selectedCheckIn.city}/` : ''}{formatTime(selectedCheckIn.createdAt)}</Text>
+                  <Text style={styles.selectedEntryTitle}>在{selectedCheckIn.city || '这里'}留下记录</Text>
+                </View>
+              </View>
+            ) : null}
+            {selectedLedger.length ? (
+              <View style={styles.selectedEntry} accessibilityLabel={`账本 ${selectedLedger.length} 笔，支出 ${formatLedgerMoney(selectedLedgerExpense)}，收入 ${formatLedgerMoney(selectedLedgerIncome)}`}>
+                <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: colors.sun }]} /></View>
+                <View style={styles.selectedEntryContent}>
+                  <Text style={styles.selectedEntryMeta}>账本/{selectedLedger.length}条</Text>
+                  <Text ellipsizeMode="tail" numberOfLines={1} style={styles.selectedEntryTitle}>支出 {formatLedgerMoney(selectedLedgerExpense)}　收入 {formatLedgerMoney(selectedLedgerIncome)}</Text>
                 </View>
               </View>
             ) : null}
@@ -251,8 +268,8 @@ function CalendarView({ activeMonth, checkInDays, onChangeMonth, onOpenPost, onS
                 <Pressable key={post.id} accessibilityLabel={`打开 ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={() => onOpenPost(post.id)} style={({ pressed }) => [styles.selectedEntry, pressed && styles.selectedEntryPressed]}>
                   <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: markerColor(markerKind) }]} /></View>
                   <View style={styles.selectedEntryContent}>
-                    <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)} / {post.locationName ? `${post.locationName} / ` : ''}{formatTime(post.createdAt)}{attachmentLabel ? ` / ${attachmentLabel}` : ''}</Text>
-                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.selectedPostPreview}>{previewText || attachmentLabel || '记录了一些内容'}</Text>
+                    <Text style={styles.selectedEntryMeta}>{markerLabel(markerKind)}/{post.locationName ? `${post.locationName}/` : ''}{formatTime(post.createdAt)}{attachmentLabel ? `/${attachmentLabel}` : ''}</Text>
+                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.selectedEntryTitle}>{previewText || attachmentLabel || '记录了一些内容'}</Text>
                   </View>
                   <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
                 </Pressable>
@@ -384,11 +401,13 @@ function formatTime(iso: string): string {
   return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatLedgerMoney(cents: number): string { return `¥${(cents / 100).toFixed(2)}`; }
+
 function postAttachmentLabel(markdown: string, readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null): string {
   const imageCount = [...markdown.matchAll(/!\[[^\]]*\]\(media:\/\/([^)]+)\)/g)].length;
   const audioCount = extractAudioEmbeds(markdown).length;
   const musicCount = extractMusicShares(markdown).length;
-  return [readingSource ? `引用《${readingSourceTitle(readingSource)}》` : '', musicCount ? `${musicCount} 首音乐` : '', imageCount ? `${imageCount} 个影像` : '', audioCount ? `${audioCount} 段语音` : ''].filter(Boolean).join(' / ');
+  return [readingSource ? `引用《${readingSourceTitle(readingSource)}》` : '', musicCount ? `${musicCount} 首音乐` : '', imageCount ? `${imageCount} 个影像` : '', audioCount ? `${audioCount} 段语音` : ''].filter(Boolean).join('/');
 }
 
 function postMarkerKind(markdown: string): CalendarMarkerKind {
@@ -401,6 +420,7 @@ function markerColor(kind: CalendarMarkerKind): string {
   if (kind === 'check-in') return colors.inkFaint;
   if (kind === 'image') return colors.sun;
   if (kind === 'audio') return colors.danger;
+  if (kind === 'ledger') return colors.sun;
   return colors.life;
 }
 
@@ -408,6 +428,7 @@ function markerLabel(kind: CalendarMarkerKind): string {
   if (kind === 'check-in') return '打卡';
   if (kind === 'image') return '影像记录';
   if (kind === 'audio') return '录音记录';
+  if (kind === 'ledger') return '账本记录';
   return '文字记录';
 }
 
@@ -483,10 +504,8 @@ const styles = createThemedStyles(() => ({
   selectedEntryPressed: { marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6, backgroundColor: colors.lifeLight },
   selectedEntryRail: { width: 20, alignSelf: 'stretch', alignItems: 'flex-start', paddingTop: 7 },
   selectedEntryDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.life },
-  selectedEntryContent: { flex: 1 },
+  selectedEntryContent: { minWidth: 0, flex: 1 },
   selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
-  selectedCheckInTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
-  selectedBirthdayTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 24 },
-  selectedPostPreview: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
+  selectedEntryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 24 },
   selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
 }));

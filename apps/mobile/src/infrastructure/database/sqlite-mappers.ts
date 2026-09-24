@@ -1,5 +1,5 @@
-import { PROFILE_COLLECTION_FIELDS, type AppThemeId, type Book, type BookExcerpt, type CheckIn, type DayKey, type Draft, type Gender, type Media, type MusicQuality, type MusicTrack, type NameStyleId, type Person, type PersonEvent, type PersonImportantDate, type Post, type ProfileCollectionField, type ProfileCollectionRequest, type ReaderTocItem, type ReadingNoteSource, type TagSystemSetting } from '@still-alive/types';
-import type { BookExcerptRow, BookRow, CheckInRow, DraftRow, MediaRow, MusicTrackRow, PersonEventRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
+import { PROFILE_COLLECTION_FIELDS, type AppThemeId, type Book, type BookExcerpt, type CheckIn, type DayKey, type Draft, type Gender, type LedgerTransaction, type Media, type MusicQuality, type MusicTrack, type NameStyleId, type Person, type PersonEvent, type PersonImportantDate, type Post, type ProfileCollectionField, type ProfileCollectionRequest, type ReaderTocItem, type ReadingNoteSource, type TagSystemSetting } from '@still-alive/types';
+import type { BookExcerptRow, BookRow, CheckInRow, DraftRow, LedgerTransactionRow, MediaRow, MusicTrackRow, PersonEventRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
 
 export function mapCheckIn(row: CheckInRow): CheckIn {
   return { id: row.id, dayKey: row.day_key as DayKey, city: row.city, createdAt: row.created_at };
@@ -25,6 +25,10 @@ export function mapDraft(row: DraftRow): Draft {
     bodyMarkdown: row.body_markdown,
     updatedAt: row.updated_at,
   };
+}
+
+export function mapLedgerTransaction(row: LedgerTransactionRow): LedgerTransaction {
+  return { id: row.id, type: row.type === 'income' ? 'income' : 'expense', amountCents: row.amount_cents, category: row.category, dayKey: row.day_key as DayKey, note: row.note, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 export function parseStringList(value: string | undefined): string[] {

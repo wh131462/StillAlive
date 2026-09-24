@@ -1,10 +1,11 @@
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { AppPreferences, BackupSnapshot, HomeMemory } from '../../infrastructure/database/database-models';
 
 export interface AppStateValue {
   today: DayKey;
   todayCheckIn: CheckIn | null;
   checkIns: CheckIn[];
+  ledgerTransactions: LedgerTransaction[];
   posts: Post[];
   people: Person[];
   personRelationships: PersonRelationship[];
@@ -37,6 +38,9 @@ export interface AppStateValue {
   error: string | null;
   checkInToday(): Promise<CheckIn>;
   updateCheckInCity(checkInId: string, city: string): Promise<void>;
+  createLedgerTransaction(transaction: LedgerTransaction): Promise<void>;
+  updateLedgerTransaction(transaction: LedgerTransaction): Promise<void>;
+  deleteLedgerTransaction(transactionId: string): Promise<void>;
   savePost(bodyMarkdown: string, personIds?: string[], dayKey?: DayKey, locationName?: string | null): Promise<Post>;
   updatePost(postId: string, bodyMarkdown: string, personIds?: string[], locationName?: string | null): Promise<void>;
   setPostPinned(postId: string, pinned: boolean): Promise<void>;

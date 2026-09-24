@@ -1,9 +1,10 @@
-import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, Draft, Gender, Media, MusicCollectionEntry, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicQuality, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonPrivacyMode, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonRelationshipNodeKind, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, Draft, Gender, LedgerTransaction, Media, MusicCollectionEntry, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicQuality, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonPrivacyMode, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonRelationshipNodeKind, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
 
 export interface CheckInRow { id: string; day_key: string; city: string | null; created_at: string; }
 export interface PostRow { comments_json: string; id: string; day_key: string; body_markdown: string; location_name: string | null; pinned: number; created_at: string; updated_at: string; }
 export interface DraftRow { id: string; day_key: string; body_markdown: string; updated_at: string; }
+export interface LedgerTransactionRow { id: string; type: LedgerTransaction['type']; amount_cents: number; category: string; day_key: string; note: string | null; created_at: string; updated_at: string; }
 export interface PersonRow {
   id: string; name: string; nickname: string | null; bio: string | null; avatar_media_id: string | null; gender: Gender | null; relation_to_me: string | null; impression: string | null;
   birthday_calendar: 'solar' | 'lunar' | null; birthday_year: number | null; birthday_month: number | null; birthday_day: number | null;
@@ -27,6 +28,7 @@ export interface ProfileCollectionRequestRow { id: string; person_id: string; fi
 
 export interface BackupSnapshot {
   checkIns: CheckIn[]; posts: Post[]; drafts: Draft[]; people: Person[]; media: Media[];
+  ledgerTransactions?: LedgerTransaction[];
   postPersons: Array<{ postId: string; personId: string }>;
   settings: Record<string, string>;
   tagDefinitions?: TagDefinition[]; tagSystemSettings?: TagSystemSetting[]; personTags?: PersonTagAssignment[]; tagGroups?: TagGroup[];

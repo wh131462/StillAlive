@@ -4,7 +4,7 @@ import { PERSON_CUSTOM_FIELD_VALUE_MAX_LENGTH } from '@still-alive/types';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState as NativeAppState, Linking } from 'react-native';
-import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, Birthday, CheckIn, DayKey, Draft, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
+import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, Birthday, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipKind, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
 import type { StillAliveRepository } from '../../infrastructure/database/repository-contract';
@@ -109,6 +109,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [today, setToday] = useState<DayKey>(() => toDayKey(new Date()));
   const [todayCheckIn, setTodayCheckIn] = useState<CheckIn | null>(null);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
+  const [ledgerTransactions, setLedgerTransactions] = useState<LedgerTransaction[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [personRelationships, setPersonRelationships] = useState<PersonRelationship[]>([]);
@@ -193,9 +194,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setToday(activeToday);
         void (async () => {
           await cleanupExpiredProfileCollectionRequests().catch((cause) => writePersistentError('profile-collection.expired.cleanup.failed', cause));
-          const [checkIn, storedCheckIns, storedPeople, storedPosts, storedPreferences, storedEvents] = await Promise.all([
+          const [checkIn, storedCheckIns, storedLedgerTransactions, storedPeople, storedPosts, storedPreferences, storedEvents] = await Promise.all([
             repository.getCheckIn(activeToday),
             repository.listCheckIns(),
+            repository.listLedgerTransactions(),
             repository.listPeople(),
             repository.listPosts(),
             repository.getPreferences(),
@@ -203,6 +205,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           ]);
           setTodayCheckIn(checkIn);
           setCheckIns(storedCheckIns);
+          setLedgerTransactions(storedLedgerTransactions);
           setPosts(storedPosts);
           setPersonEvents(storedEvents);
           await syncBirthdayNotifications(storedPeople, storedPreferences).catch((cause) => writePersistentError('notifications.birthday.sync.background-failed', cause));
@@ -223,6 +226,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       await cleanupExpiredProfileCollectionRequests().catch((cause) => writePersistentError('profile-collection.expired.cleanup.failed', cause));
       const checkIn = await repository.getCheckIn(today);
       const storedCheckIns = await repository.listCheckIns();
+      const storedLedgerTransactions = await repository.listLedgerTransactions();
       const storedPosts = await repository.listPosts();
       const storedPeople = await repository.listPeople();
       const storedPersonRelationships = await repository.listPersonRelationships();
@@ -251,6 +255,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setError(null);
         setTodayCheckIn(checkIn);
         setCheckIns(storedCheckIns);
+        setLedgerTransactions(storedLedgerTransactions);
         setPosts(storedPosts);
         setPeople(storedPeople);
         setPersonRelationships(storedPersonRelationships);
@@ -331,6 +336,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     await repository.updateCheckInCity(checkInId, city);
     setTodayCheckIn((current) => current?.id === checkInId ? { ...current, city } : current);
     setCheckIns((current) => current.map((item) => item.id === checkInId ? { ...item, city } : item));
+  }, [repository]);
+
+  const createLedgerTransaction = useCallback(async (transaction: LedgerTransaction) => {
+    validateLedgerTransaction(transaction);
+    await repository.createLedgerTransaction(transaction);
+    setLedgerTransactions(await repository.listLedgerTransactions());
+  }, [repository]);
+
+  const updateLedgerTransaction = useCallback(async (transaction: LedgerTransaction) => {
+    validateLedgerTransaction(transaction);
+    if (!ledgerTransactions.some((item) => item.id === transaction.id)) throw new Error('要编辑的账单不存在');
+    await repository.updateLedgerTransaction(transaction);
+    setLedgerTransactions(await repository.listLedgerTransactions());
+  }, [ledgerTransactions, repository]);
+
+  const deleteLedgerTransaction = useCallback(async (transactionId: string) => {
+    await repository.deleteLedgerTransaction(transactionId);
+    setLedgerTransactions((current) => current.filter((item) => item.id !== transactionId));
   }, [repository]);
 
   const savePost = useCallback(async (bodyMarkdown: string, personIds: string[] = [], dayKey: DayKey = today, locationName: string | null = null): Promise<Post> => {
@@ -1252,9 +1275,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       void syncMemoryNotifications(oldPosts, oldPreferences).catch((syncCause) => writePersistentError('notifications.memory.restore-rollback.failed', syncCause));
       throw cause;
     }
-    const [checkIn, storedCheckIns, storedPosts, storedPeople, storedPersonRelationshipNodes, storedPersonRelationships, storedPersonEvents, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
+    const [checkIn, storedCheckIns, storedLedgerTransactions, storedPosts, storedPeople, storedPersonRelationshipNodes, storedPersonRelationships, storedPersonEvents, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
       repository.getCheckIn(today),
       repository.listCheckIns(),
+      repository.listLedgerTransactions(),
       repository.listPosts(),
       repository.listPeople(),
       repository.listPersonRelationshipNodes(),
@@ -1282,6 +1306,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     ]);
     setTodayCheckIn(checkIn);
     setCheckIns(storedCheckIns);
+    setLedgerTransactions(storedLedgerTransactions);
     setPosts(storedPosts);
     setPeople(storedPeople);
     setPersonRelationshipNodes(storedPersonRelationshipNodes);
@@ -1349,6 +1374,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (!dataDeleted) throw new Error(vaultDeleted ? '密码本已删除，但记录数据删除失败，请重试' : '密码本和记录数据删除失败，请重试');
     setTodayCheckIn(null);
     setCheckIns([]);
+    setLedgerTransactions([]);
     setPosts([]);
     setPeople([]);
     setPersonRelationships([]);
@@ -1406,6 +1432,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     today,
     todayCheckIn,
     checkIns,
+    ledgerTransactions,
     posts,
     people,
     personRelationships,
@@ -1438,6 +1465,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     error,
     checkInToday,
     updateCheckInCity,
+    createLedgerTransaction,
+    updateLedgerTransaction,
+    deleteLedgerTransaction,
     savePost,
     savePostComment,
     updatePost,
@@ -1521,9 +1551,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     getReadingNoteSource,
     saveReadingNoteSource,
     deleteReadingNoteSource,
-  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonEvent, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, loadDraft, media, mergePersons, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personEvents, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonEvent, savePersonRelationship, savePost, savePostComment, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, setPostPinned, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
+  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createLedgerTransaction, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteLedgerTransaction, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonEvent, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, ledgerTransactions, loadDraft, media, mergePersons, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personEvents, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonEvent, savePersonRelationship, savePost, savePostComment, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, setPostPinned, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateLedgerTransaction, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+}
+
+function validateLedgerTransaction(transaction: LedgerTransaction): void {
+  if (!transaction.id || !['expense', 'income'].includes(transaction.type)) throw new Error('账单类型无效');
+  if (!Number.isSafeInteger(transaction.amountCents) || transaction.amountCents <= 0) throw new Error('金额必须大于 0');
+  if (!transaction.category.trim() || transaction.category.length > 40) throw new Error('账单分类无效');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(transaction.dayKey)) throw new Error('账单日期无效');
+  if (transaction.note !== null && transaction.note.length > 200) throw new Error('备注不能超过 200 字');
 }
 
 function deriveImplicitParentRelationships(relationships: PersonRelationship[]): PersonRelationship[] {
