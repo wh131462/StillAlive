@@ -718,14 +718,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async listBirthdayNotificationSchedules(): Promise<BirthdayNotificationSchedule[]> {
-    const rows = await this.db.getAllAsync<{ id: string; person_id: string; event_type: 'advance' | 'today'; birthday_day_key: string; scheduled_at: string; platform_identifier: string }>('SELECT id, person_id, event_type, birthday_day_key, scheduled_at, platform_identifier FROM birthday_notification_schedules ORDER BY scheduled_at');
-    return rows.map((row) => ({ id: row.id, personId: row.person_id, eventType: row.event_type, birthdayDayKey: row.birthday_day_key as DayKey, scheduledAt: row.scheduled_at, platformIdentifier: row.platform_identifier }));
+    const rows = await this.db.getAllAsync<{ id: string; person_id: string; event_type: BirthdayNotificationSchedule['eventType']; birthday_day_key: string; important_date_id: string | null; scheduled_at: string; platform_identifier: string }>('SELECT id, person_id, event_type, birthday_day_key, important_date_id, scheduled_at, platform_identifier FROM birthday_notification_schedules ORDER BY scheduled_at');
+    return rows.map((row) => ({ id: row.id, personId: row.person_id, eventType: row.event_type, birthdayDayKey: row.birthday_day_key as DayKey, importantDateId: row.important_date_id ?? null, scheduledAt: row.scheduled_at, platformIdentifier: row.platform_identifier }));
   }
 
   async replaceBirthdayNotificationSchedules(items: BirthdayNotificationSchedule[]): Promise<void> {
     await this.withTransaction(async (transaction) => {
       await transaction.runAsync('DELETE FROM birthday_notification_schedules');
-      for (const item of items) await transaction.runAsync('INSERT INTO birthday_notification_schedules (id, person_id, event_type, birthday_day_key, scheduled_at, platform_identifier) VALUES (?, ?, ?, ?, ?, ?)', item.id, item.personId, item.eventType, item.birthdayDayKey, item.scheduledAt, item.platformIdentifier);
+      for (const item of items) await transaction.runAsync('INSERT INTO birthday_notification_schedules (id, person_id, event_type, birthday_day_key, important_date_id, scheduled_at, platform_identifier) VALUES (?, ?, ?, ?, ?, ?, ?)', item.id, item.personId, item.eventType, item.birthdayDayKey, item.importantDateId, item.scheduledAt, item.platformIdentifier);
     });
   }
 
@@ -1143,6 +1143,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       lastExportAt: values.lastExportAt || null,
       lastExportPostCount: Number(values.lastExportPostCount ?? 0),
       backupReminderShownAt: values.backupReminderShownAt || null,
+      notificationPromptShownAt: values.notificationPromptShownAt || null,
       birthdayNotificationsEnabled: values.birthdayNotificationsEnabled === 'true',
       birthdayReminderHour: Number(values.birthdayReminderHour ?? 9),
       birthdayReminderMinute: Number(values.birthdayReminderMinute ?? 0),

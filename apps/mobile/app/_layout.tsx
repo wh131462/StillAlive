@@ -13,6 +13,7 @@ import { migrateDatabase } from '../src/infrastructure/database/sqlite-schema';
 import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/infrastructure/notifications/expo-notifications';
 import { applyColorTheme } from '../src/shared/theme/app-theme';
 import { AutomaticUpdateChecker } from '../src/features/system/automatic-update-checker';
+import { NotificationReminderPrompt } from '../src/application/components/notification-reminder-prompt';
 import { LaunchScreen } from '../src/features/onboarding/launch-screen';
 import { installGlobalErrorLogging, writePersistentError, writePersistentLog } from '../src/infrastructure/platform/persistent-log';
 import { MusicPlayerProvider } from '../src/features/music/music-player-state';
@@ -100,6 +101,7 @@ function ThemedNavigator() {
         />
       </Stack>
       {!launchScreenVisible ? <AutomaticUpdateChecker /> : null}
+      {!launchScreenVisible ? <NotificationReminderPrompt /> : null}
       {launchScreenVisible ? <LaunchScreen onFinish={finishLaunch} ready={ready} /> : null}
     </>
   );

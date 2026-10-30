@@ -16,7 +16,7 @@ import { MBTI_TYPES, validateBirthday } from '../../features/people/person-profi
 import { cancelBirthdayNotifications } from '../../features/people/birthday-notifications';
 import { cancelMemoryNotifications } from '../../features/home/memory-notifications';
 import { expoBirthdayNotificationAdapter, expoMemoryNotificationAdapter, initializeBirthdayNotificationChannel, initializeMemoryNotificationChannel, requestNotificationPermission } from '../../infrastructure/notifications/expo-notifications';
-import { getPersistentNotificationStatus, persistentNotificationSupported, refreshPersistentNotification, setPersistentNotificationEnabled } from '../../infrastructure/notifications/android-persistent-notification';
+import { addPersistentCheckInListener, getPersistentNotificationStatus, persistentNotificationSupported, refreshPersistentNotification, setPersistentNotificationEnabled } from '../../infrastructure/notifications/android-persistent-notification';
 import { extractEmbeddedMediaIds } from '../../features/journal/embedded-media';
 import { importEncryptedMusicTrack, isEncryptedMusicName } from '../../features/music/music-import-coordinator';
 import { deletePasswordVaultStorage } from '../../features/vault/password-vault-storage';
@@ -323,6 +323,33 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (!ready || !preferences.persistentNotificationEnabled) return;
     void refreshPersistentNotification().catch((cause) => writePersistentError('notifications.persistent.refresh.background-failed', cause));
   }, [checkIns, posts, preferences.persistentNotificationEnabled, ready, today]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const arm = () => {
+      timer = setTimeout(() => {
+        setToday(toDayKey(new Date()));
+        arm();
+      }, millisecondsUntilNextLocalDay(Date.now()));
+    };
+    arm();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [ready]);
+
+  useEffect(() => {
+    if (!persistentNotificationSupported) return;
+    const subscription = addPersistentCheckInListener((event) => {
+      const dayKey = (event.dayKey || toDayKey(new Date())) as DayKey;
+      void (async () => {
+        setToday((current) => (current === dayKey ? current : dayKey));
+        const [checkIn, storedCheckIns] = await Promise.all([repository.getCheckIn(dayKey), repository.listCheckIns()]);
+        setTodayCheckIn(checkIn);
+        setCheckIns(storedCheckIns);
+      })().catch((cause) => writePersistentError('notifications.persistent.check-in.sync.failed', cause, { dayKey }));
+    });
+    return () => subscription.remove();
+  }, [repository]);
 
   const checkInToday = useCallback(async () => {
     const checkIn = await repository.checkIn(today);
@@ -1599,6 +1626,12 @@ function deriveImplicitParentRelationships(relationships: PersonRelationship[]):
 
 function relationshipPairKey(leftNodeId: string, rightNodeId: string): string {
   return [leftNodeId, rightNodeId].sort().join(':');
+}
+
+function millisecondsUntilNextLocalDay(timestamp: number): number {
+  const now = new Date(timestamp);
+  const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5, 0);
+  return Math.max(1000, nextDay.getTime() - timestamp);
 }
 
 export function useAppState(): AppStateValue {

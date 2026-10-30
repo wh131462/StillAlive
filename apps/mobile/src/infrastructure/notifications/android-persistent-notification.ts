@@ -6,10 +6,19 @@ interface PersistentNotificationStatus {
   running: boolean;
 }
 
+interface PersistentCheckInEvent {
+  dayKey: string;
+}
+
+interface PersistentCheckInSubscription {
+  remove(): void;
+}
+
 interface PersistentNotificationModule {
   setEnabledAsync(enabled: boolean): Promise<void>;
   refreshAsync(): Promise<void>;
   getStatusAsync(): Promise<PersistentNotificationStatus>;
+  addListener(eventName: 'onCheckIn', listener: (event: PersistentCheckInEvent) => void): PersistentCheckInSubscription;
 }
 
 const nativeModule = Platform.OS === 'android'
@@ -29,4 +38,8 @@ export async function refreshPersistentNotification(): Promise<void> {
 
 export async function getPersistentNotificationStatus(): Promise<PersistentNotificationStatus> {
   return nativeModule?.getStatusAsync() ?? { enabled: false, running: false };
+}
+
+export function addPersistentCheckInListener(listener: (event: PersistentCheckInEvent) => void): PersistentCheckInSubscription {
+  return nativeModule?.addListener('onCheckIn', listener) ?? { remove: () => undefined };
 }

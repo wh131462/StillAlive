@@ -576,6 +576,10 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS ledger_transactions_day_idx ON ledger_transactions(day_key DESC, created_at DESC);
     PRAGMA user_version = 37;
   `);
+  if (currentVersion < 38) {
+    await addColumnIfMissing(db, 'birthday_notification_schedules', 'important_date_id', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 38;');
+  }
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

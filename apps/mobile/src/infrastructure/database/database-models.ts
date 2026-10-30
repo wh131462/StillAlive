@@ -45,7 +45,7 @@ export interface AppPreferences {
   onboardingCompleted: boolean; profileName: string; nickname: string; profileBio: string; profileSignature: string; profileGender: Gender | null;
   appearanceTheme: AppThemeId; selfNameStyle: NameStyleId; friendNameStyle: NameStyleId; birthDate: string; birthDateCalendar: BirthdayCalendar;
   birthDateIsLeapMonth: boolean; profileAvatarMediaId: string | null; profileMbti: string; profileCustomTagIds: string[]; globalMemoryEnabled: boolean;
-  lastExportAt: string | null; lastExportPostCount: number; backupReminderShownAt: string | null; birthdayNotificationsEnabled: boolean;
+  lastExportAt: string | null; lastExportPostCount: number; backupReminderShownAt: string | null; notificationPromptShownAt: string | null; birthdayNotificationsEnabled: boolean;
   birthdayReminderHour: number; birthdayReminderMinute: number; birthdayNotificationError: string | null; memoryNotificationsEnabled: boolean;
   memoryNotificationError: string | null; persistentNotificationEnabled: boolean; musicPlaybackMode: MusicPlaybackMode; miniPlayerX: number;
   miniPlayerY: number; miniPlayerEdge: 'left' | 'right' | null; miniPlayerYRatio: number | null; readerPreferencesJson: string;

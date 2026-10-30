@@ -1,5 +1,6 @@
 package com.eternalheart.stillalive.persistentnotification
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,9 +13,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import java.io.File
 import java.text.SimpleDateFormat
@@ -22,21 +21,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.Executors
 
 class PersistentNotificationService : Service() {
-  private val handler = Handler(Looper.getMainLooper())
-  private val refreshAtNextDay = object : Runnable {
-    override fun run() {
-      if (!isEnabled(this@PersistentNotificationService)) return
-      updateNotification()
-      scheduleNextDayRefresh()
-    }
-  }
-
   override fun onCreate() {
     super.onCreate()
     isRunning = true
-    createChannel()
+    createChannel(this)
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -45,157 +36,24 @@ class PersistentNotificationService : Service() {
       return START_NOT_STICKY
     }
 
-    startForeground(NOTIFICATION_ID, buildNotification())
+    startForeground(NOTIFICATION_ID, buildNotification(this))
+    scheduleNextDayRefresh(this)
     if (intent?.action == ACTION_CHECK_IN) {
-      quickCheckIn()
-      updateNotification()
+      io.execute {
+        val checkedInDayKey = quickCheckIn(this)
+        updateNotification(this)
+        if (checkedInDayKey != null) PersistentNotificationModule.reportCheckIn(checkedInDayKey)
+      }
     }
-    scheduleNextDayRefresh()
     return START_STICKY
   }
 
   override fun onDestroy() {
-    handler.removeCallbacks(refreshAtNextDay)
     isRunning = false
     super.onDestroy()
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
-
-  private fun updateNotification() {
-    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
-  }
-
-  private fun scheduleNextDayRefresh() {
-    handler.removeCallbacks(refreshAtNextDay)
-    val now = Calendar.getInstance()
-    val nextDay = (now.clone() as Calendar).apply {
-      add(Calendar.DAY_OF_YEAR, 1)
-      set(Calendar.HOUR_OF_DAY, 0)
-      set(Calendar.MINUTE, 0)
-      set(Calendar.SECOND, 1)
-      set(Calendar.MILLISECOND, 0)
-    }
-    handler.postDelayed(refreshAtNextDay, (nextDay.timeInMillis - now.timeInMillis).coerceAtLeast(1000L))
-  }
-
-  private fun quickCheckIn() {
-    val database = openDatabase(writable = true) ?: return
-    database.use { db ->
-      val now = Date()
-      val values = ContentValues().apply {
-        put("id", "checkin_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}")
-        put("day_key", dayKey(now))
-        putNull("city")
-        put("created_at", isoTimestamp(now))
-      }
-      db.insertWithOnConflict("checkins", null, values, SQLiteDatabase.CONFLICT_IGNORE)
-    }
-  }
-
-  private fun buildNotification(): Notification {
-    val state = readNotificationState()
-    val contentIntent = openAppIntent("/")
-    val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-      .setSmallIcon(notificationIcon())
-      .setColor(Color.rgb(29, 107, 73))
-      .setContentIntent(contentIntent)
-      .setOngoing(true)
-      .setOnlyAlertOnce(true)
-      .setSilent(true)
-      .setShowWhen(false)
-      .setCategory(NotificationCompat.CATEGORY_SERVICE)
-      .setPriority(NotificationCompat.PRIORITY_LOW)
-      .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-
-    builder.setContentTitle("仍在 ${displayDate(Date())}")
-
-    if (state.checkedInAt == null) {
-      builder
-        .setContentText("未打卡  今日 ${state.todayPosts} 条  累计 ${state.recordedDays} 天")
-        .addAction(0, "今天也在", serviceAction(ACTION_CHECK_IN, REQUEST_CHECK_IN))
-        .addAction(0, "打开空间", contentIntent)
-    } else {
-      val actionLabel = if (state.todayPosts > 0) "再写一条" else "写一条"
-      builder
-        .setContentText("${displayTime(state.checkedInAt)} 已打卡  今日 ${state.todayPosts} 条  累计 ${state.recordedDays} 天")
-        .addAction(0, actionLabel, openAppIntent("/editor"))
-        .addAction(0, "打开空间", contentIntent)
-    }
-
-    return builder.build()
-  }
-
-  private fun readNotificationState(): NotificationState {
-    val database = openDatabase() ?: return NotificationState(null, 0, 0)
-    return database.use { db ->
-      val today = dayKey(Date())
-      val checkedInAt = db.rawQuery(
-        "SELECT created_at FROM checkins WHERE day_key = ? LIMIT 1",
-        arrayOf(today),
-      ).use { cursor -> if (cursor.moveToFirst()) parseTimestamp(cursor.getString(0)) else null }
-      val todayPosts = db.rawQuery(
-        "SELECT COUNT(*) FROM posts WHERE day_key = ?",
-        arrayOf(today),
-      ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
-      val recordedDays = db.rawQuery(
-        "SELECT COUNT(*) FROM (SELECT day_key FROM checkins UNION SELECT day_key FROM posts)",
-        null,
-      ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
-      NotificationState(checkedInAt, todayPosts, recordedDays)
-    }
-  }
-
-  private fun openDatabase(writable: Boolean = false): SQLiteDatabase? {
-    val path = File(filesDir, "SQLite/$DATABASE_NAME")
-    if (!path.exists()) return null
-    return runCatching {
-      val flags = if (writable) {
-        SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING
-      } else {
-        SQLiteDatabase.OPEN_READONLY
-      }
-      SQLiteDatabase.openDatabase(path.absolutePath, null, flags).apply {
-        rawQuery("PRAGMA busy_timeout = $DATABASE_BUSY_TIMEOUT_MS", null).use { it.moveToFirst() }
-      }
-    }.getOrNull()
-  }
-
-  private fun createChannel() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-    val channel = NotificationChannel(CHANNEL_ID, "常驻快捷栏", NotificationManager.IMPORTANCE_LOW).apply {
-      description = "显示每日打卡状态和快捷入口"
-      setSound(null, null)
-      enableVibration(false)
-      setShowBadge(false)
-    }
-    getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-  }
-
-  private fun notificationIcon(): Int {
-    val identifier = resources.getIdentifier("notification_icon", "drawable", packageName)
-    return if (identifier != 0) identifier else applicationInfo.icon
-  }
-
-  private fun serviceAction(action: String, requestCode: Int): PendingIntent {
-    val intent = Intent(this, PersistentNotificationService::class.java).setAction(action)
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      PendingIntent.getForegroundService(this, requestCode, intent, pendingIntentFlags())
-    } else {
-      PendingIntent.getService(this, requestCode, intent, pendingIntentFlags())
-    }
-  }
-
-  private fun openAppIntent(path: String): PendingIntent {
-    val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-      action = Intent.ACTION_VIEW
-      data = Uri.parse("stillalive://$path")
-      addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    } ?: Intent(Intent.ACTION_VIEW, Uri.parse("stillalive://$path"))
-    return PendingIntent.getActivity(this, path.hashCode(), intent, pendingIntentFlags())
-  }
-
-  private fun pendingIntentFlags(): Int = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
   companion object {
     private const val CHANNEL_ID = "persistent-check-in"
@@ -207,6 +65,9 @@ class PersistentNotificationService : Service() {
     private const val ACTION_REFRESH = "com.eternalheart.stillalive.persistentnotification.REFRESH"
     private const val ACTION_CHECK_IN = "com.eternalheart.stillalive.persistentnotification.CHECK_IN"
     private const val REQUEST_CHECK_IN = 41002
+    private const val REQUEST_DAY_REFRESH = 41003
+
+    private val io = Executors.newSingleThreadExecutor()
 
     @Volatile
     var isRunning = false
@@ -223,6 +84,7 @@ class PersistentNotificationService : Service() {
       if (enabled) {
         refresh(context)
       } else {
+        cancelNextDayRefresh(context)
         context.stopService(Intent(context, PersistentNotificationService::class.java))
         context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         isRunning = false
@@ -235,6 +97,175 @@ class PersistentNotificationService : Service() {
       else context.startService(intent)
       isRunning = true
     }
+
+    // 日期变化广播与 0 点闹钟共用入口：服务存活时直接替换通知，否则尝试重新启动前台服务。
+    fun onDayChanged(context: Context) {
+      if (!isEnabled(context)) {
+        cancelNextDayRefresh(context)
+        return
+      }
+      scheduleNextDayRefresh(context)
+      if (isRunning) {
+        io.execute { updateNotification(context) }
+      } else {
+        runCatching { refresh(context) }
+      }
+    }
+
+    fun updateNotification(context: Context) {
+      context.getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(context))
+    }
+
+    fun scheduleNextDayRefresh(context: Context) {
+      val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+      val pendingIntent = dayRefreshPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
+      alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextDayStartMillis(), pendingIntent)
+    }
+
+    private fun cancelNextDayRefresh(context: Context) {
+      val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
+      val pendingIntent = dayRefreshPendingIntent(context, PendingIntent.FLAG_NO_CREATE) ?: return
+      alarmManager.cancel(pendingIntent)
+      pendingIntent.cancel()
+    }
+
+    private fun dayRefreshPendingIntent(context: Context, flags: Int): PendingIntent? {
+      val intent = Intent(context, PersistentNotificationReceiver::class.java).setAction(ACTION_REFRESH)
+      return PendingIntent.getBroadcast(context, REQUEST_DAY_REFRESH, intent, flags or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun nextDayStartMillis(): Long {
+      val nextDay = Calendar.getInstance().apply {
+        add(Calendar.DAY_OF_YEAR, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 5)
+        set(Calendar.MILLISECOND, 0)
+      }
+      return nextDay.timeInMillis
+    }
+
+    private fun quickCheckIn(context: Context): String? {
+      val database = openDatabase(context, writable = true) ?: return null
+      val now = Date()
+      val today = dayKey(now)
+      runCatching {
+        database.use { db ->
+          val values = ContentValues().apply {
+            put("id", "checkin_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}")
+            put("day_key", today)
+            putNull("city")
+            put("created_at", isoTimestamp(now))
+          }
+          db.insertWithOnConflict("checkins", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+      }.getOrElse { return null }
+      return today
+    }
+
+    private fun buildNotification(context: Context): Notification {
+      val state = readNotificationState(context)
+      val contentIntent = openAppIntent(context, "/")
+      val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        .setSmallIcon(notificationIcon(context))
+        .setColor(Color.rgb(29, 107, 73))
+        .setContentIntent(contentIntent)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setSilent(true)
+        .setShowWhen(false)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+
+      builder.setContentTitle("仍在 ${displayDate(Date())}")
+
+      if (state.checkedInAt == null) {
+        builder
+          .setContentText("未打卡  今日 ${state.todayPosts} 条  累计 ${state.recordedDays} 天")
+          .addAction(0, "今天也在", serviceAction(context, ACTION_CHECK_IN, REQUEST_CHECK_IN))
+          .addAction(0, "打开空间", contentIntent)
+      } else {
+        val actionLabel = if (state.todayPosts > 0) "再写一条" else "写一条"
+        builder
+          .setContentText("${displayTime(state.checkedInAt)} 已打卡  今日 ${state.todayPosts} 条  累计 ${state.recordedDays} 天")
+          .addAction(0, actionLabel, openAppIntent(context, "/editor"))
+          .addAction(0, "打开空间", contentIntent)
+      }
+
+      return builder.build()
+    }
+
+    private fun readNotificationState(context: Context): NotificationState {
+      val database = openDatabase(context) ?: return NotificationState(null, 0, 0)
+      return database.use { db ->
+        val today = dayKey(Date())
+        val checkedInAt = db.rawQuery(
+          "SELECT created_at FROM checkins WHERE day_key = ? LIMIT 1",
+          arrayOf(today),
+        ).use { cursor -> if (cursor.moveToFirst()) parseTimestamp(cursor.getString(0)) else null }
+        val todayPosts = db.rawQuery(
+          "SELECT COUNT(*) FROM posts WHERE day_key = ?",
+          arrayOf(today),
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+        val recordedDays = db.rawQuery(
+          "SELECT COUNT(*) FROM (SELECT day_key FROM checkins UNION SELECT day_key FROM posts)",
+          null,
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
+        NotificationState(checkedInAt, todayPosts, recordedDays)
+      }
+    }
+
+    private fun openDatabase(context: Context, writable: Boolean = false): SQLiteDatabase? {
+      val path = File(context.filesDir, "SQLite/$DATABASE_NAME")
+      if (!path.exists()) return null
+      return runCatching {
+        val flags = if (writable) {
+          SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING
+        } else {
+          SQLiteDatabase.OPEN_READONLY
+        }
+        SQLiteDatabase.openDatabase(path.absolutePath, null, flags).apply {
+          rawQuery("PRAGMA busy_timeout = $DATABASE_BUSY_TIMEOUT_MS", null).use { it.moveToFirst() }
+        }
+      }.getOrNull()
+    }
+
+    private fun createChannel(context: Context) {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+      val channel = NotificationChannel(CHANNEL_ID, "常驻快捷栏", NotificationManager.IMPORTANCE_LOW).apply {
+        description = "显示每日打卡状态和快捷入口"
+        setSound(null, null)
+        enableVibration(false)
+        setShowBadge(false)
+      }
+      context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    }
+
+    private fun notificationIcon(context: Context): Int {
+      val identifier = context.resources.getIdentifier("notification_icon", "drawable", context.packageName)
+      return if (identifier != 0) identifier else context.applicationInfo.icon
+    }
+
+    private fun serviceAction(context: Context, action: String, requestCode: Int): PendingIntent {
+      val intent = Intent(context, PersistentNotificationService::class.java).setAction(action)
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        PendingIntent.getForegroundService(context, requestCode, intent, pendingIntentFlags())
+      } else {
+        PendingIntent.getService(context, requestCode, intent, pendingIntentFlags())
+      }
+    }
+
+    private fun openAppIntent(context: Context, path: String): PendingIntent {
+      val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+        action = Intent.ACTION_VIEW
+        data = Uri.parse("stillalive://$path")
+        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      } ?: Intent(Intent.ACTION_VIEW, Uri.parse("stillalive://$path"))
+      return PendingIntent.getActivity(context, path.hashCode(), intent, pendingIntentFlags())
+    }
+
+    private fun pendingIntentFlags(): Int = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
     private fun dayKey(date: Date): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(date)
 

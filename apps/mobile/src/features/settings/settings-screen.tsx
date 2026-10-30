@@ -19,7 +19,6 @@ export default function SettingsScreen() {
   const { notificationPermission, openNotificationSettings, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
   const [retryingNotification, setRetryingNotification] = useState<'birthday' | 'memory' | null>(null);
   const [nameStyleTarget, setNameStyleTarget] = useState<'self' | 'friend' | null>(null);
-  const showNotificationStatus = preferences.birthdayNotificationsEnabled || preferences.memoryNotificationsEnabled || preferences.persistentNotificationEnabled || Boolean(preferences.birthdayNotificationError) || Boolean(preferences.memoryNotificationError);
   const nameStyleSelection = nameStyleTarget === 'self'
     ? { label: '个人名字', sample: preferences.nickname || preferences.profileName || '我的名字', value: preferences.selfNameStyle }
     : nameStyleTarget === 'friend' ? { label: '朋友名字', sample: '朋友名字', value: preferences.friendNameStyle } : null;
@@ -78,12 +77,16 @@ export default function SettingsScreen() {
           <SwitchRow checked={preferences.persistentNotificationEnabled} hint="显示打卡状态和快捷入口" label="常驻快捷栏" onPress={() => void setPersistentNotificationsEnabled(!preferences.persistentNotificationEnabled).catch((cause: unknown) => feedback.alert('快捷栏设置失败', errorMessage(cause)))} />
           <View style={styles.separator} />
         </> : null}
-        <SwitchRow checked={preferences.birthdayNotificationsEnabled} hint="提前 3 天和生日当天提醒" label="人物生日提醒" onPress={() => void setBirthdayNotificationsEnabled(!preferences.birthdayNotificationsEnabled).catch((cause: unknown) => feedback.alert('提醒设置失败', errorMessage(cause)))} />
+        <SwitchRow checked={preferences.birthdayNotificationsEnabled} hint="生日提前 3 天与当天，重要日子当天提醒" label="人物生日提醒" onPress={() => void setBirthdayNotificationsEnabled(!preferences.birthdayNotificationsEnabled).catch((cause: unknown) => feedback.alert('提醒设置失败', errorMessage(cause)))} />
         <View style={styles.separator} />
         <SwitchRow checked={preferences.memoryNotificationsEnabled} hint="默认 20:00，提醒间隔至少 7 天" label="回忆通知" onPress={() => void setMemoryNotificationsEnabled(!preferences.memoryNotificationsEnabled).catch((cause: unknown) => feedback.alert('提醒设置失败', errorMessage(cause)))} />
       </View>
       {preferences.birthdayNotificationsEnabled ? <TimePickerField hour={preferences.birthdayReminderHour} label="通用生日提醒时间" minute={preferences.birthdayReminderMinute} onChange={(hour, minute) => savePreference({ birthdayReminderHour: hour, birthdayReminderMinute: minute })} /> : null}
-      {showNotificationStatus && notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
+      <View style={styles.notificationPermission}>
+        <Text style={styles.notificationPermissionLabel}>系统通知权限</Text>
+        <Text style={[styles.notificationPermissionValue, notificationPermission === 'granted' && styles.notificationPermissionGranted, notificationPermission === 'denied' && styles.notificationPermissionDenied]}>{notificationPermission === 'granted' ? '已允许' : notificationPermission === 'denied' ? '未允许' : '尚未询问'}</Text>
+      </View>
+      {notificationPermission === 'denied' ? <Pressable onPress={() => void openNotificationSettings()} style={styles.inlineButton}><Text style={styles.inlineButtonText}>打开系统通知设置</Text></Pressable> : null}
       {preferences.birthdayNotificationError ? <><Pressable disabled={Boolean(retryingNotification)} onPress={() => void retryNotification('birthday')} style={[styles.inlineButton, retryingNotification && styles.disabled]}><Text style={styles.inlineButtonText}>{retryingNotification === 'birthday' ? '重试中…' : '重试通知调度'}</Text></Pressable><Text style={styles.error}>{preferences.birthdayNotificationError}</Text></> : null}
       {preferences.memoryNotificationError ? <><Pressable disabled={Boolean(retryingNotification)} onPress={() => void retryNotification('memory')} style={[styles.inlineButton, retryingNotification && styles.disabled]}><Text style={styles.inlineButtonText}>{retryingNotification === 'memory' ? '重试中…' : '重试回忆通知'}</Text></Pressable><Text style={styles.error}>{preferences.memoryNotificationError}</Text></> : null}
 
@@ -177,6 +180,7 @@ const styles = createThemedStyles(() => ({
   group: { overflow: 'hidden', borderRadius: 6, backgroundColor: colors.sheet }, separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.line }, entry: { minHeight: 72, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, entryCompact: { minHeight: 64 }, entryIcon: { width: 38, height: 38, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, entryCopy: { flex: 1 }, entryTitle: { color: colors.ink, fontSize: 13, fontWeight: '600' }, entryHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 15 },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' }, switchTrack: { width: 44, height: 26, marginLeft: spacing.md, padding: 2, borderRadius: 13, backgroundColor: colors.line }, switchTrackOn: { backgroundColor: colors.life }, switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper }, switchThumbOn: { alignSelf: 'flex-end' },
   inlineButton: { minHeight: 44, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: colors.sheet }, inlineButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' }, error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 17 },
+  notificationPermission: { minHeight: 44, marginTop: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 6, backgroundColor: colors.sheet }, notificationPermissionLabel: { color: colors.inkSoft, fontSize: 12, fontWeight: '600' }, notificationPermissionValue: { color: colors.inkFaint, fontSize: typography.size.meta, fontWeight: '700' }, notificationPermissionGranted: { color: colors.life }, notificationPermissionDenied: { color: colors.danger },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.7 },
 }));

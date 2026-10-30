@@ -6,8 +6,6 @@ import android.content.Intent
 
 class PersistentNotificationReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent?) {
-    if (PersistentNotificationService.isEnabled(context)) {
-      runCatching { PersistentNotificationService.refresh(context) }
-    }
+    runCatching { PersistentNotificationService.onDayChanged(context) }
   }
 }

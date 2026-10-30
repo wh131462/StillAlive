@@ -37,7 +37,7 @@ export function useNotificationSync(
       }
     } catch (cause) {
       writePersistentError('notifications.birthday.sync.failed', cause, { people: people.length, enabled: preferences.birthdayNotificationsEnabled, requestPermission });
-      const message = cause instanceof Error ? cause.message : '生日通知调度失败';
+      const message = cause instanceof Error ? cause.message : '提醒调度失败';
       setNotificationPermission(await expoBirthdayNotificationAdapter.getPermission());
       await repository.updatePreferences({ birthdayNotificationError: message });
       setPreferences((current) => ({ ...current, birthdayNotificationError: message }));

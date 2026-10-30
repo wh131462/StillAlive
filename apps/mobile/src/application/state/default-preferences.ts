@@ -20,6 +20,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   lastExportAt: null,
   lastExportPostCount: 0,
   backupReminderShownAt: null,
+  notificationPromptShownAt: null,
   birthdayNotificationsEnabled: false,
   birthdayReminderHour: 9,
   birthdayReminderMinute: 0,

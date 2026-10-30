@@ -21,14 +21,12 @@ export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
     return permissionStatus(await notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: false, allowSound: true } }), notifications);
   },
   async schedule(item: PlannedBirthdayNotification) {
-    writePersistentLog('INFO', 'notification.birthday.schedule.started', { personId: item.personId, eventType: item.eventType, triggerAt: item.triggerAt.toISOString() });
+    writePersistentLog('INFO', 'notification.birthday.schedule.started', { personId: item.personId, eventType: item.eventType, importantDateId: item.importantDateId, triggerAt: item.triggerAt.toISOString() });
     const notifications = requireNotifications();
     await ensureBirthdayChannel(notifications);
     const identifier = await notifications.scheduleNotificationAsync({
       content: {
-        title: item.eventType === 'advance' ? `${item.personName}的${calendarLabel(item.calendar)}生日快到了` : `今天是${item.personName}的${calendarLabel(item.calendar)}生日`,
-        body: item.eventType === 'advance' ? '还有 3 天，可以提前准备一份心意。' : '愿今天留下一段温柔的记忆。',
-        data: { personId: item.personId, eventType: item.eventType, calendar: item.calendar },
+        ...plannedContent(item),
         sound: 'default',
       },
       trigger: {
@@ -49,6 +47,21 @@ export const expoBirthdayNotificationAdapter: BirthdayNotificationAdapter = {
 
 function calendarLabel(calendar: PlannedBirthdayNotification['calendar']): string {
   return calendar === 'solar' ? '公历' : '农历';
+}
+
+function plannedContent(item: PlannedBirthdayNotification): { title: string; body: string; data: Record<string, string> } {
+  if (item.eventType === 'important-date') {
+    return {
+      title: `今天是${item.personName}的「${item.importantDateName ?? '重要日子'}」`,
+      body: '愿这一天被好好记住。',
+      data: { personId: item.personId, eventType: item.eventType, importantDateId: item.importantDateId ?? '' },
+    };
+  }
+  return {
+    title: item.eventType === 'advance' ? `${item.personName}的${calendarLabel(item.calendar)}生日快到了` : `今天是${item.personName}的${calendarLabel(item.calendar)}生日`,
+    body: item.eventType === 'advance' ? '还有 3 天，可以提前准备一份心意。' : '愿今天留下一段温柔的记忆。',
+    data: { personId: item.personId, eventType: item.eventType, calendar: item.calendar },
+  };
 }
 
 export const expoMemoryNotificationAdapter: MemoryNotificationAdapter = {
@@ -164,7 +177,7 @@ async function ensureBirthdayChannel(notifications: typeof ExpoNotifications | n
   if (Platform.OS !== 'android' || !notifications) return;
   await notifications.setNotificationChannelAsync(BIRTHDAY_CHANNEL_ID, {
     name: '人物生日提醒',
-    description: '人物生日提前三天和当天的本地提醒',
+    description: '人物生日提前三天、当天与重要日期的本地提醒',
     importance: notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 180, 250],
   });
