@@ -230,8 +230,9 @@ export interface BirthdayNotificationPreferences {
 export interface BirthdayNotificationSchedule {
   id: string;
   personId: string;
-  eventType: 'advance' | 'today';
+  eventType: 'advance' | 'today' | 'important-date';
   birthdayDayKey: DayKey;
+  importantDateId: string | null;
   scheduledAt: string;
   platformIdentifier: string;
 }
