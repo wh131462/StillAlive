@@ -340,7 +340,10 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
   const musicPlaylists = mergeUpdatedById(current.musicPlaylists ?? [], incoming.musicPlaylists ?? []);
   const books = mergeUpdatedEntities(current.books ?? [], incoming.books ?? [], (item) => item.fileMediaId);
   const bookLists = mergeUpdatedById(current.bookLists ?? [], incoming.bookLists ?? []);
-  const incomingBookExcerpts = (incoming.bookExcerpts ?? []).map((item) => ({ ...item, bookId: books.incomingIds.get(item.bookId) ?? item.bookId }));
+  const incomingBookExcerpts = (incoming.bookExcerpts ?? []).map((item) => ({
+    ...item,
+    bookId: item.bookId ? books.incomingIds.get(item.bookId) ?? item.bookId : null,
+  }));
   const bookExcerpts = mergePreferCurrentById(current.bookExcerpts ?? [], incomingBookExcerpts);
   const personIds = new Set(people.map((item) => item.id));
   const postIds = new Set(posts.map((item) => item.id));
@@ -651,7 +654,10 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
     if (!bookListIds.has(entry.listId) || !bookIds.has(entry.bookId) || !isValidDate(entry.addedAt) || bookListEntryKeys.has(key)) throw new Error('备份中的书单书籍关联无效');
     bookListEntryKeys.add(key);
   }
-  for (const excerpt of bookExcerpts) if (!bookIds.has(excerpt.bookId) || !excerpt.text.trim() || excerpt.text.length > 20_000 || (excerpt.locationType && !['epub-cfi', 'reflow-cfi', 'pdf-page', 'manual'].includes(excerpt.locationType)) || (excerpt.sourceKind && !['selection', 'manual'].includes(excerpt.sourceKind))) throw new Error('备份中的摘抄无效');
+  for (const excerpt of bookExcerpts) {
+    const hasBook = excerpt.bookId ? bookIds.has(excerpt.bookId) : Boolean(excerpt.bookTitle?.trim());
+    if (!hasBook || !excerpt.text.trim() || excerpt.text.length > 20_000 || (excerpt.locationType && !['epub-cfi', 'reflow-cfi', 'pdf-page', 'manual'].includes(excerpt.locationType)) || (excerpt.sourceKind && !['selection', 'manual'].includes(excerpt.sourceKind))) throw new Error('备份中的摘抄无效');
+  }
   for (const source of readingNoteSources) {
     if (!postIds.has(source.postId) || (source.bookId && !bookIds.has(source.bookId)) || source.excerptIds.some((id) => !excerptIds.has(id)) || !Array.isArray(source.quoteSnapshots)) throw new Error('备份中的阅读笔记引用无效');
   }
@@ -819,6 +825,7 @@ function migrateSnapshot(value: BackupSnapshot): void {
     book.lastReadAt ??= book.progress > 0 ? book.updatedAt : null;
   }
   for (const excerpt of value.bookExcerpts) {
+    excerpt.bookTitle ??= null;
     if (excerpt.location?.match(/^page:\d+$/)) excerpt.location = excerpt.location.replace(/^page:/, 'pdf:');
     excerpt.locationType ??= excerpt.location?.startsWith('pdf:') ? 'pdf-page' : excerpt.location?.startsWith('epubcfi(') ? 'epub-cfi' : excerpt.location?.startsWith('reflow:') || excerpt.location?.startsWith('reflow-href:') ? 'reflow-cfi' : 'manual';
     excerpt.chapterTitle ??= null;

@@ -23,7 +23,13 @@ export interface FeedbackPromptRequest {
   onSubmit: (value: string) => void;
 }
 
-export type FeedbackRequest = FeedbackAlertRequest | FeedbackPromptRequest;
+export interface FeedbackNoticeRequest {
+  kind: 'notice';
+  message: string;
+  durationMs?: number;
+}
+
+export type FeedbackRequest = FeedbackAlertRequest | FeedbackPromptRequest | FeedbackNoticeRequest;
 type FeedbackPresenter = (request: FeedbackRequest) => void;
 
 let presenter: FeedbackPresenter | null = null;
@@ -64,6 +70,11 @@ export const feedback = {
         } : undefined,
       })),
     });
+  },
+
+  notice(message: string, options: { durationMs?: number } = {}): void {
+    writePersistentLog('INFO', 'feedback.notice.presented', { message, durationMs: options.durationMs });
+    present({ kind: 'notice', message, durationMs: options.durationMs });
   },
 
   prompt(title: string, message: string | undefined, onSubmit: (value: string) => void, defaultValue = ''): void {

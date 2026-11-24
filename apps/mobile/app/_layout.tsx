@@ -12,6 +12,7 @@ import { AppStateProvider, useAppState } from '../src/application/state/app-stat
 import { migrateDatabase } from '../src/infrastructure/database/sqlite-schema';
 import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/infrastructure/notifications/expo-notifications';
 import { applyColorTheme } from '../src/shared/theme/app-theme';
+import { setHapticsEnabled } from '../src/shared/haptics';
 import { AutomaticUpdateChecker } from '../src/features/system/automatic-update-checker';
 import { NotificationReminderPrompt } from '../src/application/components/notification-reminder-prompt';
 import { LaunchScreen } from '../src/features/onboarding/launch-screen';
@@ -89,6 +90,7 @@ function ThemedNavigator() {
   const [launchScreenVisible, setLaunchScreenVisible] = useState(true);
   const finishLaunch = useCallback(() => setLaunchScreenVisible(false), []);
   applyColorTheme(preferences.appearanceTheme);
+  setHapticsEnabled(preferences.hapticsEnabled);
   return (
     <>
       <StatusBar

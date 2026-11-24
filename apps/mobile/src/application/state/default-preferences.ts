@@ -34,4 +34,5 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   miniPlayerEdge: null,
   miniPlayerYRatio: null,
   readerPreferencesJson: '{}',
+  hapticsEnabled: true,
 };

@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { registerFeedbackPresenter } from '../shared/feedback';
-import type { FeedbackButton, FeedbackRequest } from '../shared/feedback';
+import type { FeedbackAlertRequest, FeedbackButton, FeedbackNoticeRequest, FeedbackPromptRequest, FeedbackRequest } from '../shared/feedback';
 import { createThemedStyles } from '../shared/theme/app-theme';
 import { FeedbackDialog } from '../shared/components/feedback-dialog';
 
 export function FeedbackProvider({ children }: PropsWithChildren) {
-  const [request, setRequest] = useState<FeedbackRequest | null>(null);
-  const activeRequest = useRef<FeedbackRequest | null>(null);
-  const queuedRequests = useRef<FeedbackRequest[]>([]);
+  const [request, setRequest] = useState<FeedbackAlertRequest | FeedbackPromptRequest | null>(null);
+  const [notice, setNotice] = useState<FeedbackNoticeRequest | null>(null);
+  const activeRequest = useRef<FeedbackAlertRequest | FeedbackPromptRequest | null>(null);
+  const queuedRequests = useRef<Array<FeedbackAlertRequest | FeedbackPromptRequest>>([]);
 
   const show = useCallback((nextRequest: FeedbackRequest) => {
+    if (nextRequest.kind === 'notice') {
+      setNotice(nextRequest);
+      return;
+    }
     if (activeRequest.current) {
       queuedRequests.current.push(nextRequest);
       return;
@@ -22,6 +27,7 @@ export function FeedbackProvider({ children }: PropsWithChildren) {
     activeRequest.current = nextRequest;
     setRequest(nextRequest);
   }, []);
+  const hideNotice = useCallback(() => setNotice(null), []);
 
   useEffect(() => registerFeedbackPresenter(show), [show]);
 
@@ -56,11 +62,12 @@ export function FeedbackProvider({ children }: PropsWithChildren) {
     <>
       {children}
       <FeedbackModal request={request} onClose={close} onPress={dismiss} />
+      <QuietNotice request={notice} onHide={hideNotice} />
     </>
   );
 }
 
-function FeedbackModal({ request, onClose, onPress }: { request: FeedbackRequest | null; onClose(): void; onPress(button?: FeedbackButton, value?: string): void }) {
+function FeedbackModal({ request, onClose, onPress }: { request: FeedbackAlertRequest | FeedbackPromptRequest | null; onClose(): void; onPress(button?: FeedbackButton, value?: string): void }) {
   const [value, setValue] = useState('');
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -96,6 +103,44 @@ function FeedbackModal({ request, onClose, onPress }: { request: FeedbackRequest
   );
 }
 
+function QuietNotice({ request, onHide }: { request: FeedbackNoticeRequest | null; onHide(): void }) {
+  const insets = useSafeAreaInsets();
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    if (!request) return;
+    opacity.setValue(0);
+    translateY.setValue(10);
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 8, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished) onHide();
+      });
+    }, request.durationMs ?? 2400);
+    return () => {
+      clearTimeout(timer);
+      opacity.stopAnimation();
+      translateY.stopAnimation();
+    };
+  }, [onHide, opacity, request, translateY]);
+
+  if (!request) return null;
+  return (
+    <View pointerEvents="none" style={[styles.noticeLayer, { bottom: insets.bottom + 88 }]}>
+      <Animated.View accessibilityLabel={request.message} accessibilityLiveRegion="polite" accessible style={[styles.notice, { opacity, transform: [{ translateY }] }]}>
+        <Text style={styles.noticeText}>{request.message}</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 function FeedbackButtonView({ button, onPress }: { button: FeedbackButton; onPress(): void }) {
   const destructive = button.style === 'destructive';
   const cancel = button.style === 'cancel';
@@ -120,4 +165,7 @@ const styles = createThemedStyles(() => ({
   buttonCancelText: { color: colors.inkSoft },
   buttonDangerText: { color: colors.danger },
   buttonPressed: { opacity: 0.68 },
+  noticeLayer: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
+  notice: { maxWidth: '86%', minHeight: 40, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.ink, shadowColor: colors.ink, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  noticeText: { color: colors.paper, fontSize: 12, lineHeight: 17, fontWeight: '600', textAlign: 'center' },
 }));

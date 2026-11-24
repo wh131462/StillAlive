@@ -29,6 +29,7 @@ export interface AppStateValue {
   bookExcerpts: BookExcerpt[];
   readingNoteSources: ReadingNoteSource[];
   homeMemory: HomeMemory | null;
+  refreshHomeMemory(): Promise<void>;
   preferences: AppPreferences;
   notificationPermission: 'granted' | 'denied' | 'undetermined';
   persistentNotificationRunning: boolean;
@@ -94,6 +95,7 @@ export interface AppStateValue {
   deleteAllLocalData(): Promise<void>;
   createProfileCollectionRequest(request: ProfileCollectionRequest, privateKeyJwk: string): Promise<void>;
   getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null>;
+  listProfileCollectionRequests(): Promise<ProfileCollectionRequest[]>;
   deleteProfileCollectionRequest(requestId: string): Promise<void>;
   applyProfileCollectionImport(requestId: string, person: Person, mbti: string | null, customTagIds: string[], newTagNames: string[]): Promise<void>;
   importMusicTrack(item: Media, personId?: string | null): Promise<MusicTrack>;

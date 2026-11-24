@@ -469,6 +469,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     void syncMemoryNotifications(storedPosts, await repository.getPreferences()).catch((cause) => writePersistentError('notifications.memory.sync.background-failed', cause));
   }, [cleanupUnreferencedMedia, posts, repository, syncMemoryNotifications]);
 
+  const refreshHomeMemory = useCallback(async () => {
+    const memory = await repository.getHomeMemory(today);
+    setHomeMemory(memory);
+    if (memory) void repository.markMemoryShown(memory).catch((cause) => writePersistentError('memory.mark-shown.failed', cause, { postId: memory.post.id }));
+  }, [repository, today]);
+
   const getPersonIdsByPost = useCallback((postId: string) => repository.listPersonIdsByPost(postId), [repository]);
 
   const createPerson = useCallback(async (name: string) => {
@@ -580,6 +586,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [repository]);
 
   const getProfileCollectionRequest = useCallback((requestId: string) => repository.getProfileCollectionRequest(requestId), [repository]);
+  const listProfileCollectionRequests = useCallback(() => repository.listProfileCollectionRequests(), [repository]);
 
   const deleteProfileCollectionRequest = useCallback(async (requestId: string) => {
     await repository.deleteProfileCollectionRequest(requestId);
@@ -1483,6 +1490,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     bookExcerpts,
     readingNoteSources,
     homeMemory,
+    refreshHomeMemory,
     preferences,
     notificationPermission,
     persistentNotificationRunning,
@@ -1548,6 +1556,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     deleteAllLocalData,
     createProfileCollectionRequest,
     getProfileCollectionRequest,
+    listProfileCollectionRequests,
     deleteProfileCollectionRequest,
     applyProfileCollectionImport,
     importMusicTrack,
@@ -1578,7 +1587,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     getReadingNoteSource,
     saveReadingNoteSource,
     deleteReadingNoteSource,
-  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createLedgerTransaction, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteLedgerTransaction, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonEvent, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, getReadingNoteSource, homeMemory, importMusicTrack, incrementMusicTrackPlayCount, ledgerTransactions, loadDraft, media, mergePersons, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personEvents, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonEvent, savePersonRelationship, savePost, savePostComment, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, setPostPinned, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateLedgerTransaction, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
+  }), [addBooksToList, addMusicCollectionEntry, addMusicTracksToPlaylist, addPhotoToAlbum, albumMedia, albums, applyProfileCollectionImport, bindPersonRelationshipNode, bookExcerpts, bookListEntries, bookLists, books, checkInToday, checkIns, countPeopleByTag, createAlbum, createBackupSnapshot, createBook, createBookExcerpt, createBookList, createLedgerTransaction, createMusicPlaylist, createMusicTrack, createPerson, createPersonRelationshipNode, createProfileCollectionRequest, createTag, createTagGroup, deleteAlbum, deleteAllLocalData, deleteBook, deleteBookExcerpt, deleteBookList, deleteLedgerTransaction, deleteMusicPlaylist, deleteMusicTrack, deletePerson, deletePersonEvent, deletePersonRelationship, deletePersonRelationshipNode, deletePost, deleteProfileCollectionRequest, deleteReadingNoteSource, deleteTag, deleteTagGroup, discardMedia, dismissBackupReminder, error, getPersonIdsByPost, getPostsByPerson, getProfileCollectionRequest, listProfileCollectionRequests, getReadingNoteSource, homeMemory, refreshHomeMemory, importMusicTrack, incrementMusicTrackPlayCount, ledgerTransactions, loadDraft, media, mergePersons, musicCollectionEntries, musicPlaylistEntries, musicPlaylists, musicTracks, notificationPermission, openNotificationSettings, people, personBooks, personEvents, personRelationshipNodes, personRelationships, persistentNotificationRunning, personTags, posts, preferences, readingNoteSources, ready, recordBackupExport, removeBookFromList, removeMusicCollectionEntry, removeMusicTrackFromPlaylist, removePhotoFromAlbum, renameBookList, renameMusicPlaylist, renameTag, renameTagGroup, reorderAlbumPhotos, replaceMedia, restoreBackupSnapshot, retryBirthdayNotifications, retryMemoryNotifications, saveDraft, saveMedia, savePersonEvent, savePersonRelationship, savePost, savePostComment, saveReadingNoteSource, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setMusicPlaylistCover, setMusicTrackCover, setPersistentNotificationsEnabled, setPersonBooks, setPersonMemoryEnabled, setPostPinned, shouldShowBackupReminder, tagDefinitions, tagGroups, tagSystemSettings, today, todayCheckIn, updateAlbum, updateBook, updateBookExcerpt, updateCheckInCity, updateLedgerTransaction, updateMusicTrack, updatePerson, updatePreferences, updateTagSystems]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

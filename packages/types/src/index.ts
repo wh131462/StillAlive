@@ -164,6 +164,7 @@ export interface ProfileCollectionRequest {
   tagMap: Record<string, string>;
   expiresAt: string;
   status: ProfileCollectionRequestStatus;
+  invitationUrl?: string | null;
   createdAt: string;
   consumedAt: string | null;
 }
@@ -333,7 +334,8 @@ export interface Book {
 
 export interface BookExcerpt {
   id: string;
-  bookId: string;
+  bookId: string | null;
+  bookTitle?: string | null;
   text: string;
   location: string | null;
   note: string | null;
