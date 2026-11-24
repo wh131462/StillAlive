@@ -23,8 +23,8 @@ export interface PersonRelationshipNodeRow { id: string; node_type: PersonRelati
 export interface BookListRow { id: string; name: string; created_at: string; updated_at: string; }
 export interface BookListEntryRow { list_id: string; book_id: string; added_at: string; }
 export interface BookRow { id: string; file_media_id: string; cover_media_id: string | null; title: string; author: string | null; format: BookFormat; parse_status: BookParseStatus; parse_message: string | null; progress: number; last_read_at: string | null; location: string | null; location_type: BookLocationType | null; chapter_href: string | null; chapter_title: string | null; engine_version: string | null; page_count: number | null; chapter_cache_json: string | null; created_at: string; updated_at: string; }
-export interface BookExcerptRow { id: string; book_id: string; text: string; location: string | null; note: string | null; location_type: BookLocationType | null; chapter_title: string | null; context_before: string | null; context_after: string | null; source_kind: 'selection' | 'manual' | null; created_at: string; }
-export interface ProfileCollectionRequestRow { id: string; person_id: string; fields_json: string; tag_map_json: string; expires_at: string; status: ProfileCollectionRequestStatus; created_at: string; consumed_at: string | null; }
+export interface BookExcerptRow { id: string; book_id: string | null; book_title: string | null; text: string; location: string | null; note: string | null; location_type: BookLocationType | null; chapter_title: string | null; context_before: string | null; context_after: string | null; source_kind: 'selection' | 'manual' | null; created_at: string; }
+export interface ProfileCollectionRequestRow { id: string; person_id: string; fields_json: string; tag_map_json: string; expires_at: string; status: ProfileCollectionRequestStatus; invitation_url: string | null; created_at: string; consumed_at: string | null; }
 
 export interface BackupSnapshot {
   checkIns: CheckIn[]; posts: Post[]; drafts: Draft[]; people: Person[]; media: Media[];
@@ -48,7 +48,7 @@ export interface AppPreferences {
   lastExportAt: string | null; lastExportPostCount: number; backupReminderShownAt: string | null; notificationPromptShownAt: string | null; birthdayNotificationsEnabled: boolean;
   birthdayReminderHour: number; birthdayReminderMinute: number; birthdayNotificationError: string | null; memoryNotificationsEnabled: boolean;
   memoryNotificationError: string | null; persistentNotificationEnabled: boolean; musicPlaybackMode: MusicPlaybackMode; miniPlayerX: number;
-  miniPlayerY: number; miniPlayerEdge: 'left' | 'right' | null; miniPlayerYRatio: number | null; readerPreferencesJson: string;
+  miniPlayerY: number; miniPlayerEdge: 'left' | 'right' | null; miniPlayerYRatio: number | null; readerPreferencesJson: string; hapticsEnabled: boolean;
 }
 
 export type HomeMemory =

@@ -732,14 +732,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async createProfileCollectionRequest(request: ProfileCollectionRequest): Promise<void> {
     await this.enqueueWrite(() => this.db.runAsync(
       `INSERT INTO profile_collection_requests
-       (id, person_id, fields_json, tag_map_json, expires_at, status, created_at, consumed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, person_id, fields_json, tag_map_json, expires_at, status, invitation_url, created_at, consumed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       request.id,
       request.personId,
       JSON.stringify(request.fields),
       JSON.stringify(request.tagMap),
       request.expiresAt,
       request.status,
+      request.invitationUrl ?? null,
       request.createdAt,
       request.consumedAt,
     ));
@@ -747,11 +748,16 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null> {
     const row = await this.db.getFirstAsync<ProfileCollectionRequestRow>(
-      `SELECT id, person_id, fields_json, tag_map_json, expires_at, status, created_at, consumed_at
+      `SELECT id, person_id, fields_json, tag_map_json, expires_at, status, invitation_url, created_at, consumed_at
        FROM profile_collection_requests WHERE id = ?`,
       requestId,
     );
     return row ? mapProfileCollectionRequest(row) : null;
+  }
+
+  async listProfileCollectionRequests(): Promise<ProfileCollectionRequest[]> {
+    const rows = await this.db.getAllAsync<ProfileCollectionRequestRow>('SELECT id, person_id, fields_json, tag_map_json, expires_at, status, invitation_url, created_at, consumed_at FROM profile_collection_requests ORDER BY created_at DESC');
+    return rows.map(mapProfileCollectionRequest);
   }
 
   async listProfileCollectionRequestIds(): Promise<string[]> {
@@ -1001,22 +1007,25 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   }
 
   async deleteBook(bookId: string): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('DELETE FROM books WHERE id = ?', bookId));
+    await this.enqueueWrite(async () => {
+      await this.db.runAsync('UPDATE book_excerpts SET book_title = COALESCE(book_title, (SELECT title FROM books WHERE id = ?)) WHERE book_id = ?', bookId, bookId);
+      await this.db.runAsync('DELETE FROM books WHERE id = ?', bookId);
+    });
   }
 
   async listBookExcerpts(bookId?: string): Promise<BookExcerpt[]> {
     const rows = bookId
-      ? await this.db.getAllAsync<BookExcerptRow>('SELECT id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at FROM book_excerpts WHERE book_id = ? ORDER BY created_at DESC', bookId)
-      : await this.db.getAllAsync<BookExcerptRow>('SELECT id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at FROM book_excerpts ORDER BY created_at DESC');
+      ? await this.db.getAllAsync<BookExcerptRow>('SELECT id, book_id, book_title, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at FROM book_excerpts WHERE book_id = ? ORDER BY created_at DESC', bookId)
+      : await this.db.getAllAsync<BookExcerptRow>('SELECT id, book_id, book_title, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at FROM book_excerpts ORDER BY created_at DESC');
     return rows.map(mapBookExcerpt);
   }
 
   async createBookExcerpt(excerpt: BookExcerpt): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO book_excerpts (id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt));
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO book_excerpts (id, book_id, book_title, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.bookTitle ?? null, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt));
   }
 
   async updateBookExcerpt(excerpt: BookExcerpt): Promise<void> {
-    await this.enqueueWrite(() => this.db.runAsync('UPDATE book_excerpts SET text = ?, location = ?, note = ?, location_type = ?, chapter_title = ?, context_before = ?, context_after = ?, source_kind = ? WHERE id = ?', excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.id));
+    await this.enqueueWrite(() => this.db.runAsync('UPDATE book_excerpts SET book_id = ?, book_title = ?, text = ?, location = ?, note = ?, location_type = ?, chapter_title = ?, context_before = ?, context_after = ?, source_kind = ? WHERE id = ?', excerpt.bookId, excerpt.bookTitle ?? null, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.id));
   }
 
   async deleteBookExcerpt(excerptId: string): Promise<void> {
@@ -1157,6 +1166,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       miniPlayerEdge: values.miniPlayerEdge === 'left' || values.miniPlayerEdge === 'right' ? values.miniPlayerEdge : null,
       miniPlayerYRatio: values.miniPlayerYRatio && Number.isFinite(Number(values.miniPlayerYRatio)) ? Math.max(0, Math.min(1, Number(values.miniPlayerYRatio))) : null,
       readerPreferencesJson: values.readerPreferencesJson ?? '{}',
+      hapticsEnabled: values.hapticsEnabled !== 'false',
     };
   }
 
@@ -1291,7 +1301,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const list of snapshot.bookLists ?? []) await transaction.runAsync('INSERT INTO book_lists (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)', list.id, list.name, list.createdAt, list.updatedAt);
       for (const entry of snapshot.bookListEntries ?? []) await transaction.runAsync('INSERT INTO book_list_entries (list_id, book_id, added_at) VALUES (?, ?, ?)', entry.listId, entry.bookId, entry.addedAt);
       for (const relation of snapshot.personBooks ?? []) await transaction.runAsync('INSERT INTO person_books (person_id, book_id, created_at) VALUES (?, ?, ?)', relation.personId, relation.bookId, relation.createdAt);
-      for (const excerpt of snapshot.bookExcerpts ?? []) await transaction.runAsync('INSERT INTO book_excerpts (id, book_id, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt);
+      for (const excerpt of snapshot.bookExcerpts ?? []) await transaction.runAsync('INSERT INTO book_excerpts (id, book_id, book_title, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.bookTitle ?? null, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt);
       for (const source of snapshot.readingNoteSources ?? []) await transaction.runAsync('INSERT INTO reading_note_sources (post_id, book_id, excerpt_ids_json, quote_snapshots_json) VALUES (?, ?, ?, ?)', source.postId, source.bookId, JSON.stringify(source.excerptIds), JSON.stringify(source.quoteSnapshots));
       for (const [key, value] of Object.entries(snapshot.settings)) {
         await transaction.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', key, value);

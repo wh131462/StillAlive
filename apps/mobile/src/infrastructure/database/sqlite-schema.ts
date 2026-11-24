@@ -580,6 +580,64 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'birthday_notification_schedules', 'important_date_id', 'TEXT');
     await db.execAsync('PRAGMA user_version = 38;');
   }
+  if (currentVersion < 39) {
+    const hasBookExcerpts = await tableExists(db, 'book_excerpts');
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
+    try {
+      if (hasBookExcerpts) {
+        await db.execAsync(`
+          DROP TABLE IF EXISTS book_excerpts_v38;
+          ALTER TABLE book_excerpts RENAME TO book_excerpts_v38;
+          CREATE TABLE book_excerpts (
+            id TEXT PRIMARY KEY NOT NULL,
+            book_id TEXT REFERENCES books(id) ON DELETE SET NULL,
+            book_title TEXT,
+            text TEXT NOT NULL,
+            location TEXT,
+            note TEXT,
+            location_type TEXT,
+            chapter_title TEXT,
+            context_before TEXT,
+            context_after TEXT,
+            source_kind TEXT,
+            created_at TEXT NOT NULL
+          );
+          INSERT INTO book_excerpts (id, book_id, book_title, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at)
+          SELECT e.id, e.book_id, b.title, e.text, e.location, e.note, e.location_type, e.chapter_title, e.context_before, e.context_after, e.source_kind, e.created_at
+          FROM book_excerpts_v38 e
+          LEFT JOIN books b ON b.id = e.book_id;
+          DROP TABLE book_excerpts_v38;
+          CREATE INDEX IF NOT EXISTS book_excerpts_book_idx ON book_excerpts(book_id, created_at DESC);
+          PRAGMA user_version = 39;
+        `);
+      } else {
+        await db.execAsync(`
+          CREATE TABLE IF NOT EXISTS book_excerpts (
+            id TEXT PRIMARY KEY NOT NULL,
+            book_id TEXT REFERENCES books(id) ON DELETE SET NULL,
+            book_title TEXT,
+            text TEXT NOT NULL,
+            location TEXT,
+            note TEXT,
+            location_type TEXT,
+            chapter_title TEXT,
+            context_before TEXT,
+            context_after TEXT,
+            source_kind TEXT,
+            created_at TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS book_excerpts_book_idx ON book_excerpts(book_id, created_at DESC);
+          PRAGMA user_version = 39;
+        `);
+      }
+    } finally {
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+    }
+  }
+  if (currentVersion < 40) {
+    await addColumnIfMissing(db, 'profile_collection_requests', 'invitation_url', 'TEXT');
+    await db.execAsync('PRAGMA user_version = 40;');
+  }
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

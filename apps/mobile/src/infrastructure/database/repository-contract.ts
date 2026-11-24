@@ -63,6 +63,7 @@ export interface StillAliveRepository {
   replaceBirthdayNotificationSchedules(items: BirthdayNotificationSchedule[]): Promise<void>;
   createProfileCollectionRequest(request: ProfileCollectionRequest): Promise<void>;
   getProfileCollectionRequest(requestId: string): Promise<ProfileCollectionRequest | null>;
+  listProfileCollectionRequests(): Promise<ProfileCollectionRequest[]>;
   listProfileCollectionRequestIds(): Promise<string[]>;
   consumeProfileCollectionRequest(requestId: string, consumedAt: string): Promise<void>;
   deleteProfileCollectionRequest(requestId: string): Promise<void>;

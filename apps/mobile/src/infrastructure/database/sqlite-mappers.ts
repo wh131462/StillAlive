@@ -153,7 +153,7 @@ export function parseReaderToc(value: string | null): ReaderTocItem[] {
 }
 
 export function mapBookExcerpt(row: BookExcerptRow): BookExcerpt {
-  return { id: row.id, bookId: row.book_id, text: row.text, location: row.location, note: row.note, locationType: row.location_type, chapterTitle: row.chapter_title, contextBefore: row.context_before, contextAfter: row.context_after, sourceKind: row.source_kind ?? 'manual', createdAt: row.created_at };
+  return { id: row.id, bookId: row.book_id, bookTitle: row.book_title, text: row.text, location: row.location, note: row.note, locationType: row.location_type, chapterTitle: row.chapter_title, contextBefore: row.context_before, contextAfter: row.context_after, sourceKind: row.source_kind ?? 'manual', createdAt: row.created_at };
 }
 
 export function mapProfileCollectionRequest(row: ProfileCollectionRequestRow): ProfileCollectionRequest {
@@ -164,6 +164,7 @@ export function mapProfileCollectionRequest(row: ProfileCollectionRequestRow): P
     tagMap: parseStringMap(row.tag_map_json),
     expiresAt: row.expires_at,
     status: row.status === 'consumed' ? 'consumed' : 'pending',
+    invitationUrl: row.invitation_url,
     createdAt: row.created_at,
     consumedAt: row.consumed_at,
   };
