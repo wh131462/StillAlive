@@ -46,6 +46,8 @@ export interface ReadingPreferences {
   showStatusBar: boolean;
   fontSize: number;
   lineHeight: number;
+  paragraphSpacing: number;
+  firstLineIndent: boolean;
   pageMargin: number;
   fontFamily: ReaderFontFamily;
   fontName: string | null;

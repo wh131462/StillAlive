@@ -21,10 +21,10 @@ type ReaderSheet = 'library' | 'display' | 'font' | 'jump' | 'info' | null;
 type LibraryTab = 'toc' | 'excerpts' | 'notes';
 
 const READER_THEMES: Array<{ id: ReaderTheme; label: string; swatch: string }> = [
-  { id: 'paper', label: '纸白', swatch: '#F8F8F4' },
-  { id: 'warm', label: '暖黄', swatch: '#EEE3C9' },
-  { id: 'green', label: '护眼', swatch: '#E6F0DC' },
-  { id: 'night', label: '夜间', swatch: '#151916' },
+  { id: 'paper', label: '纸白', swatch: '#F8F7F2' },
+  { id: 'warm', label: '暖黄', swatch: '#EFE4CB' },
+  { id: 'green', label: '护眼', swatch: '#E8F0DE' },
+  { id: 'night', label: '夜间', swatch: '#141815' },
 ];
 
 const READER_LOCATION_WRITE_DELAY_MS = 800;
@@ -43,6 +43,7 @@ export default function ReaderScreen() {
   const latestLocationEventRef = useRef<ReaderLocationEvent | null>(null);
   const latestLocationKeyRef = useRef<string | null>(null);
   const bookRef = useRef(book);
+  const lastLightThemeRef = useRef<ReaderTheme>('paper');
   const controlsProgress = useRef(new Animated.Value(0)).current;
   const [controlsVisible, setControlsVisible] = useState(false);
   const [sheet, setSheet] = useState<ReaderSheet>(null);
@@ -81,6 +82,12 @@ export default function ReaderScreen() {
     });
     return () => { active = false; };
   }, [fontsLoaded, sheet]);
+
+  // 记住上一次的浅色主题，底部「夜间」按钮才能在日间与夜间之间来回切换。
+  useEffect(() => {
+    const theme = readingPreferences?.theme;
+    if (theme && theme !== 'night') lastLightThemeRef.current = theme;
+  }, [readingPreferences?.theme]);
 
   const persistBookPatch = useCallback((changes: Partial<Book>) => {
     const currentBook = bookRef.current;
@@ -144,13 +151,13 @@ export default function ReaderScreen() {
   const currentChapterTitle = currentPdfTocItem?.label ?? chapterTitleFromLocator(location) ?? (book.chapterTitle?.trim() || null);
   const immersiveChapterTitle = currentChapterTitle ?? book.title;
 
-  // 控制栏是覆盖层，但正文区域仍应利用整块屏幕。展开时为顶部 54pt 和底部
-  // 132pt 控制区预留空间；收起后只保留沉浸 HUD 所需的安全距离，避免出现
-  // 大块空白。EPUB 会随高度重新分页，这是收起控制栏时保留可读性的代价。
-  const readerContentPadding = useMemo(() => ({
-    top: insets.top + (controlsVisible ? 54 + 8 : 24),
-    bottom: insets.bottom + (controlsVisible ? 132 + 8 : 28),
-  }), [controlsVisible, insets.bottom, insets.top]);
+  // 阅读控制栏是浮层，不参与正文布局。固定安全区可以避免展开/收起时
+  // EPUB 重新分页或 PDF 可视区域变化，导致正文跳动；顶部与 48pt 顶栏对齐，
+  // 顶栏展开时不会切断第一行正文。
+  const readerContentPadding = {
+    top: insets.top + 48,
+    bottom: insets.bottom + 44,
+  };
 
   const persistLocation = (event: ReaderLocationEvent) => {
     const key = readerLocationEventKey(book.id, event);
@@ -175,6 +182,25 @@ export default function ReaderScreen() {
   const openLibrary = (tab: LibraryTab) => {
     setLibraryTab(tab);
     setSheet('library');
+  };
+
+  // 底部进度行：PDF 打开页码跳转，其他格式打开目录；不额外造一个「假滑块」。
+  const openProgress = () => {
+    if (session.capabilities.pageJump) {
+      setJumpDraft(String(location?.type === 'pdf-page' ? location.page : 1));
+      setSheet('jump');
+      return;
+    }
+    openLibrary('toc');
+  };
+
+  const toggleNightTheme = () => {
+    if (readingPreferences.theme === 'night') {
+      persistPreferences({ ...readingPreferences, theme: lastLightThemeRef.current });
+      return;
+    }
+    lastLightThemeRef.current = readingPreferences.theme;
+    persistPreferences({ ...readingPreferences, theme: 'night' });
   };
 
   const handleSelection = (selection: ReaderSelection) => {
@@ -251,6 +277,7 @@ export default function ReaderScreen() {
 
   const locationLabel = formatLocation(book.format, location, book.progress);
   const hudProgressLabel = formatHudProgress(book.format, location, book.progress);
+  const progression = readerProgression(book.format, location, book.progress);
   const currentTocHref = currentTocItemHref(book.format, location, book.chapterHref ?? null, toc);
   const controlBarOpacity = controlsProgress;
   const immersiveHudOpacity = controlsProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
@@ -260,6 +287,7 @@ export default function ReaderScreen() {
     : systemFonts;
   const selectedFontLabel = readingPreferences.fontName
     ?? (readingPreferences.fontFamily === 'serif' ? '默认衬线' : '默认无衬线');
+  const nightMode = readingPreferences.theme === 'night';
 
   return (
     <SafeAreaView edges={[]} style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -272,7 +300,7 @@ export default function ReaderScreen() {
         style={[
           styles.header,
           {
-            minHeight: 54 + insets.top,
+            minHeight: 48 + insets.top,
             paddingTop: insets.top,
             backgroundColor: palette.background,
             borderBottomColor: palette.line,
@@ -284,6 +312,7 @@ export default function ReaderScreen() {
         <IconButton label="返回书架" name={{ android: 'chevron_left', ios: 'chevron.left', web: 'chevron_left' }} onPress={() => { flushLocation(); router.back(); }} tint={palette.text} />
         <View style={styles.headerCopy}>
           <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.headerTitle, { color: palette.text }]}>{book.title}</Text>
+          {currentChapterTitle ? <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.headerChapter, { color: palette.muted }]}>{currentChapterTitle}</Text> : null}
         </View>
         <IconButton label="查看阅读信息" name={{ android: 'info', ios: 'info.circle', web: 'info' }} onPress={() => setSheet('info')} tint={palette.text} />
       </Animated.View>
@@ -366,25 +395,30 @@ export default function ReaderScreen() {
           {
             paddingBottom: insets.bottom,
             backgroundColor: palette.background,
-            borderTopColor: palette.line,
             opacity: controlBarOpacity,
             transform: [{ translateY: controlsProgress.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
           },
         ]}
       >
-        <View style={styles.positionControls}>
-          <Pressable accessibilityLabel="上一页或上一章" disabled={!readable} onPress={() => readerRef.current?.previous()} style={({ pressed }) => [styles.positionAction, !readable && styles.disabled, pressed && styles.pressed]}><Text style={[styles.positionActionText, { color: palette.text }]}>上一页</Text></Pressable>
-          <Pressable accessibilityLabel={book.format === 'pdf' ? '跳转页码' : '当前阅读位置'} disabled={!session.capabilities.pageJump} onPress={() => {
-            if (!session.capabilities.pageJump) return;
-            setJumpDraft(String(location?.type === 'pdf-page' ? location.page : 1));
-            setSheet('jump');
-          }} style={styles.positionLabel}><Text style={[styles.positionText, { color: palette.text }]}>{locationLabel}</Text></Pressable>
-          <Pressable accessibilityLabel="下一页或下一章" disabled={!readable} onPress={() => readerRef.current?.next()} style={({ pressed }) => [styles.positionAction, !readable && styles.disabled, pressed && styles.pressed]}><Text style={[styles.positionActionText, { color: palette.text }]}>下一页</Text></Pressable>
+        <View pointerEvents="none" style={[styles.progressTrack, { backgroundColor: palette.line }]}>
+          <View style={[styles.progressFill, { width: `${Math.round(progression * 100)}%`, backgroundColor: palette.accent }]} />
         </View>
+        <Pressable
+          accessibilityLabel={book.format === 'pdf' ? `阅读进度 ${locationLabel}，跳转页码` : `当前 ${immersiveChapterTitle}，阅读进度 ${locationLabel}，打开目录`}
+          accessibilityRole="button"
+          hitSlop={4}
+          onPress={openProgress}
+          style={({ pressed }) => [styles.progressRow, pressed && styles.pressed]}
+        >
+          <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.progressChapter, { color: palette.text }]}>{immersiveChapterTitle}</Text>
+          <Text style={[styles.progressValue, { color: palette.muted }]}>{locationLabel}</Text>
+          <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={13} style={styles.progressChevron} tintColor={palette.muted} type="hierarchical" />
+        </Pressable>
         <View style={styles.readerTools}>
           <ReaderTool icon={{ android: 'menu_book', ios: 'list.bullet', web: 'menu_book' }} label="目录" disabled={!session.capabilities.toc} onPress={() => openLibrary('toc')} tint={palette.muted} />
           <ReaderTool icon={{ android: 'format_quote', ios: 'quote.bubble', web: 'format_quote' }} label={excerpts.length ? `书摘 ${excerpts.length}` : '书摘'} onPress={() => openLibrary('excerpts')} tint={palette.muted} />
           <ReaderTool icon={{ android: 'edit_note', ios: 'square.and.pencil', web: 'edit_note' }} label="笔记" onPress={() => openLibrary('notes')} tint={palette.muted} />
+          <ReaderTool accessibilityLabel={nightMode ? '切换到浅色主题' : '切换到夜间主题'} icon={nightMode ? { android: 'light_mode', ios: 'sun.max', web: 'light_mode' } : { android: 'dark_mode', ios: 'moon', web: 'dark_mode' }} label={nightMode ? '日间' : '夜间'} onPress={toggleNightTheme} tint={nightMode ? palette.accent : palette.muted} />
           <ReaderTool icon={{ android: 'text_fields', ios: 'textformat', web: 'text_fields' }} label="设置" onPress={() => setSheet('display')} tint={palette.muted} />
         </View>
       </Animated.View>
@@ -427,7 +461,12 @@ export default function ReaderScreen() {
             <View>
               {session.capabilities.fontSize ? <SettingRow label="字号" palette={palette}><Stepper label={`${readingPreferences.fontSize} px`} onDecrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.max(14, readingPreferences.fontSize - 1) })} onIncrease={() => persistPreferences({ ...readingPreferences, fontSize: Math.min(32, readingPreferences.fontSize + 1) })} palette={palette} /></SettingRow> : null}
               {session.capabilities.lineHeight ? <SettingRow label="行距" palette={palette}><Stepper label={readingPreferences.lineHeight.toFixed(1)} onDecrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.max(1.3, Number((readingPreferences.lineHeight - 0.1).toFixed(1))) })} onIncrease={() => persistPreferences({ ...readingPreferences, lineHeight: Math.min(2.4, Number((readingPreferences.lineHeight + 0.1).toFixed(1))) })} palette={palette} /></SettingRow> : null}
+              <SettingRow label="段距" palette={palette}><Stepper label={`${readingPreferences.paragraphSpacing.toFixed(1)} em`} onDecrease={() => persistPreferences({ ...readingPreferences, paragraphSpacing: Math.max(0, Number((readingPreferences.paragraphSpacing - 0.1).toFixed(1))) })} onIncrease={() => persistPreferences({ ...readingPreferences, paragraphSpacing: Math.min(1.5, Number((readingPreferences.paragraphSpacing + 0.1).toFixed(1))) })} palette={palette} /></SettingRow>
               <SettingRow label="页边距" palette={palette}><Stepper label={`${readingPreferences.pageMargin} px`} onDecrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.max(12, readingPreferences.pageMargin - 2) })} onIncrease={() => persistPreferences({ ...readingPreferences, pageMargin: Math.min(44, readingPreferences.pageMargin + 2) })} palette={palette} /></SettingRow>
+              <Pressable accessibilityRole="switch" accessibilityState={{ checked: readingPreferences.firstLineIndent }} onPress={() => persistPreferences({ ...readingPreferences, firstLineIndent: !readingPreferences.firstLineIndent })} style={({ pressed }) => [styles.settingRow, { borderBottomColor: palette.line }, pressed && styles.pressed]}>
+                <Text style={[styles.settingRowLabel, { color: palette.text }]}>首行缩进</Text>
+                <View style={[styles.switchTrack, { backgroundColor: readingPreferences.firstLineIndent ? palette.accent : palette.line }]}><View style={[styles.switchThumb, readingPreferences.firstLineIndent && styles.switchThumbOn]} /></View>
+              </Pressable>
               <SettingRow label="字体" palette={palette}>
                 <Pressable accessibilityLabel={`当前字体：${selectedFontLabel}`} onPress={() => {
                   setFontSearch('');
@@ -516,8 +555,8 @@ function ExcerptPanel({ draft, excerpts, highlights, manual, onChangeDraft, onDe
   return <View style={styles.excerptPanel}><Text style={[styles.sheetHint, { color: palette.muted }]}>{hint}</Text><TextInput maxLength={20_000} multiline onChangeText={onChangeDraft} placeholder="输入摘抄内容" placeholderTextColor={palette.muted} style={[styles.excerptInput, { backgroundColor: palette.background, color: palette.text }]} textAlignVertical="top" value={draft} /><Pressable disabled={!draft.trim()} onPress={onSave} style={({ pressed }) => [styles.primaryAction, { backgroundColor: palette.accent }, !draft.trim() && styles.disabled, pressed && styles.pressed]}><Text style={styles.primaryActionText}>保存书摘</Text></Pressable><ScrollView contentContainerStyle={styles.toolList} keyboardShouldPersistTaps="handled" style={styles.excerptScroll}>{excerpts.map((excerpt) => <View key={excerpt.id} style={[styles.excerpt, { borderTopColor: palette.line }]}><Text numberOfLines={5} style={[styles.quote, { color: palette.text }]}>{excerpt.text}</Text><View style={styles.excerptFooter}><Text style={[styles.excerptLocation, { color: palette.muted }]}>{formatExcerptLocation(excerpt)}</Text><View style={styles.excerptActions}><IconButton label="引用书摘写观后感" name={{ android: 'edit_note', ios: 'square.and.pencil', web: 'edit_note' }} onPress={() => onWrite(excerpt.id)} tint={palette.accent} /><IconButton label="删除书摘" name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} onPress={() => onDelete(excerpt.id)} tint={colors.danger} /></View></View></View>)}{excerpts.length === 0 ? <Text style={[styles.emptyText, { color: palette.muted }]}>还没有书摘</Text> : null}</ScrollView></View>;
 }
 
-function ReaderTool({ icon, label, onPress, tint, disabled = false }: { icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void; tint: string; disabled?: boolean }) {
-  return <Pressable accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.readerTool, disabled && styles.disabled, pressed && styles.pressed]}><SymbolView name={icon} size={21} tintColor={tint} type="hierarchical" /><Text numberOfLines={1} style={[styles.readerToolText, { color: tint }]}>{label}</Text></Pressable>;
+function ReaderTool({ accessibilityLabel, icon, label, onPress, tint, disabled = false }: { accessibilityLabel?: string; icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void; tint: string; disabled?: boolean }) {
+  return <Pressable accessibilityLabel={accessibilityLabel ?? label} accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.readerTool, disabled && styles.disabled, pressed && styles.pressed]}><SymbolView name={icon} size={21} tintColor={tint} type="hierarchical" /><Text numberOfLines={1} style={[styles.readerToolText, { color: tint }]}>{label}</Text></Pressable>;
 }
 
 function ImmersiveReaderHud({ progressLabel, onOpenControls, palette }: { progressLabel: string; onOpenControls(): void; palette: ReturnType<typeof readerPalette> }) {
@@ -617,8 +656,18 @@ function formatLocation(format: string, locator: BookLocator | null, progression
     const total = locator?.type === 'pdf-page' ? locator.pageCount : null;
     return total ? `${page} / ${total}` : `第 ${page} 页`;
   }
-  const value = locator?.type === 'epub-cfi' || locator?.type === 'reflow-cfi' ? locator.progression : progression;
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+  return `${Math.round(readerProgression(format, locator, progression) * 100)}%`;
+}
+
+function readerProgression(format: string, locator: BookLocator | null, fallback: number): number {
+  const value = format === 'pdf' && locator?.type === 'pdf-page'
+    ? locator.pageCount
+      ? (locator.page - 1) / Math.max(1, locator.pageCount - 1)
+      : fallback
+    : locator?.type === 'epub-cfi' || locator?.type === 'reflow-cfi'
+      ? locator.progression
+      : fallback;
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 }
 
 function tocItemLocator(book: Book, location: BookLocator | null, item: ReaderTocItem): BookLocator | null {
@@ -656,12 +705,7 @@ function pdfPageFromTocHref(href: string): number | null {
 }
 
 function readingProgressLabel(book: Book, location: BookLocator | null): string {
-  const value = location?.type === 'epub-cfi' || location?.type === 'reflow-cfi'
-    ? location.progression
-    : location?.type === 'pdf-page' && location.pageCount
-      ? (location.page - 1) / Math.max(1, location.pageCount - 1)
-      : book.progress;
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+  return `${Math.round(readerProgression(book.format, location, book.progress) * 100)}%`;
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -677,14 +721,11 @@ function chapterTitleFromLocator(locator: BookLocator | null): string | null {
 }
 
 function formatHudProgress(format: string, locator: BookLocator | null, progression: number) {
+  const percent = Math.round(readerProgression(format, locator, progression) * 100);
   if (format === 'pdf' && locator?.type === 'pdf-page') {
-    const percent = locator.pageCount
-      ? Math.round(Math.max(0, Math.min(1, locator.page / locator.pageCount)) * 100)
-      : Math.round(Math.max(0, Math.min(1, progression)) * 100);
     return locator.pageCount ? `${locator.page}/${locator.pageCount}  ${percent}%` : `第 ${locator.page} 页  ${percent}%`;
   }
-  const value = locator?.type === 'epub-cfi' || locator?.type === 'reflow-cfi' ? locator.progression : progression;
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+  return `${percent}%`;
 }
 
 function formatExcerptLocation(excerpt: BookExcerpt) {
@@ -711,10 +752,10 @@ function isProtectedReaderError(message: string): boolean {
 }
 
 function readerPalette(theme: ReaderTheme) {
-  if (theme === 'night') return { background: '#151916', chrome: '#202621', surface: '#2A312B', line: '#3B463D', text: '#EDF0EB', muted: '#9DA69E', accent: '#83A98B', accentSoft: '#29382D' };
-  if (theme === 'warm') return { background: '#EEE3C9', chrome: '#F5ECD9', surface: '#E5D8BC', line: '#D2C3A4', text: '#403A30', muted: '#817664', accent: '#587763', accentSoft: '#DCE7D8' };
-  if (theme === 'green') return { background: '#E6F0DC', chrome: '#EEF5E8', surface: '#D7E5CD', line: '#C4D4BA', text: '#29372B', muted: '#657267', accent: '#4D7357', accentSoft: '#D1E4D2' };
-  return { background: '#F8F8F4', chrome: '#FFFFFF', surface: '#ECEDE7', line: '#D8DAD1', text: '#242824', muted: '#747A74', accent: colors.life, accentSoft: colors.lifeLight };
+  if (theme === 'night') return { background: '#141815', chrome: '#1E231F', surface: '#29312B', line: 'rgba(233, 236, 230, 0.13)', text: '#E9ECE6', muted: '#9AA49B', accent: '#86AF90', accentSoft: '#29382D' };
+  if (theme === 'warm') return { background: '#EFE4CB', chrome: '#F8F0DF', surface: '#E6D9BD', line: 'rgba(64, 58, 48, 0.14)', text: '#3D372C', muted: '#756A58', accent: '#55705F', accentSoft: '#DCE7D8' };
+  if (theme === 'green') return { background: '#E8F0DE', chrome: '#F1F7EA', surface: '#D9E6CF', line: 'rgba(41, 55, 43, 0.13)', text: '#28362A', muted: '#5F6B60', accent: '#4C7256', accentSoft: '#D1E4D2' };
+  return { background: '#F8F7F2', chrome: '#FFFFFF', surface: '#EFEFE8', line: 'rgba(36, 40, 36, 0.11)', text: '#242824', muted: '#666C63', accent: '#2F6B4D', accentSoft: '#DCE8DF' };
 }
 
 const styles = createThemedStyles(() => ({
@@ -723,8 +764,9 @@ const styles = createThemedStyles(() => ({
   missingSafe: { flex: 1, backgroundColor: colors.paper },
   missing: { margin: spacing.lg, color: colors.inkSoft },
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
-  headerCopy: { flex: 1, minWidth: 0, paddingVertical: spacing.xs, alignItems: 'flex-start' },
+  headerCopy: { flex: 1, minWidth: 0, paddingVertical: 5, alignItems: 'flex-start' },
   headerTitle: { maxWidth: '100%', fontFamily: typography.display, fontSize: 14, lineHeight: 18 },
+  headerChapter: { maxWidth: '100%', marginTop: 1, fontSize: 11, lineHeight: 14 },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   readerSurface: { flex: 1 },
   readerError: { flex: 1, paddingHorizontal: spacing.xl, alignItems: 'center', justifyContent: 'center' },
@@ -734,24 +776,25 @@ const styles = createThemedStyles(() => ({
   secondaryAction: { minWidth: 128, minHeight: 46, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 6 },
   secondaryActionText: { fontSize: 12, fontWeight: '600' },
   immersiveChapterLayer: { position: 'absolute', left: spacing.md, right: spacing.md, zIndex: 18, minHeight: 24, justifyContent: 'center' },
-  immersiveChapterTitle: { maxWidth: '100%', fontFamily: typography.display, fontSize: 11, lineHeight: 16, opacity: 0.72 },
+  immersiveChapterTitle: { maxWidth: '100%', fontFamily: typography.display, fontSize: 11, lineHeight: 16, opacity: 0.8 },
   immersiveHudLayer: { position: 'absolute', left: spacing.md, right: spacing.md, zIndex: 18 },
   immersiveHud: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   immersiveHudRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  immersiveHudMeta: { fontFamily: typography.mono, fontSize: 10, fontVariant: ['tabular-nums'], opacity: 0.72 },
+  immersiveHudMeta: { fontFamily: typography.mono, fontSize: 10, fontVariant: ['tabular-nums'], opacity: 0.8 },
   immersiveBattery: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  bottomControls: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, paddingHorizontal: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
-  positionControls: { minHeight: 52, flexDirection: 'row', alignItems: 'center' },
-  positionAction: { width: 82, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  positionActionText: { fontSize: 11, fontWeight: '600' },
-  positionLabel: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  positionText: { fontFamily: typography.mono, fontSize: 11 },
-  readerTools: { minHeight: 72, flexDirection: 'row', justifyContent: 'space-around' },
+  bottomControls: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, paddingHorizontal: spacing.md },
+  progressTrack: { height: 2, marginHorizontal: -spacing.md, overflow: 'hidden' },
+  progressFill: { height: 2 },
+  progressRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center' },
+  progressChapter: { flex: 1, minWidth: 0, marginRight: spacing.sm, fontFamily: typography.display, fontSize: 12, lineHeight: 17 },
+  progressValue: { fontFamily: typography.mono, fontSize: 10, fontVariant: ['tabular-nums'] },
+  progressChevron: { marginLeft: spacing.xs },
+  readerTools: { minHeight: 64, flexDirection: 'row', justifyContent: 'space-between' },
   pageTurnLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '18%' },
   pageTurnRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '18%' },
   defaultPreferencesButton: { minHeight: 44, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 6 },
   defaultPreferencesText: { fontSize: 11, fontWeight: '700' },
-  readerTool: { width: 74, minHeight: 66, alignItems: 'center', justifyContent: 'center' },
+  readerTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center' },
   readerToolText: { maxWidth: 68, marginTop: 5, fontSize: 10 },
   disabled: { opacity: 0.32 },
   pressed: { opacity: 0.58 },

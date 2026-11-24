@@ -332,13 +332,29 @@ function flattenToc(items: Toc, depth = 0): ReaderTocItem[] {
 
 function epubTheme(preferences: ReadingPreferences, palette: BookReaderProps['palette']): Theme {
   const family = readerFontFamily(preferences);
+  // epub.js 会把这里的键原样写进 CSS，因此必须使用带连字符的 CSS 属性名，
+  // 不能使用 paddingRight/fontSize 这类 React 风格写法（浏览器会整条忽略）。
   return {
     'html, body': { background: `${palette.background} !important`, color: `${palette.text} !important` },
-    body: { paddingRight: `${preferences.pageMargin}px !important`, paddingLeft: `${preferences.pageMargin}px !important`, fontFamily: `${family} !important`, fontSize: `${preferences.fontSize}px !important`, lineHeight: `${preferences.lineHeight} !important`, overflowWrap: 'break-word !important' },
-    'article, section, main, div, p, li, blockquote, span, td, th, dt, dd, figcaption': { background: 'transparent !important', color: `${palette.text} !important`, fontFamily: `${family} !important`, lineHeight: `${preferences.lineHeight} !important`, letterSpacing: '0 !important' },
-    'h1, h2, h3, h4': { color: `${palette.text} !important`, fontFamily: `${family} !important`, letterSpacing: '0 !important' },
+    body: {
+      'padding-left': `${preferences.pageMargin}px !important`,
+      'padding-right': `${preferences.pageMargin}px !important`,
+      'font-family': `${family} !important`,
+      'font-size': `${preferences.fontSize}px !important`,
+      'line-height': `${preferences.lineHeight} !important`,
+      'overflow-wrap': 'break-word !important',
+      'text-align': 'justify !important',
+    },
+    'article, section, main, div, p, li, blockquote, span, td, th, dt, dd, figcaption': { background: 'transparent !important', color: `${palette.text} !important`, 'font-family': `${family} !important`, 'line-height': `${preferences.lineHeight} !important`, 'letter-spacing': '0 !important' },
+    p: {
+      'text-indent': preferences.firstLineIndent ? '2em !important' : '0 !important',
+      'margin-top': '0 !important',
+      'margin-bottom': `${preferences.paragraphSpacing}em !important`,
+      'text-align': 'justify !important',
+    },
+    'h1, h2, h3, h4': { color: `${palette.text} !important`, 'font-family': `${family} !important`, 'font-weight': '700 !important', 'letter-spacing': '0 !important', 'line-height': '1.45 !important', 'margin-top': '1.4em !important', 'margin-bottom': '0.9em !important', 'text-indent': '0 !important' },
     a: { color: `${palette.accent} !important` },
-    'img, svg, video': { maxWidth: '100% !important', height: 'auto !important' },
+    'img, svg, video': { 'max-width': '100% !important', height: 'auto !important' },
     '::selection': { background: `${palette.accent}55` },
   };
 }
