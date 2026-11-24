@@ -24,7 +24,7 @@ type SortMode = 'reading' | 'imported' | 'title';
 export default function BookshelfScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { bookListEntries, bookLists, books, createBook, createBookList, deleteBook, discardMedia, media, saveMedia, updateBook } = useAppState();
+  const { bookExcerpts, bookListEntries, bookLists, books, createBook, createBookList, deleteBook, discardMedia, media, saveMedia, updateBook } = useAppState();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('reading');
   const [importing, setImporting] = useState(false);
@@ -387,6 +387,12 @@ export default function BookshelfScreen() {
   };
 
   const listHeader = <>
+    <Pressable accessibilityLabel="查看全部书摘" accessibilityRole="button" onPress={() => router.push('/excerpts' as never)} style={({ pressed }) => [styles.excerptEntry, pressed && styles.pressed]}>
+      <View style={styles.excerptEntryIcon}><SymbolView name={{ android: 'format_quote', ios: 'quote.bubble', web: 'format_quote' }} size={19} tintColor={colors.life} type="hierarchical" /></View>
+      <View style={styles.excerptEntryCopy}><Text style={styles.excerptEntryTitle}>全部书摘</Text><Text style={styles.excerptEntryHint}>按书籍归拢所有摘抄与备注</Text></View>
+      <Text style={styles.excerptEntryCount}>{bookExcerpts.length} 条</Text>
+      <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} size={18} tintColor={colors.inkFaint} type="hierarchical" />
+    </Pressable>
     {importProgress ? <View style={styles.importProgress}><ActivityIndicator color={colors.life} size="small" /><View style={styles.importProgressCopy}><Text style={styles.importProgressTitle}>正在导入 {importProgress.current} / {importProgress.total}</Text><View style={styles.importProgressTrack}><View style={[styles.importProgressFill, { width: `${Math.round(importProgress.current / importProgress.total * 100)}%` }]} /></View></View></View> : null}
     {continueBook ? <ContinueReading book={continueBook} media={media} onPress={() => openBook(continueBook)} /> : null}
 
@@ -569,8 +575,14 @@ function formatDate(value: string): string { const date = new Date(value); retur
 function formatLocalPath(value: string | undefined): string { if (!value) return '未知'; const path = value.startsWith('file://') ? value.slice('file://'.length) : value; try { return decodeURI(path); } catch { return path; } }
 
 const styles = createThemedStyles(() => ({
+  excerptEntry: { minHeight: 64, marginBottom: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 6, backgroundColor: colors.sheet },
+  excerptEntryIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.lifeLight },
+  excerptEntryCopy: { flex: 1, minWidth: 0 },
+  excerptEntryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 16 },
+  excerptEntryHint: { marginTop: 4, color: colors.inkFaint, fontSize: 10 },
+  excerptEntryCount: { color: colors.life, fontFamily: typography.mono, fontSize: 9 },
   safe: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl + 96 },
   importProgress: { minHeight: 64, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: 6, backgroundColor: colors.sheet },
   importProgressCopy: { flex: 1, marginLeft: spacing.md },
   importProgressTitle: { color: colors.inkSoft, fontSize: 11, fontWeight: '600' },
@@ -615,10 +627,10 @@ const styles = createThemedStyles(() => ({
   rowAuthor: { marginTop: 4, color: colors.inkFaint, fontSize: 10 },
   rowMeta: { marginTop: 7, flexDirection: 'row', alignItems: 'center' },
   formatTag: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 5, color: colors.life, backgroundColor: colors.lifeLight, fontFamily: typography.mono, fontSize: 8 },
-  formatTagWarm: { color: colors.sun, backgroundColor: colors.sunLight },
+  formatTagWarm: { color: colors.sunInk, backgroundColor: colors.sunLight },
   formatTagDanger: { color: colors.danger, backgroundColor: colors.dangerLight },
   rowPosition: { marginLeft: spacing.sm, color: colors.inkSoft, fontSize: 10 },
-  rowPositionWarm: { color: colors.sun },
+  rowPositionWarm: { color: colors.sunInk },
   rowPositionDanger: { color: colors.danger },
   rowProgress: { marginLeft: 'auto', color: colors.life, fontFamily: typography.mono, fontSize: 10 },
   moreButton: { width: 44, height: 52, alignItems: 'center', justifyContent: 'center' },
@@ -654,7 +666,7 @@ const styles = createThemedStyles(() => ({
   actionTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17, lineHeight: 22 },
   actionMeta: { marginTop: 4, color: colors.inkFaint, fontSize: 10 },
   statusExplanation: { paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
-  statusExplanationLabel: { color: colors.sun, fontSize: 12, fontWeight: '700' },
+  statusExplanationLabel: { color: colors.sunInk, fontSize: 12, fontWeight: '700' },
   statusExplanationDanger: { color: colors.danger },
   statusExplanationText: { marginTop: 5, color: colors.inkSoft, fontSize: 11, lineHeight: 17 },
   editSheet: { maxHeight: '92%', paddingHorizontal: spacing.lg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet },

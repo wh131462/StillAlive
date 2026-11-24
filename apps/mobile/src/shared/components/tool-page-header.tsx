@@ -92,7 +92,7 @@ const styles = createThemedStyles(() => ({
   headerTitle: { maxWidth: '100%', color: colors.ink, fontFamily: typography.display, fontSize: 18, textAlign: 'center' },
   headerSubtitle: { maxWidth: '100%', marginTop: 2, color: colors.inkFaint, fontSize: typography.size.meta, textAlign: 'center' },
   headerTextButton: { minWidth: 44, maxWidth: 88, height: 44, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
-  headerTextButtonEmphasized: { minWidth: 68, height: 40, backgroundColor: colors.life },
+  headerTextButtonEmphasized: { minWidth: 68, height: 44, backgroundColor: colors.life },
   headerText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' },
   headerTextEmphasized: { color: colors.onLife },
   overview: { minHeight: 112, padding: spacing.md, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.sheet },

@@ -98,7 +98,7 @@ interface CalendarViewProps {
 }
 
 function BirthdayCakeIcon({ size }: { size: number }) {
-  return <Image accessibilityIgnoresInvertColors accessible={false} resizeMode="contain" source={birthdayCakeSource} style={{ width: size, height: size, tintColor: colors.sun }} />;
+  return <Image accessibilityIgnoresInvertColors accessible={false} resizeMode="contain" source={birthdayCakeSource} style={{ width: size, height: size, tintColor: colors.sunInk }} />;
 }
 
 function CalendarView({ activeMonth, checkInDays, ledgerTransactions, onChangeMonth, onOpenPost, onSelectDay, onWrite, people, posts, readingNoteSources, selectedCheckIn, selectedDay, selectedPosts, selfBirthday, today }: CalendarViewProps) {
@@ -131,6 +131,7 @@ function CalendarView({ activeMonth, checkInDays, ledgerTransactions, onChangeMo
   const selectedLedgerExpense = selectedLedger.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amountCents, 0);
   const selectedLedgerIncome = selectedLedger.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amountCents, 0);
   const selectedItemCount = selectedPosts.length + Number(Boolean(selectedCheckIn));
+  const selectedEcho = useMemo(() => findEchoPost(posts, selectedDay), [posts, selectedDay]);
   const [year, month] = activeMonth.split('-');
 
   return (
@@ -226,11 +227,11 @@ function CalendarView({ activeMonth, checkInDays, ledgerTransactions, onChangeMo
           <View style={styles.selectedDateBlock}>
             <Text style={styles.selectedDate}>{selectedDay.replaceAll('-', '.')} {chineseWeekdayLabel(selectedDay)}</Text>
             {selectedLunarDate ? <Text style={styles.selectedLunar}>农历 {selectedLunarDate.fullLabel}{selectedLunarDate.term ? ` ${selectedLunarDate.term}` : ''}</Text> : null}
-            <Text style={styles.selectedHint}>{selectedItemCount ? `这一天留下了 ${selectedItemCount} 个片段` : selectedLedger.length ? '这一天有账本记录' : '这一天还没有内容'}</Text>
+            <Text style={styles.selectedHint}>{selectedItemCount ? `这一天留下了 ${selectedItemCount} 个片段${selectedEcho ? `，还有 ${Number(selectedDay.slice(0, 4)) - Number(selectedEcho.dayKey.slice(0, 4))} 年前的今天` : ''}` : selectedEcho ? `没有新的内容，但遇见了 ${Number(selectedDay.slice(0, 4)) - Number(selectedEcho.dayKey.slice(0, 4))} 年前的今天` : selectedLedger.length ? '这一天有账本记录' : '这一天还没有内容'}</Text>
           </View>
           {selectedDay <= today ? <Pressable accessibilityRole="button" onPress={() => onWrite(selectedDay)} style={styles.writeButton}><Text style={styles.writeButtonText}>{selectedDay === today ? '写一条' : '补写一条'}</Text></Pressable> : null}
         </View>
-        {selectedBirthdays.length || selectedItemCount || selectedLedger.length ? (
+        {selectedBirthdays.length || selectedItemCount || selectedLedger.length || selectedEcho ? (
           <View style={styles.selectedList}>
             {selectedBirthdays.map((birthday) => (
               <View key={`${birthday.personId}_${birthday.calendar}`} style={styles.selectedEntry}>
@@ -252,13 +253,25 @@ function CalendarView({ activeMonth, checkInDays, ledgerTransactions, onChangeMo
             ) : null}
             {selectedLedger.length ? (
               <View style={styles.selectedEntry} accessibilityLabel={`账本 ${selectedLedger.length} 笔，支出 ${formatLedgerMoney(selectedLedgerExpense)}，收入 ${formatLedgerMoney(selectedLedgerIncome)}`}>
-                <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: colors.sun }]} /></View>
+                <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: colors.sunInk }]} /></View>
                 <View style={styles.selectedEntryContent}>
                   <Text style={styles.selectedEntryMeta}>账本/{selectedLedger.length}条</Text>
                   <Text ellipsizeMode="tail" numberOfLines={1} style={styles.selectedEntryTitle}>支出 {formatLedgerMoney(selectedLedgerExpense)}　收入 {formatLedgerMoney(selectedLedgerIncome)}</Text>
                 </View>
               </View>
             ) : null}
+            {selectedEcho ? (() => {
+              const echoYears = Number(selectedDay.slice(0, 4)) - Number(selectedEcho.dayKey.slice(0, 4));
+              const previewText = calendarPostPreview(withoutEmbeddedAttachments(selectedEcho.bodyMarkdown));
+              return <Pressable accessibilityLabel={`打开 ${echoYears} 年前的今天的记录`} accessibilityRole="button" onPress={() => onOpenPost(selectedEcho.id)} style={({ pressed }) => [styles.selectedEntry, styles.selectedEntryEcho, pressed && styles.selectedEntryPressed]}>
+                <View style={styles.selectedEntryRail}><View style={[styles.selectedEntryDot, { backgroundColor: colors.sunInk }]} /></View>
+                <View style={styles.selectedEntryContent}>
+                  <Text style={[styles.selectedEntryMeta, styles.selectedEchoMeta]}>{echoYears} 年前的今天 / {selectedEcho.dayKey.replaceAll('-', '.')}</Text>
+                  <Text ellipsizeMode="tail" numberOfLines={1} style={styles.selectedEntryTitle}>{previewText || '那天留下了一段记录'}</Text>
+                </View>
+                <Text accessibilityElementsHidden style={styles.selectedEntryArrow}>›</Text>
+              </Pressable>;
+            })() : null}
             {selectedPosts.map((post) => {
               const readingSource = readingNoteSources.find((source) => source.postId === post.id) ?? null;
               const attachmentLabel = postAttachmentLabel(post.bodyMarkdown, readingSource);
@@ -418,9 +431,9 @@ function postMarkerKind(markdown: string): CalendarMarkerKind {
 
 function markerColor(kind: CalendarMarkerKind): string {
   if (kind === 'check-in') return colors.inkFaint;
-  if (kind === 'image') return colors.sun;
+  if (kind === 'image') return colors.sunInk;
   if (kind === 'audio') return colors.danger;
-  if (kind === 'ledger') return colors.sun;
+  if (kind === 'ledger') return colors.sunInk;
   return colors.life;
 }
 
@@ -432,9 +445,17 @@ function markerLabel(kind: CalendarMarkerKind): string {
   return '文字记录';
 }
 
+function findEchoPost(posts: Post[], selectedDay: DayKey): Post | null {
+  const mmdd = selectedDay.slice(5);
+  const selectedYear = Number(selectedDay.slice(0, 4));
+  return posts
+    .filter((post) => post.dayKey.slice(5) === mmdd && Number(post.dayKey.slice(0, 4)) < selectedYear)
+    .sort((left, right) => right.dayKey.localeCompare(left.dayKey) || right.createdAt.localeCompare(left.createdAt))[0] ?? null;
+}
+
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  container: { padding: spacing.lg, paddingBottom: spacing.xxl + 96 },
   calendarSection: { marginTop: 0 },
   calendarHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthJump: { borderRadius: 6 },
@@ -442,10 +463,10 @@ const styles = createThemedStyles(() => ({
   calendarYear: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   calendarTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 37 },
   monthArrows: { flexDirection: 'row', gap: spacing.sm },
-  monthArrow: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 19, backgroundColor: colors.sheet },
+  monthArrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 22, backgroundColor: colors.sheet },
   weekRow: { flexDirection: 'row', marginTop: spacing.md, paddingBottom: spacing.sm },
   weekLabel: { flex: 1, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 0.3, textAlign: 'center' },
-  weekLabelWeekend: { color: colors.sun },
+  weekLabelWeekend: { color: colors.sunInk },
   calendarGrid: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 6, backgroundColor: colors.sheet },
   calendarWeek: { flexDirection: 'row' },
   calendarCell: { flex: 1, aspectRatio: 0.72, paddingTop: 8, paddingHorizontal: 5, alignItems: 'center', overflow: 'hidden', backgroundColor: colors.sheet },
@@ -462,7 +483,7 @@ const styles = createThemedStyles(() => ({
   todayMarkText: { color: colors.onLife, fontSize: typography.size.meta, fontWeight: '700' },
   lunarDay: { maxWidth: '100%', color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 13 },
   lunarDayOutsideMonth: { opacity: 0.58 },
-  lunarFestival: { color: colors.sun, fontWeight: '700' },
+  lunarFestival: { color: colors.sunInk, fontWeight: '700' },
   lunarDaySelected: { color: colors.life },
   calendarIndicators: { position: 'absolute', right: 0, bottom: 4, left: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   calendarMarks: { flexDirection: 'row', alignItems: 'center', gap: 3 },
@@ -473,7 +494,7 @@ const styles = createThemedStyles(() => ({
   legendMark: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.life },
   almanacCard: { marginTop: spacing.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: 6, backgroundColor: colors.sheet },
   almanacHeader: { minHeight: 76, paddingHorizontal: spacing.lg, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
-  almanacEyebrow: { color: colors.sun, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.1 },
+  almanacEyebrow: { color: colors.sunInk, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
   almanacTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18, lineHeight: 24 },
   almanacSeal: { width: 44, height: 44, padding: 3, borderWidth: 2, transform: [{ rotate: '-4deg' }] },
   almanacLuckySeal: { borderColor: colors.life },
@@ -497,15 +518,17 @@ const styles = createThemedStyles(() => ({
   selectedDate: { color: colors.life, fontFamily: typography.mono, fontSize: 10, letterSpacing: 1.1 },
   selectedLunar: { marginTop: 6, color: colors.ink, fontFamily: typography.display, fontSize: 15 },
   selectedHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
-  writeButton: { minWidth: 76, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.life },
+  writeButton: { minWidth: 76, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: colors.life },
   writeButtonText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
   selectedList: { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   selectedEntry: { minHeight: 72, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   selectedEntryPressed: { marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6, backgroundColor: colors.lifeLight },
+  selectedEntryEcho: { marginTop: spacing.xs, paddingLeft: spacing.sm, borderLeftWidth: 2, borderLeftColor: colors.sunInk, backgroundColor: colors.sunLight },
+  selectedEchoMeta: { color: colors.sunInk },
   selectedEntryRail: { width: 20, alignSelf: 'stretch', alignItems: 'flex-start', paddingTop: 7 },
   selectedEntryDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.life },
   selectedEntryContent: { minWidth: 0, flex: 1 },
-  selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
+  selectedEntryMeta: { marginBottom: 5, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.5 },
   selectedEntryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 24 },
   selectedEntryArrow: { marginLeft: spacing.sm, color: colors.life, fontFamily: typography.display, fontSize: 24, lineHeight: 28 },
 }));

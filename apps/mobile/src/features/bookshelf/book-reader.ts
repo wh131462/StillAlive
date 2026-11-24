@@ -124,7 +124,8 @@ export function readingPreferencesForBook(json: string, bookId: string): Reading
   try {
     const all: unknown = JSON.parse(json);
     if (!all || typeof all !== 'object' || Array.isArray(all)) return DEFAULT_READING_PREFERENCES;
-    return sanitizePreferences((all as Record<string, unknown>)[bookId]);
+    const store = all as Record<string, unknown>;
+    return sanitizePreferences(store[bookId] ?? store.__default__);
   } catch {
     return DEFAULT_READING_PREFERENCES;
   }
@@ -139,6 +140,17 @@ export function updateReadingPreferencesJson(json: string, bookId: string, prefe
     // Invalid legacy preference data is replaced with a valid store.
   }
   return JSON.stringify({ ...all, [bookId]: sanitizePreferences(preferences) });
+}
+
+export function updateDefaultReadingPreferencesJson(json: string, preferences: ReadingPreferences): string {
+  let all: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) all = parsed as Record<string, unknown>;
+  } catch {
+    // Invalid legacy preference data is replaced with a valid store.
+  }
+  return JSON.stringify({ ...all, __default__: sanitizePreferences(preferences) });
 }
 
 export function createPdfLocator(page: number, pageCount: number | null = null): BookLocator {

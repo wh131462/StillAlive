@@ -15,7 +15,7 @@ import { BookReader } from './book-reader-view';
 import { useAppState } from '../../application/state/app-state';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import type { BookLocator, ReaderLocationEvent, ReaderSelection, ReaderSurfaceHandle } from './book-reader';
-import { createEpubLocator, createPdfLocator, createReflowLocator, detectReaderCapability, locatorFromBook, pageFromBookLocation, ReaderSessionController, readingPreferencesForBook, serializeBookLocator, updateReadingPreferencesJson } from './book-reader';
+import { createEpubLocator, createPdfLocator, createReflowLocator, detectReaderCapability, locatorFromBook, pageFromBookLocation, ReaderSessionController, readingPreferencesForBook, serializeBookLocator, updateDefaultReadingPreferencesJson, updateReadingPreferencesJson } from './book-reader';
 
 type ReaderSheet = 'library' | 'display' | 'font' | 'jump' | 'info' | null;
 type LibraryTab = 'toc' | 'excerpts' | 'notes';
@@ -32,12 +32,13 @@ const READER_LOCATION_WRITE_DELAY_MS = 800;
 export default function ReaderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, excerptId } = useLocalSearchParams<{ id: string; excerptId?: string }>();
   const { books, bookExcerpts, createBookExcerpt, deleteBookExcerpt, media, preferences, updateBook, updatePreferences } = useAppState();
   const book = books.find((item) => item.id === id);
   const file = book ? media.find((item) => item.id === book.fileMediaId) : null;
   const excerpts = useMemo(() => bookExcerpts.filter((item) => item.bookId === id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [bookExcerpts, id]);
   const readerRef = useRef<ReaderSurfaceHandle>(null);
+  const openedExcerptRef = useRef<string | null>(null);
   const pendingLocationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestLocationEventRef = useRef<ReaderLocationEvent | null>(null);
   const latestLocationKeyRef = useRef<string | null>(null);
@@ -61,6 +62,14 @@ export default function ReaderScreen() {
   useEffect(() => {
     bookRef.current = book;
   }, [book]);
+
+  useEffect(() => {
+    if (!excerptId || openedExcerptRef.current === excerptId) return;
+    if (!excerpts.some((excerpt) => excerpt.id === excerptId)) return;
+    openedExcerptRef.current = excerptId;
+    setLibraryTab('excerpts');
+    setSheet('library');
+  }, [excerptId, excerpts]);
 
   useEffect(() => {
     if (sheet !== 'font' || fontsLoaded) return;
@@ -135,12 +144,13 @@ export default function ReaderScreen() {
   const currentChapterTitle = currentPdfTocItem?.label ?? chapterTitleFromLocator(location) ?? (book.chapterTitle?.trim() || null);
   const immersiveChapterTitle = currentChapterTitle ?? book.title;
 
-  // 阅读控制栏是覆盖层，不应参与正文布局。固定安全区可以避免展开/收起时
-  // EPUB 重新分页或 PDF 可视区域变化，导致正文跳动。
-  const readerContentPadding = {
-    top: Math.max(40, insets.top + 28),
-    bottom: insets.bottom + 44,
-  };
+  // 控制栏是覆盖层，但正文区域仍应利用整块屏幕。展开时为顶部 54pt 和底部
+  // 132pt 控制区预留空间；收起后只保留沉浸 HUD 所需的安全距离，避免出现
+  // 大块空白。EPUB 会随高度重新分页，这是收起控制栏时保留可读性的代价。
+  const readerContentPadding = useMemo(() => ({
+    top: insets.top + (controlsVisible ? 54 + 8 : 24),
+    bottom: insets.bottom + (controlsVisible ? 132 + 8 : 28),
+  }), [controlsVisible, insets.bottom, insets.top]);
 
   const persistLocation = (event: ReaderLocationEvent) => {
     const key = readerLocationEventKey(book.id, event);
@@ -184,6 +194,7 @@ export default function ReaderScreen() {
       await createBookExcerpt({
         id: `excerpt_${Date.now()}`,
         bookId: book.id,
+        bookTitle: book.title,
         text,
         location: serializeBookLocator(locator),
         locationType: locator.type,
@@ -302,6 +313,13 @@ export default function ReaderScreen() {
           <ReaderError palette={palette} status={runtimeError ? (isProtectedReaderError(runtimeError) ? 'protected' : 'failed') : capability.status} message={runtimeError || capability.message || (file ? null : '书籍文件不存在')} onBack={() => router.back()} />
         )}
 
+        {readable && !controlsVisible && sheet === null && book.format !== 'pdf' && readingPreferences.flow !== 'scrolled' ? (
+          <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+            <Pressable accessibilityLabel="上一页" accessibilityRole="button" onPress={() => readerRef.current?.previous()} style={styles.pageTurnLeft} />
+            <Pressable accessibilityLabel="下一页" accessibilityRole="button" onPress={() => readerRef.current?.next()} style={styles.pageTurnRight} />
+          </View>
+        ) : null}
+
         {readable && sheet === null ? (
           <Animated.View
             accessibilityElementsHidden={!immersive}
@@ -392,7 +410,7 @@ export default function ReaderScreen() {
           if (locator) readerRef.current?.goTo(locator);
           setSheet(null);
         }} palette={palette} /> : null}
-        {libraryTab === 'excerpts' ? <ExcerptPanel draft={excerptDraft} excerpts={excerpts} manual={!session.capabilities.selection || !pendingSelection} onChangeDraft={setExcerptDraft} onDelete={removeExcerpt} onSave={() => void saveExcerpt()} onWrite={writeNote} palette={palette} /> : null}
+        {libraryTab === 'excerpts' ? <ExcerptPanel draft={excerptDraft} excerpts={excerpts} highlights={session.capabilities.highlights} manual={!session.capabilities.selection || !pendingSelection} onChangeDraft={setExcerptDraft} onDelete={removeExcerpt} onSave={() => void saveExcerpt()} onWrite={writeNote} palette={palette} /> : null}
         {libraryTab === 'notes' ? <View style={styles.notesPanel}><Text style={[styles.notesTitle, { color: palette.text }]}>关于《{book.title}》</Text><Text style={[styles.notesCopy, { color: palette.muted }]}>笔记会进入时间线，并保留当前书籍来源。</Text><Pressable onPress={() => writeNote()} style={[styles.primaryAction, { backgroundColor: palette.accent }]}><Text style={styles.primaryActionText}>写读书笔记</Text></Pressable></View> : null}
       </ReaderSheetShell>
 
@@ -423,6 +441,13 @@ export default function ReaderScreen() {
             </View>
           </> : null}
           {session.capabilities.zoom ? <><SettingLabel color={palette.muted}>PDF 页面</SettingLabel><View><SettingRow label="配色" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfThemeEnabled} label="跟随主题" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: true })} palette={palette} /><Segment active={!readingPreferences.pdfThemeEnabled} label="保留原色" onPress={() => persistPreferences({ ...readingPreferences, pdfThemeEnabled: false })} palette={palette} /></View></SettingRow><SettingRow label="缩放" palette={palette}><Stepper label={`${readingPreferences.pdfScale.toFixed(1)}x`} onDecrease={() => setPdfZoom(readingPreferences.pdfScale - 0.25)} onIncrease={() => setPdfZoom(readingPreferences.pdfScale + 0.25)} palette={palette} /></SettingRow><SettingRow label="快捷缩放" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={readingPreferences.pdfScale === 1} label="适合宽度" onPress={() => setPdfZoom(1)} palette={palette} /><Segment active={readingPreferences.pdfScale === 1.5} label="150%" onPress={() => setPdfZoom(1.5)} palette={palette} /></View></SettingRow><SettingRow label="阅读方向" palette={palette}><View style={[styles.segmented, { backgroundColor: palette.surface }]}><Segment active={!readingPreferences.pdfHorizontal} label="纵向" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: false })} palette={palette} /><Segment active={readingPreferences.pdfHorizontal} label="横向" onPress={() => persistPreferences({ ...readingPreferences, pdfHorizontal: true })} palette={palette} /></View></SettingRow></View></> : null}
+          <Pressable accessibilityRole="button" onPress={() => {
+            void updatePreferences({ readerPreferencesJson: updateDefaultReadingPreferencesJson(preferences.readerPreferencesJson, readingPreferences) })
+              .then(() => feedback.notice('已设为新打开书籍的默认阅读设置'))
+              .catch((cause: unknown) => feedback.alert('设置失败', cause instanceof Error ? cause.message : '请稍后重试。'));
+          }} style={({ pressed }) => [styles.defaultPreferencesButton, { borderColor: palette.line }, pressed && styles.pressed]}>
+            <Text style={[styles.defaultPreferencesText, { color: palette.accent }]}>设为新书的默认阅读设置</Text>
+          </Pressable>
         </ScrollView>
       </ReaderSheetShell>
 
@@ -482,8 +507,13 @@ function ReadingInfoRow({ label, palette, value }: { label: string; palette: Ret
   return <View style={[styles.readingInfoRow, { borderBottomColor: palette.line }]}><Text style={[styles.readingInfoLabel, { color: palette.muted }]}>{label}</Text><Text numberOfLines={2} style={[styles.readingInfoValue, { color: palette.text }]}>{value}</Text></View>;
 }
 
-function ExcerptPanel({ draft, excerpts, manual, onChangeDraft, onDelete, onSave, onWrite, palette }: { draft: string; excerpts: BookExcerpt[]; manual: boolean; onChangeDraft(value: string): void; onDelete(id: string): void; onSave(): void; onWrite(id: string): void; palette: ReturnType<typeof readerPalette> }) {
-  return <View style={styles.excerptPanel}><Text style={[styles.sheetHint, { color: palette.muted }]}>{manual ? '手动录入的书摘会绑定当前阅读位置。' : '已从阅读器选区取得文字，保存后会恢复高亮。'}</Text><TextInput maxLength={20_000} multiline onChangeText={onChangeDraft} placeholder="输入摘抄内容" placeholderTextColor={palette.muted} style={[styles.excerptInput, { backgroundColor: palette.background, color: palette.text }]} textAlignVertical="top" value={draft} /><Pressable disabled={!draft.trim()} onPress={onSave} style={({ pressed }) => [styles.primaryAction, { backgroundColor: palette.accent }, !draft.trim() && styles.disabled, pressed && styles.pressed]}><Text style={styles.primaryActionText}>保存书摘</Text></Pressable><ScrollView contentContainerStyle={styles.toolList} keyboardShouldPersistTaps="handled" style={styles.excerptScroll}>{excerpts.map((excerpt) => <View key={excerpt.id} style={[styles.excerpt, { borderTopColor: palette.line }]}><Text numberOfLines={5} style={[styles.quote, { color: palette.text }]}>{excerpt.text}</Text><View style={styles.excerptFooter}><Text style={[styles.excerptLocation, { color: palette.muted }]}>{formatExcerptLocation(excerpt)}</Text><View style={styles.excerptActions}><IconButton label="引用书摘写观后感" name={{ android: 'edit_note', ios: 'square.and.pencil', web: 'edit_note' }} onPress={() => onWrite(excerpt.id)} tint={palette.accent} /><IconButton label="删除书摘" name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} onPress={() => onDelete(excerpt.id)} tint={colors.danger} /></View></View></View>)}{excerpts.length === 0 ? <Text style={[styles.emptyText, { color: palette.muted }]}>还没有书摘</Text> : null}</ScrollView></View>;
+function ExcerptPanel({ draft, excerpts, highlights, manual, onChangeDraft, onDelete, onSave, onWrite, palette }: { draft: string; excerpts: BookExcerpt[]; highlights: boolean; manual: boolean; onChangeDraft(value: string): void; onDelete(id: string): void; onSave(): void; onWrite(id: string): void; palette: ReturnType<typeof readerPalette> }) {
+  const hint = manual
+    ? '手动录入的书摘会绑定当前阅读位置。'
+    : highlights
+      ? '已从阅读器选区取得文字，保存后会恢复高亮。'
+      : '已从阅读器选区取得文字，保存后会作为摘抄保留；当前格式不支持高亮回显。';
+  return <View style={styles.excerptPanel}><Text style={[styles.sheetHint, { color: palette.muted }]}>{hint}</Text><TextInput maxLength={20_000} multiline onChangeText={onChangeDraft} placeholder="输入摘抄内容" placeholderTextColor={palette.muted} style={[styles.excerptInput, { backgroundColor: palette.background, color: palette.text }]} textAlignVertical="top" value={draft} /><Pressable disabled={!draft.trim()} onPress={onSave} style={({ pressed }) => [styles.primaryAction, { backgroundColor: palette.accent }, !draft.trim() && styles.disabled, pressed && styles.pressed]}><Text style={styles.primaryActionText}>保存书摘</Text></Pressable><ScrollView contentContainerStyle={styles.toolList} keyboardShouldPersistTaps="handled" style={styles.excerptScroll}>{excerpts.map((excerpt) => <View key={excerpt.id} style={[styles.excerpt, { borderTopColor: palette.line }]}><Text numberOfLines={5} style={[styles.quote, { color: palette.text }]}>{excerpt.text}</Text><View style={styles.excerptFooter}><Text style={[styles.excerptLocation, { color: palette.muted }]}>{formatExcerptLocation(excerpt)}</Text><View style={styles.excerptActions}><IconButton label="引用书摘写观后感" name={{ android: 'edit_note', ios: 'square.and.pencil', web: 'edit_note' }} onPress={() => onWrite(excerpt.id)} tint={palette.accent} /><IconButton label="删除书摘" name={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} onPress={() => onDelete(excerpt.id)} tint={colors.danger} /></View></View></View>)}{excerpts.length === 0 ? <Text style={[styles.emptyText, { color: palette.muted }]}>还没有书摘</Text> : null}</ScrollView></View>;
 }
 
 function ReaderTool({ icon, label, onPress, tint, disabled = false }: { icon: ComponentProps<typeof SymbolView>['name']; label: string; onPress(): void; tint: string; disabled?: boolean }) {
@@ -717,6 +747,10 @@ const styles = createThemedStyles(() => ({
   positionLabel: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   positionText: { fontFamily: typography.mono, fontSize: 11 },
   readerTools: { minHeight: 72, flexDirection: 'row', justifyContent: 'space-around' },
+  pageTurnLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '18%' },
+  pageTurnRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '18%' },
+  defaultPreferencesButton: { minHeight: 44, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 6 },
+  defaultPreferencesText: { fontSize: 11, fontWeight: '700' },
   readerTool: { width: 74, minHeight: 66, alignItems: 'center', justifyContent: 'center' },
   readerToolText: { maxWidth: 68, marginTop: 5, fontSize: 10 },
   disabled: { opacity: 0.32 },
