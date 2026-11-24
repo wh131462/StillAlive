@@ -1,6 +1,6 @@
 {
-  "versionCode": 28,
-  "versionName": "1.1.19",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.19.apk",
-  "releaseNotes": "优化个人资料卡信息展示与人物列表布局。\n改进记录热力图，支持完整历史数据并自适应屏幕宽度。\n新增账本功能,可以开始记账啦~"
+  "versionCode": 29,
+  "versionName": "1.1.20",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.20.apk",
+  "releaseNotes": "新增生日提醒引导，记录朋友生日后会提示开启提醒，人物重要日子也会在当天推送通知。\n优化常驻快捷栏：每天自动刷新日期与打卡状态，跨日后可直接在通知栏完成当天打卡，应用内状态同步更新。\n设置页新增系统通知权限状态显示，未授权时提供跳转入口。"
 }
