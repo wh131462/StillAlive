@@ -1,6 +1,6 @@
 {
-  "versionCode": 29,
-  "versionName": "1.1.20",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.20.apk",
-  "releaseNotes": "新增生日提醒引导，记录朋友生日后会提示开启提醒，人物重要日子也会在当天推送通知。\n优化常驻快捷栏：每天自动刷新日期与打卡状态，跨日后可直接在通知栏完成当天打卡，应用内状态同步更新。\n设置页新增系统通知权限状态显示，未授权时提供跳转入口。"
+  "versionCode": 30,
+  "versionName": "1.1.21",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.21.apk",
+  "releaseNotes": "阅读器升级：控制栏改为浮层，正文不再跳动，页边距、行距、段距、首行缩进与夜间模式都能在阅读器内调节。\n书摘集中管理：可按书查看、搜索、备注、写观后感与跳回原文，删除书籍后书摘仍保留。\n生日提醒现在新增开启引导与重要日子提醒；常驻快捷栏会跨日自动刷新，你可以直接在通知栏打卡。\n邀请链接可以保留和复制，并显示待回信状态；首页的回忆可以换一条，发布新记录后会自动定位到这条新记录。\n日历可以回看多年前的今天，人物页支持采纳记录生成的印象；我们还统一了轻提示与触感反馈，音乐播放器支持拖动进度。"
 }
