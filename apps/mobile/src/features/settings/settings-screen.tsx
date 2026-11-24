@@ -1,17 +1,17 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
 import { TimePickerField } from '../people/date-time-picker';
 import { StyledName } from '../people/styled-name';
-import { NAME_STYLE_OPTIONS, THEME_OPTIONS, createThemedStyles } from '../../shared/theme/app-theme';
+import { NAME_STYLE_OPTIONS, THEME_OPTIONS, applyColorTheme, createThemedStyles } from '../../shared/theme/app-theme';
 import { ToolPageHeader } from '../../shared/components/tool-page-header';
 
 export default function SettingsScreen() {
@@ -19,11 +19,29 @@ export default function SettingsScreen() {
   const { notificationPermission, openNotificationSettings, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
   const [retryingNotification, setRetryingNotification] = useState<'birthday' | 'memory' | null>(null);
   const [nameStyleTarget, setNameStyleTarget] = useState<'self' | 'friend' | null>(null);
+  const [themePreview, setThemePreview] = useState<string | null>(null);
+  const themeWash = useRef(new Animated.Value(0)).current;
+  const activeTheme = themePreview ?? preferences.appearanceTheme;
   const nameStyleSelection = nameStyleTarget === 'self'
     ? { label: '个人名字', sample: preferences.nickname || preferences.profileName || '我的名字', value: preferences.selfNameStyle }
     : nameStyleTarget === 'friend' ? { label: '朋友名字', sample: '朋友名字', value: preferences.friendNameStyle } : null;
 
   const savePreference = (changes: Parameters<typeof updatePreferences>[0]) => void updatePreferences(changes).catch((cause: unknown) => feedback.alert('设置失败', errorMessage(cause)));
+  const selectTheme = (theme: typeof preferences.appearanceTheme) => {
+    if (theme === activeTheme) return;
+    const previous = preferences.appearanceTheme;
+    setThemePreview(theme);
+    applyColorTheme(theme);
+    themeWash.setValue(0.5);
+    Animated.timing(themeWash, { toValue: 0, duration: 180, useNativeDriver: true }).start();
+    void updatePreferences({ appearanceTheme: theme }).then(() => {
+      setThemePreview(null);
+    }).catch((cause: unknown) => {
+      setThemePreview(null);
+      applyColorTheme(previous);
+      feedback.alert('主题切换失败', errorMessage(cause));
+    });
+  };
   const saveNameStyle = (value: NameStyleId) => {
     if (nameStyleTarget === 'self') savePreference({ selfNameStyle: value });
     if (nameStyleTarget === 'friend') savePreference({ friendNameStyle: value });
@@ -49,8 +67,8 @@ export default function SettingsScreen() {
           <Text style={styles.appearanceTitle}>主题</Text>
           <View style={styles.themeOptions}>
             {THEME_OPTIONS.map((option) => {
-              const selected = preferences.appearanceTheme === option.id;
-              return <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => savePreference({ appearanceTheme: option.id })} style={({ pressed }) => [styles.themeOption, selected && styles.themeOptionSelected, pressed && styles.pressed]}>
+              const selected = activeTheme === option.id;
+              return <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => selectTheme(option.id)} style={({ pressed }) => [styles.themeOption, selected && styles.themeOptionSelected, pressed && styles.pressed]}>
                 <View style={[styles.themePreview, { backgroundColor: option.colors.paper }]}><View style={[styles.themePreviewSheet, { backgroundColor: option.colors.sheet }]}><View style={[styles.themePreviewAccent, { backgroundColor: option.colors.life }]} /></View></View>
                 <View style={styles.themeOptionMeta}><Text style={[styles.themeLabel, selected && styles.themeLabelSelected]}>{option.label}</Text>{selected ? <View style={styles.selectionMark}><SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={11} tintColor={colors.onLife} type="hierarchical" /></View> : null}</View>
                 <Text style={styles.themeHint}>{option.hint}</Text>
@@ -62,6 +80,8 @@ export default function SettingsScreen() {
         <NameStylePreview label="个人名字" onPress={() => setNameStyleTarget('self')} sample={preferences.nickname || preferences.profileName || '我的名字'} value={preferences.selfNameStyle} />
         <View style={styles.separator} />
         <NameStylePreview label="朋友名字" onPress={() => setNameStyleTarget('friend')} sample="朋友名字" value={preferences.friendNameStyle} />
+        <View style={styles.separator} />
+        <SwitchRow checked={preferences.hapticsEnabled} hint="打卡、保存、采纳印象时给一次轻触反馈" label="轻触觉" onPress={() => savePreference({ hapticsEnabled: !preferences.hapticsEnabled })} />
       </View>
 
       <Text style={styles.eyebrow}>CONTENT</Text>
@@ -106,6 +126,7 @@ export default function SettingsScreen() {
       </View>
     </ScrollView>
     {nameStyleSelection ? <NameStyleCarouselModal name={nameStyleSelection.label} onChange={saveNameStyle} onClose={() => setNameStyleTarget(null)} sample={nameStyleSelection.sample} value={nameStyleSelection.value} /> : null}
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.paper, opacity: themeWash }]} />
   </SafeAreaView>;
 }
 

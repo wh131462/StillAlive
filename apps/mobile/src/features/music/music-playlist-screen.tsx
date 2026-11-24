@@ -62,21 +62,27 @@ export default function MusicPlaylistScreen() {
 
   const playTrack = useCallback(async (track: MusicTrack) => {
     if (!playlist) return;
-    if (player.currentTrack?.id !== track.id) {
+    if (player.currentTrack?.id === track.id) {
+      if (!player.playing) player.toggle();
+    } else {
       await player.playTrack(track.id, tracks.map((item) => item.id), 'playlist', playlist.id);
     }
     router.push('/music-player' as never);
-  }, [playlist, player.currentTrack?.id, player.playTrack, router, tracks]);
+  }, [playlist, player.currentTrack?.id, player.playing, player.playTrack, player.toggle, router, tracks]);
 
   const playAll = () => {
-    if (playlist && tracks[0]) void player.playTrack(tracks[0].id, tracks.map((track) => track.id), 'playlist', playlist.id);
+    if (!playlist || !tracks[0]) return;
+    void player.setMode('list').then(() => player.playTrack(tracks[0].id, tracks.map((track) => track.id), 'playlist', playlist.id));
   };
 
-  const shuffleAll = async () => {
+  const shuffleAll = () => {
     if (!playlist || !tracks.length) return;
-    await player.setMode('shuffle');
-    const first = tracks[Math.floor(Math.random() * tracks.length)];
-    await player.playTrack(first.id, tracks.map((track) => track.id), 'playlist', playlist.id);
+    const shuffled = [...tracks];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+    }
+    void player.setMode('shuffle').then(() => player.playTrack(shuffled[0].id, shuffled.map((track) => track.id), 'playlist', playlist.id));
   };
 
   const openPicker = () => {

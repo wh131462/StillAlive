@@ -18,6 +18,8 @@ import {
   View,
 } from 'react-native';
 import { feedback } from '../../shared/feedback';
+import { haptic } from '../../shared/haptics';
+import { markNewPost } from '../../shared/new-post-signal';
 import type { DayKey, Media, ReadingNoteSource } from '@still-alive/types';
 import { toDayKey } from '../../shared/core/day-key';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
@@ -86,6 +88,9 @@ export default function EditorScreen() {
   const [customLocation, setCustomLocation] = useState('');
   const [locating, setLocating] = useState<'address' | 'city' | null>(null);
   const [draftStatus, setDraftStatus] = useState('');
+  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const draftStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(() => Keyboard.isVisible());
   const [saving, setSaving] = useState(false);
   const [audioSaving, setAudioSaving] = useState(false);
@@ -111,7 +116,7 @@ export default function EditorScreen() {
   }, [postId, readingNoteSources, readingSourceRemoved, sourceBook, sourceExcerpt, sourceExcerptId]);
   const readingSourceBook = sourceBook ?? (readingSource?.bookId ? books.find((book) => book.id === readingSource.bookId) ?? null : null);
   const headerSubtitle = draftStatus || (readingSource ? '写下这段阅读留给你的感受' : musicShare ? '写下这首歌留给你的感受' : postId ? '修改并完善这条记录' : isPastEntry ? '补写那天想留下的内容' : '写下此刻想留下的内容');
-  const editorBusy = saving || audioSaving || mediaSaving || relationsLoading;
+  const editorBusy = saving || saved || audioSaving || mediaSaving || relationsLoading;
 
   useEffect(() => () => { locationRequestRef.current += 1; }, []);
 
@@ -210,9 +215,16 @@ export default function EditorScreen() {
       draftQueueRef.current = task;
       pendingDraftSaveRef.current = task;
       void task.then(() => {
-        if (pendingDraftSaveRef.current === task) setDraftStatus('刚刚已保存');
+        if (pendingDraftSaveRef.current === task) {
+          setDraftSaveFailed(false);
+          setDraftStatus(`已保存 · ${formatClockTime()}`);
+          scheduleDraftStatusReset();
+        }
       }).catch(() => {
-        if (pendingDraftSaveRef.current === task) setDraftStatus('草稿保存失败');
+        if (pendingDraftSaveRef.current === task) {
+          setDraftSaveFailed(true);
+          setDraftStatus('草稿保存失败');
+        }
       }).finally(() => {
         if (pendingDraftSaveRef.current === task) pendingDraftSaveRef.current = null;
       });
@@ -304,6 +316,38 @@ export default function EditorScreen() {
     setShowTextSize(false);
   };
 
+  const scheduleDraftStatusReset = () => {
+    if (draftStatusTimerRef.current) clearTimeout(draftStatusTimerRef.current);
+    draftStatusTimerRef.current = setTimeout(() => {
+      draftStatusTimerRef.current = null;
+      setDraftStatus('');
+    }, 2200);
+  };
+
+  const retryDraftSave = () => {
+    if (postId) return;
+    bodyTouchedRef.current = true;
+    setDraftSaveFailed(false);
+    setDraftStatus('保存中…');
+    const task = draftQueueRef.current.catch(() => undefined).then(() => saveDraft(withReadingSourceQuote(withMusicShare(body, musicShare), readingSource, readingSourceBook), targetDay));
+    draftQueueRef.current = task;
+    pendingDraftSaveRef.current = task;
+    void task.then(() => {
+      setDraftSaveFailed(false);
+      setDraftStatus(`已保存 · ${formatClockTime()}`);
+      scheduleDraftStatusReset();
+    }).catch(() => {
+      setDraftSaveFailed(true);
+      setDraftStatus('草稿保存失败');
+    }).finally(() => {
+      if (pendingDraftSaveRef.current === task) pendingDraftSaveRef.current = null;
+    });
+  };
+
+  useEffect(() => () => {
+    if (draftStatusTimerRef.current) clearTimeout(draftStatusTimerRef.current);
+  }, []);
+
   const handleSave = async () => {
     if (editorBusy) return;
     const value = body.trim();
@@ -324,6 +368,7 @@ export default function EditorScreen() {
       }
       else {
         const createdPost = await savePost(savedBody, selectedPersonIds, targetDay, locationName);
+        markNewPost(createdPost.id);
         if (readingSource) await saveReadingNoteSource({ ...readingSource, postId: createdPost.id });
       }
       const created = createdMediaRef.current;
@@ -331,11 +376,18 @@ export default function EditorScreen() {
       await Promise.all(created.map(discardMedia)).catch(() => undefined);
       allowExitRef.current = true;
       Keyboard.dismiss();
+      setSaving(false);
+      setSaved(true);
+      setDraftSaveFailed(false);
+      setDraftStatus(`已记下 · ${formatClockTime()}`);
+      haptic('success');
+      await new Promise((resolve) => setTimeout(resolve, 650));
       if (musicTrackId && !postId) router.replace('/');
       else if (router.canGoBack()) router.back();
       else router.replace('/');
     } catch (cause: unknown) {
       setSaving(false);
+      setSaved(false);
       feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。');
     }
   };
@@ -623,7 +675,7 @@ export default function EditorScreen() {
         <ToolPageHeader
           backDisabled={editorBusy}
           onBack={() => router.back()}
-          right={<ToolPageHeaderTextAction disabled={editorBusy || recorderState.isRecording} emphasized label={saving ? '保存中' : mediaSaving ? '处理媒体' : audioSaving ? '保存语音' : relationsLoading ? '加载中' : '完成'} onPress={() => void handleSave()} />}
+          right={<ToolPageHeaderTextAction disabled={editorBusy || recorderState.isRecording} emphasized label={saved ? '已记下' : saving ? '保存中' : mediaSaving ? '处理媒体' : audioSaving ? '保存语音' : relationsLoading ? '加载中' : '完成'} onPress={() => void handleSave()} />}
           subtitle={headerSubtitle}
           title={postId ? '编辑记录' : isPastEntry ? '补写记录' : '新建记录'}
         />
@@ -656,7 +708,10 @@ export default function EditorScreen() {
             <SymbolView name={{ android: 'location_on', ios: 'mappin.and.ellipse', web: 'location_on' }} size={14} tintColor={locationName ? colors.life : colors.inkFaint} type="hierarchical" />
             <Text numberOfLines={1} style={[styles.locationButtonText, locationName && styles.locationButtonTextActive]}>{locationName ?? '所在位置'}</Text>
           </Pressable>
-          <Text style={styles.metaText}>{markdownTextLength(body)} 字</Text>
+          <View style={styles.metaRight}>
+            {draftSaveFailed ? <Pressable accessibilityRole="button" onPress={retryDraftSave} style={({ pressed }) => [styles.draftRetry, pressed && styles.draftRetryPressed]}><Text style={styles.draftRetryText}>重试保存草稿</Text></Pressable> : null}
+            <Text style={styles.metaText}>{markdownTextLength(body)} 字</Text>
+          </View>
         </View>
 
         <View collapsable={false} pointerEvents={editorBusy ? 'none' : 'auto'} style={[styles.toolbarStage, editorBusy && styles.disabledControl]}>
@@ -898,6 +953,11 @@ function markdownTextLength(markdown: string): number {
     .length;
 }
 
+function formatClockTime(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
 const styles = createThemedStyles(() => ({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.sheet },
@@ -908,6 +968,10 @@ const styles = createThemedStyles(() => ({
   domEditor: { flex: 1, width: '100%', backgroundColor: 'transparent' },
   meta: { minHeight: 34, paddingHorizontal: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   metaText: { color: colors.inkFaint, fontSize: typography.size.meta },
+  metaRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  draftRetry: { minHeight: 32, paddingHorizontal: spacing.sm, justifyContent: 'center', borderRadius: 16, backgroundColor: colors.dangerLight },
+  draftRetryPressed: { opacity: 0.7 },
+  draftRetryText: { color: colors.danger, fontSize: 9, fontWeight: '700' },
   locationButton: { maxWidth: '76%', minHeight: 30, paddingRight: spacing.sm, flexDirection: 'row', gap: 5, alignItems: 'center' },
   locationButtonPressed: { opacity: 0.58 },
   locationButtonText: { flexShrink: 1, color: colors.inkFaint, fontSize: typography.size.meta },

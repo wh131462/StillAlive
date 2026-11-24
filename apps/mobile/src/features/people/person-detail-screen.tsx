@@ -1,13 +1,13 @@
 import { PostCommentPreview } from '../journal/post-comments';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Linking } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import type { PersonEvent, Post } from '@still-alive/types';
+import type { PersonEvent, Post, ProfileCollectionRequest } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
 import { genderOption } from './gender-picker';
@@ -19,6 +19,7 @@ import { readingSourceTitle, withoutReadingSourceQuote } from '../../application
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { MediaThumbnail } from '../../shared/components/media-thumbnail';
 import { feedback } from '../../shared/feedback';
+import { haptic } from '../../shared/haptics';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { StyledName } from './styled-name';
 
@@ -26,7 +27,7 @@ export default function PersonScreen() {
   const router = useRouter();
   const window = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { albums, deletePersonEvent, getPostsByPerson, media, mergePersons, musicCollectionEntries, people, personBooks, personTags, personEvents, posts: allPosts, preferences, readingNoteSources, ready, savePersonEvent, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn } = useAppState();
+  const { albums, deletePersonEvent, getPostsByPerson, listProfileCollectionRequests, media, mergePersons, musicCollectionEntries, people, personBooks, personTags, personEvents, posts: allPosts, preferences, readingNoteSources, ready, savePersonEvent, setPersonMemoryEnabled, tagDefinitions, tagSystemSettings, todayCheckIn, updatePerson } = useAppState();
   const [posts, setPosts] = useState<Post[]>([]);
   const [timelineFilter, setTimelineFilter] = useState<'all' | 'posts' | 'events'>('all');
   const [timelineGroup, setTimelineGroup] = useState<'date' | 'time'>('date');
@@ -35,6 +36,9 @@ export default function PersonScreen() {
   const [moreMenuPosition, setMoreMenuPosition] = useState<{ right: number; top: number }>({ right: spacing.md, top: 60 });
   const [mergePickerOpen, setMergePickerOpen] = useState(false);
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
+  const [pendingInvite, setPendingInvite] = useState<ProfileCollectionRequest | null>(null);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const moreButtonRef = useRef<View>(null);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
   const displayName = person ? personDisplayName(person) : '';
@@ -54,10 +58,28 @@ export default function PersonScreen() {
     void getPostsByPerson(id).then(setPosts);
   }, [allPosts, getPostsByPerson, id, ready]);
 
+  useFocusEffect(useCallback(() => {
+    if (!ready || !id) return;
+    let active = true;
+    void listProfileCollectionRequests().then((requests) => {
+      if (!active) return;
+      const now = Date.now();
+      setPendingInvite(requests.find((request) => request.personId === id
+        && request.status === 'pending'
+        && Boolean(request.invitationUrl)
+        && new Date(request.expiresAt).getTime() > now) ?? null);
+    }).catch(() => {
+      if (active) setPendingInvite(null);
+    });
+    return () => { active = false; };
+  }, [id, listProfileCollectionRequests, ready]));
+
   useEffect(() => {
     if (ready && !person) router.replace('/people');
   }, [person, ready, router]);
 
+  const impressionSuggestions = useMemo(() => buildImpressionSuggestions(posts), [posts]);
+  const impressionSuggestion = impressionSuggestions.length ? impressionSuggestions[suggestionIndex % impressionSuggestions.length] : null;
   const personMusicCount = person ? musicCollectionEntries.filter((entry) => entry.targetType === 'person' && entry.targetId === person.id).length : 0;
   const personBookCount = person ? personBooks.filter((entry) => entry.personId === person.id).length : 0;
   const events = person ? personEvents.filter((event) => event.personId === person.id) : [];
@@ -66,6 +88,23 @@ export default function PersonScreen() {
     ...(timelineFilter !== 'events' ? posts.map((post) => ({ kind: 'post' as const, key: post.id, date: post.dayKey, post })) : []),
     ...(timelineFilter !== 'posts' ? events.map((event) => ({ kind: 'event' as const, key: event.id, date: timelineGroup === 'date' ? event.createdAt.slice(0, 10) : event.timeText ?? '未标注时间', event })) : []),
   ].sort((left, right) => (right.kind === 'event' && right.event.pinned ? 1 : 0) - (left.kind === 'event' && left.event.pinned ? 1 : 0) || right.date.localeCompare(left.date));
+
+  const adoptImpression = async () => {
+    if (!person || !impressionSuggestion) return;
+    try {
+      await updatePerson(person.id, {
+        name: person.name, nickname: person.nickname, bio: person.bio, avatarMediaId: person.avatarMediaId,
+        gender: person.gender, relationToMe: person.relationToMe, impression: impressionSuggestion.text,
+        birthday: person.birthday, contacts: person.contacts, customFields: person.customFields,
+        importantDates: person.importantDates, privacyMode: person.privacyMode,
+      });
+      haptic('success');
+      feedback.notice('已写入印象，只改了这一句');
+      setSuggestionDismissed(true);
+    } catch (cause: unknown) {
+      feedback.alert('采纳失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    }
+  };
 
   const openMergePicker = () => {
     if (!person) return;
@@ -99,7 +138,9 @@ export default function PersonScreen() {
   const invitePerson = () => {
     if (!person || privateHidden) return;
     setMoreOpen(false);
-    router.push({ pathname: '/profile-collection/invite', params: { personId: person.id } });
+    router.push(pendingInvite
+      ? { pathname: '/profile-collection/invite', params: { personId: person.id, requestId: pendingInvite.id } }
+      : { pathname: '/profile-collection/invite', params: { personId: person.id } });
   };
 
   return (
@@ -127,6 +168,19 @@ export default function PersonScreen() {
                 {person.privacyMode === 'private' ? <Text style={styles.privateBadge}>资料已隐藏</Text> : null}
               </View>
             </View>
+
+            {!privateHidden && !suggestionDismissed && !person.impression?.trim() && impressionSuggestion ? (
+              <View style={styles.growCard}>
+                <Text style={styles.growLabel}>从记录里长出来</Text>
+                <Text style={styles.growQuote}>“{impressionSuggestion.text}”</Text>
+                <Text style={styles.growSource}>来自 {impressionSuggestion.dayKey.replaceAll('-', '.')} 的记录</Text>
+                <View style={styles.growActions}>
+                  <Pressable accessibilityRole="button" onPress={() => void adoptImpression()} style={({ pressed }) => [styles.growPrimary, pressed && styles.featureRowPressed]}><Text style={styles.growPrimaryText}>采纳为印象</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={() => setSuggestionIndex((current) => current + 1)} style={({ pressed }) => [styles.growSecondary, pressed && styles.featureRowPressed]}><Text style={styles.growSecondaryText}>换一句</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={() => setSuggestionDismissed(true)} style={({ pressed }) => [styles.growQuiet, pressed && styles.featureRowPressed]}><Text style={styles.growQuietText}>先不用</Text></Pressable>
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.sectionHeading}><Text style={styles.sectionEyebrow}>人物资料</Text></View>
             <View style={styles.profileCard}>
@@ -207,6 +261,15 @@ export default function PersonScreen() {
                 </View>
                 <View style={[styles.memorySwitch, person.memoryEnabled && styles.memorySwitchOn]}><View style={[styles.memoryThumb, person.memoryEnabled && styles.memoryThumbOn]} /></View>
               </Pressable>
+              {!privateHidden ? <>
+                <View style={styles.featureDivider} />
+                <Pressable accessibilityRole="button" onPress={() => router.push(pendingInvite
+                  ? { pathname: '/profile-collection/invite', params: { personId: person.id, requestId: pendingInvite.id } }
+                  : { pathname: '/profile-collection/invite', params: { personId: person.id } })} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}>
+                  <View style={styles.featureCopy}><Text style={styles.featureTitle}>邀请本人补充</Text><Text style={styles.featureHint}>{pendingInvite ? `待回信 · ${formatInviteRemaining(pendingInvite.expiresAt)}` : `生成 7 天有效的一次性邀请，由 ${displayName} 本人填写`}</Text></View>
+                  <View style={styles.featureMeta}><Text style={styles.albumCount}>{pendingInvite ? '待回信' : '生成'}</Text><SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={16} tintColor={colors.inkFaint} type="hierarchical" /></View>
+                </Pressable>
+              </> : null}
               <View style={styles.featureDivider} />
               <Pressable accessibilityRole="button" onPress={openMergePicker} style={({ pressed }) => [styles.featureRow, pressed && styles.featureRowPressed]}><View style={styles.featureCopy}><Text style={styles.featureTitle}>合并重复人物</Text><Text style={styles.featureHint}>从人物列表中选择要合并到这里的重复记录</Text></View><SymbolView name={{ android: 'merge_type', ios: 'arrow.triangle.merge', web: 'merge_type' }} size={16} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
             </View>
@@ -298,9 +361,57 @@ function MoreMenuItem({ icon, label, onPress }: { icon: ComponentProps<typeof Sy
   return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}><SymbolView name={icon} size={18} tintColor={colors.ink} type="hierarchical" /><Text style={styles.menuItemText}>{label}</Text></Pressable>;
 }
 
+function buildImpressionSuggestions(posts: Post[]): Array<{ text: string; dayKey: string }> {
+  const seen = new Set<string>();
+  const suggestions: Array<{ text: string; dayKey: string }> = [];
+  for (const post of posts.slice(0, 4)) {
+    const text = extractImpressionSentence(post.bodyMarkdown);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    suggestions.push({ text, dayKey: post.dayKey });
+    if (suggestions.length >= 3) break;
+  }
+  return suggestions;
+}
+
+function extractImpressionSentence(markdown: string): string | null {
+  const plain = markdown
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^```.*$/gm, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/[*_`~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!plain) return null;
+  const sentences = plain.match(/[^。！？!?]+[。！？!?]?/g)?.map((item) => item.trim()).filter(Boolean) ?? [];
+  const candidate = sentences.find((item) => item.length >= 6 && item.length <= 80) ?? plain.slice(0, 60);
+  return candidate.length >= 6 ? candidate.slice(0, 80) : null;
+}
+
+function formatInviteRemaining(value: string): string {
+  const remaining = new Date(value).getTime() - Date.now();
+  if (!Number.isFinite(remaining) || remaining <= 0) return '已过期';
+  const hours = Math.ceil(remaining / 3_600_000);
+  return hours >= 24 ? `剩 ${Math.ceil(hours / 24)} 天` : `剩 ${hours} 小时`;
+}
+
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  container: { padding: spacing.lg, paddingBottom: spacing.xxl + 96 },
+  growCard: { marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: 6, backgroundColor: colors.sheet },
+  growLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.1 },
+  growQuote: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 24 },
+  growSource: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 9 },
+  growActions: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  growPrimary: { minHeight: 44, paddingHorizontal: spacing.md, justifyContent: 'center', borderRadius: 20, backgroundColor: colors.life },
+  growPrimaryText: { color: colors.onLife, fontSize: 10, fontWeight: '700' },
+  growSecondary: { minHeight: 44, paddingHorizontal: spacing.md, justifyContent: 'center', borderWidth: 1, borderColor: colors.lifeLine, borderRadius: 20 },
+  growSecondaryText: { color: colors.life, fontSize: 10, fontWeight: '700' },
+  growQuiet: { minHeight: 40, paddingHorizontal: spacing.sm, justifyContent: 'center' },
+  growQuietText: { color: colors.inkFaint, fontSize: 10 },
   identityCard: { padding: spacing.lg, borderRadius: 6, backgroundColor: colors.sheet },
   identityRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 38, backgroundColor: colors.life },
@@ -336,13 +447,13 @@ const styles = createThemedStyles(() => ({
   importantDateCard: { paddingHorizontal: spacing.md, borderRadius: 6, backgroundColor: colors.sheet },
   importantDateRow: { minHeight: 82, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center' },
   importantDateMarker: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: colors.lifeLight },
-  importantDateMonth: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.6 },
+  importantDateMonth: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.6 },
   importantDateDay: { marginTop: 1, color: colors.life, fontFamily: typography.display, fontSize: 18, lineHeight: 20 },
   importantDateCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md },
   importantDateName: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 20 },
   importantDateValueRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   importantDateValue: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: 10 },
-  importantDateReminder: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.lifeLight, color: colors.life, fontSize: 8 },
+  importantDateReminder: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.lifeLight, color: colors.life, fontSize: 9 },
   importantDateReminderOff: { backgroundColor: colors.paper, color: colors.inkFaint },
   importantDateNote: { marginTop: 5, color: colors.inkFaint, fontSize: 10, lineHeight: 16 },
   importantDateDivider: { marginLeft: 46 + spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },

@@ -180,7 +180,7 @@ export function AndroidUpdateDialog({ checking = false, manifest, notice = null,
             <>
               <Text style={styles.title}>更新失败</Text>
               <ScrollView bounces={false} contentContainerStyle={styles.longTextContent} nestedScrollEnabled persistentScrollbar showsVerticalScrollIndicator style={[styles.longTextScroll, { maxHeight: longTextMaxHeight }]}><Text style={styles.errorText}>{error}</Text></ScrollView>
-              <PrimaryButton label="继续下载" onPress={() => void startDownload()} />
+              <PrimaryButton label="重新下载" onPress={() => void startDownload()} />
               <SecondaryButton label="关闭" onPress={onDismiss} />
             </>
           ) : null}

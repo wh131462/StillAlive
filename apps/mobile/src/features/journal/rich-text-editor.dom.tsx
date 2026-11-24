@@ -223,7 +223,14 @@ export default function RichTextEditor({
       return;
     }
     const mediaId = mediaFrame?.dataset.mediaId;
-    if (mediaId && target?.closest('.media-replace')) onReplaceImage(mediaId);
+    if (mediaId && target?.closest('.media-replace')) {
+      onReplaceImage(mediaId);
+      return;
+    }
+    if (mediaFrame?.classList.contains('is-media-error') && mediaId) {
+      event.preventDefault();
+      onReplaceImage(mediaId);
+    }
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -1526,7 +1533,7 @@ const editorCss = (theme: EditorTheme) => `
   figure { margin: 1.2em 0; }
   .media-frame { display: block; position: relative; overflow: hidden; margin: 1.2em 0; border-radius: 4px; cursor: pointer; }
   .media-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; }
-  .media-actions button { display: inline-flex; height: 32px; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid ${theme.line}; border-radius: 16px; background: rgba(250, 249, 243, 0.92); box-shadow: 0 3px 10px rgba(16, 24, 20, 0.14); color: ${theme.ink}; font: inherit; font-size: 10px; cursor: pointer; }
+  .media-actions button { display: inline-flex; height: 44px; align-items: center; gap: 5px; padding: 0 10px; border: 1px solid ${theme.line}; border-radius: 22px; background: rgba(250, 249, 243, 0.92); box-shadow: 0 3px 10px rgba(16, 24, 20, 0.14); color: ${theme.ink}; font: inherit; font-size: 10px; cursor: pointer; }
   .media-actions button:active { transform: scale(0.96); }
   .media-actions button:hover { background: ${theme.paper}; }
   .media-actions .media-remove { border-color: ${theme.dangerLine}; background: rgba(255, 238, 234, 0.94); color: ${theme.danger}; }

@@ -367,7 +367,7 @@ function postMarkdownToPlainText(markdown: string): string {
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.sheet },
   detailContainer: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl + 96 },
   contentHidden: { opacity: 0 },
   commentBar: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   detailTime: { flex: 1, color: colors.inkFaint, fontSize: 10 },

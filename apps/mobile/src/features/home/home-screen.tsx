@@ -1,7 +1,7 @@
 import { PostCommentComposer, PostCommentMenu, PostCommentPreview } from '../journal/post-comments';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { feedback } from '../../shared/feedback';
@@ -29,6 +29,8 @@ import { ReadingShareCard } from '../../application/components/reading-share-car
 import { extractMusicShares, withoutMusicShares } from '../../application/music-share';
 import { readingSourceTitle, withoutReadingSourceQuote } from '../../application/reading-share';
 import { MediaThumbnail } from '../../shared/components/media-thumbnail';
+import { consumeNewPost } from '../../shared/new-post-signal';
+import { haptic } from '../../shared/haptics';
 
 type TimelineItem =
   | { kind: 'check-in'; checkIn: CheckIn }
@@ -50,7 +52,7 @@ const POST_PREVIEW_MAX_HEIGHT = 168;
 
 export default function SpaceScreen() {
   const router = useRouter();
-  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, readingNoteSources, ready, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
+  const { checkInToday, checkIns, dismissBackupReminder, error, homeMemory, media, people, posts, preferences, readingNoteSources, ready, refreshHomeMemory, shouldShowBackupReminder, today, todayCheckIn, updateCheckInCity, updatePreferences } = useAppState();
   const [commentTarget, setCommentTarget] = useState<{ postId: string; commentId?: string } | null>(null);
   const commentPost = posts.find((post) => post.id === commentTarget?.postId);
   const openComment = (postId: string, comment?: PostComment) => {
@@ -67,6 +69,8 @@ export default function SpaceScreen() {
   const [birthDateIsLeapMonth, setBirthDateIsLeapMonth] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [showMemoryTrace, setShowMemoryTrace] = useState(false);
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
+  const listRef = useRef<SectionList<TimelineItem, TimelineSection>>(null);
   const checkInActionInProgressRef = useRef(false);
   const checkInLocationTasksRef = useRef(new Set<string>());
   const todayPosts = posts.filter((post) => post.dayKey === today);
@@ -83,12 +87,29 @@ export default function SpaceScreen() {
   const memoryReadingSource = homeMemory ? readingNoteSources.find((source) => source.postId === homeMemory.post.id) ?? null : null;
   // 备份提醒优先展示；用户稍后处理后，今日页再轮换回忆卡片，避免次级卡片同时抢占注意力。
   const showBackupReminder = shouldShowBackupReminder;
-  const showMemory = Boolean(homeMemory) && !showBackupReminder;
+  const showMemory = Boolean(homeMemory);
   const recordedDayKeys = [...posts.map((post) => post.dayKey), ...checkIns.map((item) => item.dayKey)];
   const recordedDays = new Set(recordedDayKeys).size;
   const latestRecordedDay = [...recordedDayKeys].sort().at(-1);
   const visualMediaCount = media.filter((item) => item.mimeType.startsWith('image/') || item.mimeType.startsWith('video/')).length;
   const voiceCount = media.filter((item) => item.mimeType.startsWith('audio/')).length;
+
+  useFocusEffect(useCallback(() => {
+    const postId = consumeNewPost();
+    if (!postId) return;
+    const sectionIndex = timelineSections.findIndex((section) => section.data.some((item) => item.kind === 'post' && item.post.id === postId));
+    const itemIndex = sectionIndex >= 0 ? timelineSections[sectionIndex].data.findIndex((item) => item.kind === 'post' && item.post.id === postId) : -1;
+    if (sectionIndex < 0 || itemIndex < 0) return;
+    setHighlightedPostId(postId);
+    const scrollTimer = setTimeout(() => {
+      listRef.current?.scrollToLocation({ sectionIndex, itemIndex, viewPosition: 0.25, animated: true });
+    }, 80);
+    const clearTimer = setTimeout(() => setHighlightedPostId(null), 2400);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [timelineSections]));
 
   useEffect(() => {
     setProfileName(preferences.profileName);
@@ -124,6 +145,7 @@ export default function SpaceScreen() {
         setCheckingIn(true);
         warmDeviceLocation('city');
         const checkIn = await checkInToday();
+        haptic('success');
         void resolveCheckInCity(checkIn.id);
       } catch (cause: unknown) {
         feedback.alert('暂时无法打卡', cause instanceof Error ? cause.message : '请稍后重试。');
@@ -238,7 +260,10 @@ export default function SpaceScreen() {
         <View style={styles.memory}>
           <View style={styles.memoryHeader}>
             <Text style={styles.memoryLabel}>{memoryLabel(homeMemory, today)}</Text>
-            <Text style={styles.memoryDate}>{homeMemory.post.dayKey.replaceAll('-', '.')}</Text>
+            <View style={styles.memoryHeaderRight}>
+              <Text style={styles.memoryDate}>{homeMemory.post.dayKey.replaceAll('-', '.')}</Text>
+              <Pressable accessibilityLabel="换一条回忆" accessibilityRole="button" onPress={() => void refreshHomeMemory()} style={({ pressed }) => [styles.memoryShuffle, pressed && styles.pressed]}><Text style={styles.memoryShuffleText}>换一个</Text></Pressable>
+            </View>
           </View>
           <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${homeMemory.post.id}`)} style={({ pressed }) => [styles.memoryCard, pressed && styles.pressed]}>
             {memoryImage ? <MediaThumbnail accessibilityLabel="回忆媒体" item={memoryImage} style={styles.memoryImage} /> : null}
@@ -275,12 +300,14 @@ export default function SpaceScreen() {
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <AppKeyboardAvoidingView style={styles.feed}>
       <SectionList<TimelineItem, TimelineSection>
+        ref={listRef}
         keyboardShouldPersistTaps="handled"
         style={styles.feed}
         contentContainerStyle={styles.container}
         keyExtractor={(item) => item.kind === 'post' ? item.post.id : item.checkIn.id}
         ListEmptyComponent={<Text style={styles.empty}>还没有记录。今天，可以从一个小小的坐标开始。</Text>}
         ListHeaderComponent={listHeader}
+        onScrollToIndexFailed={(info) => (listRef.current as unknown as { scrollToOffset?: (params: { offset: number; animated?: boolean }) => void } | null)?.scrollToOffset?.({ offset: info.averageItemLength * info.index, animated: true })}
         renderItem={({ item }) => item.kind === 'post' ? (
           <PostCard
             authorName={preferences.nickname || preferences.profileName || '我'}
@@ -290,6 +317,7 @@ export default function SpaceScreen() {
             onImagePress={(imageIndex, images) => router.push({ pathname: '/file-preview', params: previewRouteParams(images.map(toSelectedPreviewFile), imageIndex) })}
             onPress={() => router.push(`/post/${item.post.id}`)}
             post={item.post}
+            highlighted={item.post.id === highlightedPostId}
             readingSource={readingNoteSources.find((source) => source.postId === item.post.id) ?? null}
             signature={preferences.profileSignature}
             nameStyle={preferences.selfNameStyle}
@@ -347,7 +375,7 @@ function CheckInRow({ checkIn }: { checkIn: CheckIn }) {
   );
 }
 
-function PostCard({ authorName, avatarUri, mediaById, nameStyle, onComment, onImagePress, onPress, post, readingSource, signature }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onComment(comment?: PostComment): void; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null; signature: string }) {
+function PostCard({ authorName, avatarUri, mediaById, nameStyle, onComment, onImagePress, onPress, post, readingSource, signature, highlighted }: { authorName: string; avatarUri: string | null; mediaById: Map<string, Media>; nameStyle: NameStyleId; onComment(comment?: PostComment): void; onImagePress(index: number, images: Media[]): void; onPress(): void; post: Post; readingSource: ReturnType<typeof useAppState>['readingNoteSources'][number] | null; signature: string; highlighted?: boolean }) {
   const [bodyOverflowed, setBodyOverflowed] = useState(false);
   const mediaIds = extractMediaIds(post.bodyMarkdown);
   const images = mediaIds.map((id) => mediaById.get(id)).filter((item): item is Media => Boolean(item));
@@ -357,7 +385,7 @@ function PostCard({ authorName, avatarUri, mediaById, nameStyle, onComment, onIm
   const hasHiddenContent = bodyOverflowed || images.length > 9 || audioEmbeds.length > 2;
 
   return (
-    <Pressable accessibilityLabel={`打开 ${post.dayKey} ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.postCard, pressed && styles.feedPressed]}>
+    <Pressable accessibilityLabel={`打开 ${post.dayKey} ${formatTime(post.createdAt)} 的记录`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.postCard, highlighted && styles.postCardHighlighted, pressed && styles.feedPressed]}>
       <ProfileAvatar name={authorName} uri={avatarUri} />
       <View style={styles.postContent}>
         <View style={styles.postHeader}>
@@ -598,7 +626,7 @@ function memoryLabel(memory: NonNullable<ReturnType<typeof useAppState>['homeMem
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  container: { padding: spacing.lg, paddingBottom: spacing.xxl + 96 },
   date: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, lineHeight: 15, textAlign: 'right' },
   stateMessage: { marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.caption },
   errorMessage: { marginBottom: spacing.sm, color: colors.danger, fontSize: typography.size.caption, lineHeight: 18 },
@@ -628,7 +656,7 @@ const styles = createThemedStyles(() => ({
   memoryTraceStats: { marginTop: 'auto', paddingTop: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lifeLine },
   memoryTraceStat: { flex: 1, alignItems: 'center' },
   memoryTraceValue: { color: colors.life, fontFamily: typography.display, fontSize: 22 },
-  memoryTraceLabel: { marginTop: 2, color: colors.inkFaint, fontSize: 8 },
+  memoryTraceLabel: { marginTop: 2, color: colors.inkFaint, fontSize: 9 },
   memoryTraceDivider: { width: StyleSheet.hairlineWidth, height: 26, backgroundColor: colors.lifeLine },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.5 },
@@ -636,13 +664,16 @@ const styles = createThemedStyles(() => ({
   birthdayAvatar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: colors.sunLight },
   birthdayAvatarText: { color: colors.life, fontFamily: typography.display, fontSize: 20 },
   birthdayContent: { flex: 1, marginLeft: spacing.md },
-  promptLabel: { color: colors.sun, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
+  promptLabel: { color: colors.sunInk, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   birthdayTitle: { marginTop: 5, color: colors.ink, fontFamily: typography.display, fontSize: 17 },
   promptFoot: { marginTop: 6, color: colors.inkFaint, fontSize: typography.size.meta },
   memory: { marginTop: spacing.lg },
   memoryHeader: { flexDirection: 'row', justifyContent: 'space-between' },
   memoryLabel: { color: colors.inkSoft, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   memoryDate: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
+  memoryHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  memoryShuffle: { minHeight: 32, paddingHorizontal: spacing.sm, justifyContent: 'center', borderRadius: 16, backgroundColor: colors.lifeLight },
+  memoryShuffleText: { color: colors.life, fontSize: 9, fontWeight: '700' },
   memoryCard: { marginTop: spacing.sm, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet },
   memoryImage: { width: '100%', height: 180, marginBottom: spacing.md, borderRadius: 4, backgroundColor: colors.lifeLight },
   memoryText: { color: colors.ink, fontFamily: typography.display, fontSize: 17, lineHeight: 29 },
@@ -657,12 +688,12 @@ const styles = createThemedStyles(() => ({
   backupLater: { minWidth: 88, minHeight: 42, alignItems: 'center', justifyContent: 'center' },
   backupLaterText: { color: colors.inkSoft, fontSize: 10 },
   timelineHeading: { marginTop: spacing.xxl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  timelineLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1.3 },
+  timelineLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
   timelineTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 25 },
-  timelineCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 1 },
+  timelineCount: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
   dayHeader: { marginTop: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.paper },
   dayTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 19 },
-  dayMeta: { marginTop: 3, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.5 },
+  dayMeta: { marginTop: 3, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.5 },
   dayLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
   checkInRow: { minHeight: 58, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   checkInMarker: { width: 42, alignItems: 'center', justifyContent: 'center' },
@@ -670,8 +701,9 @@ const styles = createThemedStyles(() => ({
   checkInDotCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.life },
   checkInContent: { flex: 1, marginLeft: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   checkInTitle: { color: colors.inkSoft, fontFamily: typography.body, fontSize: 12 },
-  checkInMeta: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  checkInMeta: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   postCard: { paddingTop: spacing.md, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'flex-start', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  postCardHighlighted: { marginHorizontal: -spacing.sm, paddingHorizontal: spacing.sm, borderRadius: 6, backgroundColor: colors.lifeLight },
   feedPressed: { opacity: 0.68 },
   postAvatar: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 21, backgroundColor: colors.life },
   postAvatarImage: { width: '100%', height: '100%' },
@@ -700,8 +732,8 @@ const styles = createThemedStyles(() => ({
   audioWave: { height: 25, flexDirection: 'row', alignItems: 'center', gap: 3 },
   audioWaveBar: { width: 3, borderRadius: 2, backgroundColor: colors.lifeLine },
   audioMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  audioLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 8, letterSpacing: 0.7 },
-  audioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 8 },
+  audioLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.7 },
+  audioDuration: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   postMoreButton: { minWidth: 64, minHeight: 44, marginTop: spacing.xs, alignSelf: 'flex-start', alignItems: 'flex-start', justifyContent: 'center' },
   postOverflowMark: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: 14 },
   postMoreText: { color: colors.life, fontFamily: typography.mono, fontSize: 9, fontWeight: '700', letterSpacing: 0.6 },

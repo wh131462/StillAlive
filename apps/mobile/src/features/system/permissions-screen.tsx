@@ -157,7 +157,7 @@ const styles = createThemedStyles(() => ({
   permissionTitle: { color: colors.ink, fontSize: typography.size.label, fontWeight: '700' },
   permissionStatus: { fontSize: typography.size.meta, fontWeight: '700' },
   status_positive: { color: colors.life },
-  status_warning: { color: colors.sun },
+  status_warning: { color: colors.sunInk },
   status_danger: { color: colors.danger },
   status_neutral: { color: colors.inkFaint },
   permissionDescription: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.caption, lineHeight: 18 },

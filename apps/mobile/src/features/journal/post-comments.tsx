@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -15,60 +14,20 @@ import { persistPickedImage } from '../../infrastructure/files/local-media';
 import { previewRouteParams, toSelectedPreviewFile } from '../files/file-preview.types';
 
 export function PostCommentMenu({ onComment }: { onComment(): void }) {
-  const buttonRef = useRef<View>(null);
-  const window = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const reveal = useRef(new Animated.Value(0)).current;
-  const actionScale = useRef(new Animated.Value(1)).current;
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [position, setPosition] = useState<{ right: number; top: number } | null>(null);
-  const closeMenu = () => {
-    if (closeTimer.current) {
-      clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-    reveal.stopAnimation();
-    reveal.setValue(0);
-    actionScale.stopAnimation();
-    actionScale.setValue(1);
-    setPosition(null);
-  };
-  useEffect(() => () => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-  }, []);
-  const animateMenu = () => Animated.timing(reveal, { toValue: 1, duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  return <>
-    <Pressable accessibilityLabel="更多记录操作" accessibilityRole="button" hitSlop={6} onPress={(event) => {
+  return <Pressable
+    accessibilityLabel="写一句评论"
+    accessibilityRole="button"
+    hitSlop={6}
+    onPress={(event) => {
       event.stopPropagation();
       Keyboard.dismiss();
-      buttonRef.current?.measureInWindow((x, y, _width, height) => {
-        reveal.setValue(0);
-        setPosition({
-          right: Math.max(insets.right + 12, Math.min(window.width - x + 8, window.width - insets.left - 108)),
-          top: Math.max(insets.top + 8, Math.min(y + height / 2 - 18, window.height - insets.bottom - 44)),
-        });
-      });
-    }} style={styles.moreHit}>
-      <View collapsable={false} ref={buttonRef} style={styles.more}><SymbolView name={{ android: 'more_horiz', ios: 'ellipsis', web: 'more_horiz' }} size={18} tintColor={colors.lifeDeep} /></View>
-    </Pressable>
-    <Modal animationType="none" onRequestClose={closeMenu} onShow={animateMenu} transparent visible={Boolean(position)}>
-      <Pressable accessibilityLabel="关闭记录菜单" onPress={closeMenu} style={StyleSheet.absoluteFill} />
-      <Animated.View accessibilityRole="menu" style={[styles.menu, position, { opacity: reveal, transform: [{ translateX: reveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }, { scaleX: reveal.interpolate({ inputRange: [0, 1], outputRange: [0.84, 1] }) }] }]}>
-        <Pressable accessibilityRole="menuitem" hitSlop={4} onPressIn={() => Animated.timing(actionScale, { toValue: 0.94, duration: 70, useNativeDriver: true }).start()} onPressOut={() => Animated.timing(actionScale, { toValue: 1, duration: 90, useNativeDriver: true }).start()} onPress={() => {
-          closeTimer.current = setTimeout(() => {
-            closeTimer.current = null;
-            closeMenu();
-            requestAnimationFrame(onComment);
-          }, 110);
-        }} style={({ pressed }) => [styles.menuAction, pressed && styles.menuActionPressed]}>
-          <Animated.View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, transform: [{ scale: actionScale }] }}>
-            <SymbolView name={{ android: 'chat_bubble_outline', ios: 'bubble.right', web: 'chat_bubble_outline' }} size={16} tintColor={colors.lifeDeep} />
-            <Text style={styles.menuText}>评论</Text>
-          </Animated.View>
-        </Pressable>
-      </Animated.View>
-    </Modal>
-  </>;
+      onComment();
+    }}
+    style={({ pressed }) => [styles.commentTrigger, pressed && styles.commentTriggerPressed]}
+  >
+    <SymbolView name={{ android: 'chat_bubble_outline', ios: 'bubble.right', web: 'chat_bubble_outline' }} size={14} tintColor={colors.inkFaint} />
+    <Text style={styles.commentTriggerText}>写一句</Text>
+  </Pressable>;
 }
 
 export function PostCommentPreview({ post, onEdit }: { post: Post; onEdit?(comment: PostComment): void }) {
@@ -93,7 +52,7 @@ export function PostComments({ post, onEdit, preview = false }: { post: Post; on
   };
   const actions = (comment: PostComment) => feedback.alert('评论操作', undefined, [
     { text: '编辑', onPress: () => onEdit ? onEdit(comment) : router.push({ pathname: '/post/[id]', params: { id: post.id, commentId: comment.id } }) },
-    { text: '删除', style: 'destructive', onPress: () => void remove(comment) },
+    { text: '删除', style: 'destructive', onPress: () => feedback.alert('删除这条评论？', '删除后无法恢复。', [{ text: '取消', style: 'cancel' }, { text: '删除', style: 'destructive', onPress: () => void remove(comment) }]) },
     { text: '取消', style: 'cancel' },
   ]);
 
@@ -193,12 +152,9 @@ function formatCommentTime(value: string) {
 }
 
 const styles = createThemedStyles(() => StyleSheet.create({
-  moreHit: { minWidth: 44, height: 32, alignItems: 'flex-end', justifyContent: 'center' },
-  more: { width: 30, height: 22, borderRadius: 4, backgroundColor: colors.lifeLight, alignItems: 'center', justifyContent: 'center' },
-  menu: { position: 'absolute', width: 96, height: 36, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.sheet, shadowColor: colors.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3 },
-  menuAction: { flex: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
-  menuActionPressed: { backgroundColor: colors.lifeLight },
-  menuText: { color: colors.inkSoft, fontSize: 13, fontWeight: '500' },
+  commentTrigger: { minHeight: 44, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 16 },
+  commentTriggerPressed: { backgroundColor: colors.lineSoft, opacity: 0.72 },
+  commentTriggerText: { color: colors.inkFaint, fontSize: 10, fontWeight: '500', letterSpacing: 0.2 },
   comments: { marginTop: 10, borderRadius: 4, backgroundColor: colors.paper, paddingHorizontal: 10 },
   notch: { position: 'absolute', top: -5, left: 14, width: 10, height: 10, backgroundColor: colors.paper, transform: [{ rotate: '45deg' }] },
   comment: { paddingVertical: 4, paddingHorizontal: 10, marginHorizontal: -10 },
@@ -218,11 +174,11 @@ const styles = createThemedStyles(() => StyleSheet.create({
   composer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, backgroundColor: colors.paper, paddingHorizontal: spacing.md, paddingTop: 6, paddingBottom: 10 },
   composerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   composerTitle: { flex: 1, color: colors.inkSoft, fontSize: 11 },
-  close: { width: 32, height: 28, alignItems: 'center', justifyContent: 'center' },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   input: { flex: 1, minHeight: 42, maxHeight: 120, borderRadius: 5, backgroundColor: colors.sheet, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 10, color: colors.ink, fontSize: 14, lineHeight: 22 },
-  photoButton: { width: 36, height: 42, alignItems: 'center', justifyContent: 'center' },
-  send: { height: 38, marginBottom: 2, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 5, backgroundColor: colors.life },
+  photoButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  send: { height: 44, marginBottom: 2, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 5, backgroundColor: colors.life },
   sendText: { color: colors.onLife, fontSize: 13, fontWeight: '600' },
   disabled: { opacity: 0.4 },
   selectedImages: { gap: 10, paddingTop: 6, paddingBottom: 10, paddingRight: 8 },

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
@@ -39,6 +39,7 @@ export default function MusicPlayerScreen() {
   const player = useMusicPlayer();
   const { media, ready } = useAppState();
   const [queueOpen, setQueueOpen] = useState(queueParam === '1');
+  const [scrubProgress, setScrubProgress] = useState<number | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [moreMenuPosition, setMoreMenuPosition] = useState<{ right: number; top: number }>({ right: spacing.md, top: 60 });
   const [progressWidth, setProgressWidth] = useState(1);
@@ -56,6 +57,21 @@ export default function MusicPlayerScreen() {
       ? formatSleepTimerRemaining(player.sleepTimerEndsAt, timerNow)
       : null;
   const currentQueueIndex = current ? player.queue.findIndex((track) => track.id === current.id) : -1;
+  const progressPanResponder = useMemo(() => {
+    const ratioAt = (locationX: number) => progressWidth > 0 ? Math.max(0, Math.min(1, locationX / progressWidth)) : 0;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => Boolean(player.duration),
+      onMoveShouldSetPanResponder: (_event, gesture) => Boolean(player.duration) && Math.abs(gesture.dx) > 2,
+      onPanResponderGrant: (event) => setScrubProgress(ratioAt(event.nativeEvent.locationX)),
+      onPanResponderMove: (event) => setScrubProgress(ratioAt(event.nativeEvent.locationX)),
+      onPanResponderRelease: (event) => {
+        const value = ratioAt(event.nativeEvent.locationX);
+        setScrubProgress(null);
+        if (player.duration) void player.seekTo(player.duration * value);
+      },
+      onPanResponderTerminate: () => setScrubProgress(null),
+    });
+  }, [player.duration, player.seekTo, progressWidth]);
   const recordScale = Math.min(
     1,
     Math.max(0.78, 0.78 + (window.height - 640) * 0.001375),
@@ -138,9 +154,24 @@ export default function MusicPlayerScreen() {
             <View style={styles.trackIdentity}><ScrollingTrackTitle key={current.id} title={current.title} /><Text numberOfLines={1} style={styles.artist}>{current.artist || '未知艺术家'}{current.album ? ` / ${current.album}` : ''}</Text></View>
 
             <View style={styles.timeline}>
-              <Pressable accessibilityRole="adjustable" onLayout={(event) => setProgressWidth(event.nativeEvent.layout.width)} onPress={(event) => { if (duration) void player.seekTo(duration * Math.max(0, Math.min(1, event.nativeEvent.locationX / progressWidth))); }} style={styles.progressTrack}>
+              <Pressable
+                accessibilityActions={[{ name: 'increment', label: '快进' }, { name: 'decrement', label: '快退' }]}
+                accessibilityLabel="播放进度"
+                accessibilityRole="adjustable"
+                accessibilityValue={{ min: 0, max: Math.round(duration), now: Math.round(scrubProgress === null ? player.currentTime : duration * scrubProgress) }}
+                hitSlop={{ top: 8, bottom: 8 }}
+                onAccessibilityAction={(event) => {
+                  if (!duration) return;
+                  const next = Math.max(0, Math.min(1, progress + (event.nativeEvent.actionName === 'increment' ? 0.05 : -0.05)));
+                  void player.seekTo(duration * next);
+                }}
+                onLayout={(event) => setProgressWidth(event.nativeEvent.layout.width)}
+                onPress={(event) => { if (duration) void player.seekTo(duration * Math.max(0, Math.min(1, event.nativeEvent.locationX / progressWidth))); }}
+                style={styles.progressTrack}
+                {...progressPanResponder.panHandlers}
+              >
                 <View style={styles.progressRail}>
-                  <View style={[styles.progressFill, { width: `${progress * 100}%` }]}><View style={styles.progressThumb} /></View>
+                  <View style={[styles.progressFill, { width: `${(scrubProgress ?? progress) * 100}%` }]}><View style={[styles.progressThumb, scrubProgress !== null && styles.progressThumbScrubbing]} /></View>
                 </View>
               </Pressable>
               <View style={styles.timeRow}><Text style={styles.timeText}>{formatTime(player.currentTime)}</Text><Text style={styles.timeText}>{formatTime(duration)}</Text></View>
@@ -251,6 +282,17 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
     setSelectingPerson(false);
   };
 
+  const queueListRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!open || selectingPerson) return;
+    const index = player.queue.findIndex((track) => track.id === currentTrackId);
+    if (index < 0) return;
+    const timer = setTimeout(() => {
+      queueListRef.current?.scrollTo({ y: Math.max(0, index * 62 - 124), animated: true });
+    }, 260);
+    return () => clearTimeout(timer);
+  }, [currentTrackId, open, player.queue, selectingPerson]);
+
   return (
     <DraggableBottomSheet accessibilityLabel="播放队列，向下拖动关闭" backdropStyle={styles.backdrop} onClose={onClose} open={open} sheetStyle={[styles.queueSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
             <View style={styles.queueHeader}>
@@ -273,7 +315,7 @@ function QueueSheet({ currentTrackId, onClose, onSelect, open }: { currentTrackI
                   const selected = source.id === 'people' ? player.queueSource === 'person' : player.queueSource === source.id;
                   return <Pressable key={source.id} accessibilityState={{ selected }} onPress={() => selectSource(source.id)} style={[styles.source, selected && styles.sourceActive]}><Text style={[styles.sourceText, selected && styles.sourceTextActive]}>{source.label}</Text></Pressable>;
                 })}</View>
-                <ScrollView contentContainerStyle={styles.queueContent} style={styles.queueList}>{player.queue.map((track, index) => <Pressable key={track.id} onPress={() => onSelect(track)} style={({ pressed }) => [styles.queueRow, pressed && styles.pressed]}><View style={styles.queueState}><Text style={styles.queueIndex}>{index + 1}</Text></View><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={42} style={styles.queueCover} /><View style={styles.queueCopy}><View style={styles.queueTrackTitleRow}><Text numberOfLines={1} style={[styles.queueTrackTitle, track.id === currentTrackId && styles.queueTrackTitleActive]}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><Text numberOfLines={1} style={styles.queueTrackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>)}{player.queue.length === 0 ? <View style={styles.queueEmpty}><Text style={styles.emptyText}>当前来源没有音乐</Text></View> : null}</ScrollView>
+                <ScrollView ref={queueListRef} contentContainerStyle={styles.queueContent} style={styles.queueList}>{player.queue.map((track, index) => <Pressable key={track.id} onPress={() => onSelect(track)} style={({ pressed }) => [styles.queueRow, track.id === currentTrackId && styles.queueRowActive, pressed && styles.pressed]}><View style={styles.queueState}><Text style={styles.queueIndex}>{index + 1}</Text></View><MusicCover media={media.find((item) => item.id === track.coverMediaId)} size={42} style={styles.queueCover} /><View style={styles.queueCopy}><View style={styles.queueTrackTitleRow}><Text numberOfLines={1} style={[styles.queueTrackTitle, track.id === currentTrackId && styles.queueTrackTitleActive]}>{track.title}</Text><MusicQualityBadge quality={track.quality} /></View><Text numberOfLines={1} style={styles.queueTrackMeta}>{track.artist || '未知艺术家'}{track.album ? ` / ${track.album}` : ''}</Text></View></Pressable>)}{player.queue.length === 0 ? <View style={styles.queueEmpty}><Text style={styles.emptyText}>当前来源没有音乐</Text></View> : null}</ScrollView>
               </>
             )}
     </DraggableBottomSheet>
@@ -431,9 +473,10 @@ const styles = createThemedStyles(() => ({
   titleMarqueeGap: { width: TITLE_MARQUEE_GAP },
   artist: { maxWidth: '100%', marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, textAlign: 'center' },
   timeline: { width: '100%', marginTop: spacing.md },
-  progressTrack: { width: '100%', height: 24, justifyContent: 'center' },
+  progressTrack: { width: '100%', height: 32, justifyContent: 'center' },
   progressRail: { width: '100%', height: 5, justifyContent: 'center', borderRadius: 3, backgroundColor: colors.line },
   progressFill: { height: 5, minWidth: 4, justifyContent: 'center', alignItems: 'flex-end', borderRadius: 3, backgroundColor: colors.life },
+  progressThumbScrubbing: { transform: [{ scale: 1.35 }] },
   progressThumb: { width: 14, height: 14, marginRight: -7, borderWidth: 2, borderColor: colors.sheet, borderRadius: 7, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.18, shadowRadius: 3, elevation: 2 },
   timeRow: { marginTop: 2, flexDirection: 'row', justifyContent: 'space-between' },
   timeText: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 10 },
@@ -481,6 +524,7 @@ const styles = createThemedStyles(() => ({
   queueList: { marginTop: spacing.md },
   queueContent: { paddingBottom: spacing.md },
   queueRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  queueRowActive: { backgroundColor: colors.lifeLight },
   queueState: { width: 38, alignItems: 'center', justifyContent: 'center' },
   queueIndex: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9 },
   queueCover: { marginRight: spacing.sm, borderRadius: 6 },

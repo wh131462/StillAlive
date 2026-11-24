@@ -9,6 +9,7 @@ import type { Person, PersonRelationship, PersonRelationshipKind, PersonRelation
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
 import { feedback } from '../../shared/feedback';
+import { haptic } from '../../shared/haptics';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { createThemedStyles, nameTextStyle } from '../../shared/theme/app-theme';
@@ -65,6 +66,7 @@ export default function RelationshipTreeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { bindPersonRelationshipNode, createPerson, createPersonRelationshipNode, deletePersonRelationship, deletePersonRelationshipNode, getPostsByPerson, media, people, personRelationshipNodes, personRelationships, preferences, savePersonRelationship } = useAppState();
   const [selectedMember, setSelectedMember] = useState<TreeMember | null>(null);
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [selectedPostCount, setSelectedPostCount] = useState(0);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -239,6 +241,8 @@ export default function RelationshipTreeScreen() {
         }
       }
       await savePersonRelationship(sourceNodeId, targetNodeId, kind, editingId);
+      haptic('success');
+      feedback.notice('关系已保存');
       setEditorOpen(false);
     } catch (cause: unknown) {
       if (createdNode) await deletePersonRelationshipNode(createdNode.id).catch(() => undefined);
@@ -292,7 +296,7 @@ export default function RelationshipTreeScreen() {
         <GestureDetector gesture={canvasGesture}>
           <View collapsable={false} style={styles.canvasGestureArea}>
           <Animated.View style={[styles.treeBody, { width: graphLayout.width, height: graphLayout.height, transform: [{ translateX: animatedTranslateX }, { translateY: animatedTranslateY }, { scale: animatedScale }] }]}>
-            <RelationshipEdges layout={graphLayout} relationships={personRelationships} />
+            <RelationshipEdges focusedKey={focusedKey} layout={graphLayout} relationships={personRelationships} showLabels={scale >= 0.45} />
             {generations.map((generation) => (
               <View key={generation.level} style={[styles.graphRow, { top: (graphLayout.positions.get(generation.members[0].key)?.y ?? 0) - GRAPH_HEADING_HEIGHT - 12 }]}>
                 <View style={styles.generationHeading}>
@@ -305,9 +309,11 @@ export default function RelationshipTreeScreen() {
             {graphLayout.nodes.map(({ member, x, y }) => (
               <View key={member.key} style={[styles.graphNode, { left: x, top: y }]}>
                 <TreeNode
+                  compact={scale < 0.45}
+                  focused={member.key === focusedKey}
                   media={media}
                   member={member}
-                  onPress={() => openMember(member)}
+                  onPress={() => { setFocusedKey(member.key); openMember(member); }}
                   preferences={preferences}
                   profileAvatarUri={member.key === SELF_KEY ? profileAvatar?.localPath ?? null : null}
                 />
@@ -419,21 +425,21 @@ export default function RelationshipTreeScreen() {
   );
 }
 
-function TreeNode({ media, member, onPress, preferences, profileAvatarUri }: { media: ReturnType<typeof useAppState>['media']; member: TreeMember; onPress(): void; preferences: ReturnType<typeof useAppState>['preferences']; profileAvatarUri: string | null }) {
+function TreeNode({ compact, focused, media, member, onPress, preferences, profileAvatarUri }: { compact: boolean; focused: boolean; media: ReturnType<typeof useAppState>['media']; member: TreeMember; onPress(): void; preferences: ReturnType<typeof useAppState>['preferences']; profileAvatarUri: string | null }) {
   const isSelf = member.key === SELF_KEY;
   const isPlaceholder = member.node.kind === 'placeholder';
   return (
-    <Pressable accessibilityLabel={`查看${memberDisplayName(member, preferences)}的关系信息`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.node, isSelf && styles.selfNode, isPlaceholder && styles.placeholderNode, pressed && styles.nodePressed]}>
+    <Pressable accessibilityLabel={`查看${memberDisplayName(member, preferences)}的关系信息`} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.node, isSelf && styles.selfNode, isPlaceholder && styles.placeholderNode, focused && styles.nodeFocused, pressed && styles.nodePressed]}>
       {isSelf ? <Text style={styles.rootBadge}>根</Text> : null}
       {isPlaceholder ? <Text style={styles.placeholderBadge}>待补全</Text> : null}
       <PersonAvatar media={media} person={member.person} placeholder={isPlaceholder} profileAvatarUri={profileAvatarUri} size={50} />
       <Text numberOfLines={1} style={[styles.nodeName, isPlaceholder && styles.placeholderNodeName, member.person && nameTextStyle(preferences.friendNameStyle)]}>{memberDisplayName(member, preferences)}</Text>
-      <Text numberOfLines={1} style={styles.nodeRelation}>{member.relationLabel}</Text>
+      {compact ? null : <Text numberOfLines={1} style={styles.nodeRelation}>{member.relationLabel}</Text>}
     </Pressable>
   );
 }
 
-function RelationshipEdges({ layout, relationships }: { layout: TreeGraphLayout; relationships: PersonRelationship[] }) {
+function RelationshipEdges({ focusedKey, layout, relationships, showLabels }: { focusedKey: string | null; layout: TreeGraphLayout; relationships: PersonRelationship[]; showLabels: boolean }) {
   const collapsed = new Set<string>();
   const sharedChildEdges = new Map<string, { partner: PersonRelationship; child: PersonRelationship }>();
   const sameGenerationLaneIndexes = new Map<string, number>();
@@ -476,17 +482,17 @@ function RelationshipEdges({ layout, relationships }: { layout: TreeGraphLayout;
       const targetBottom = { x: targetCenter.x, y: target.y + NODE_HEIGHT };
       const labelLeft = (sourceBottom.x + targetBottom.x) / 2 - 21;
       return <View key={relationship.id}>
-        <RelationshipLine end={{ x: sourceBottom.x, y: laneY }} start={sourceBottom} />
-        <RelationshipLine end={{ x: targetBottom.x, y: laneY }} start={targetBottom} />
-        <RelationshipLine end={{ x: targetBottom.x, y: laneY }} start={{ x: sourceBottom.x, y: laneY }} />
-        <View style={[styles.edgeLabel, { left: labelLeft, top: laneY - 9 }]}><Text style={styles.edgeLabelText}>{relationLabel(relationship.kind)}</Text></View>
+        <RelationshipLine highlighted={Boolean(focusedKey && (relationship.sourceNodeId === focusedKey || relationship.targetNodeId === focusedKey))} end={{ x: sourceBottom.x, y: laneY }} start={sourceBottom} />
+        <RelationshipLine highlighted={Boolean(focusedKey && (relationship.sourceNodeId === focusedKey || relationship.targetNodeId === focusedKey))} end={{ x: targetBottom.x, y: laneY }} start={targetBottom} />
+        <RelationshipLine highlighted={Boolean(focusedKey && (relationship.sourceNodeId === focusedKey || relationship.targetNodeId === focusedKey))} end={{ x: targetBottom.x, y: laneY }} start={{ x: sourceBottom.x, y: laneY }} />
+        {showLabels ? <View style={[styles.edgeLabel, { left: labelLeft, top: laneY - 9 }]}><Text style={styles.edgeLabelText}>{relationLabel(relationship.kind)}</Text></View> : null}
       </View>;
     }
     const start = { x: sourceCenter.x, y: sourceCenter.y + Math.sign(targetCenter.y - sourceCenter.y) * NODE_HEIGHT / 2 };
     const end = { x: targetCenter.x, y: targetCenter.y - Math.sign(targetCenter.y - sourceCenter.y) * NODE_HEIGHT / 2 };
     return <View key={relationship.id}>
-      <RelationshipLine end={end} start={start} />
-      <View style={[styles.edgeLabel, { left: (start.x + end.x) / 2 - 21, top: (start.y + end.y) / 2 - 9 }]}><Text style={styles.edgeLabelText}>{relationLabel(relationship.kind)}</Text></View>
+      <RelationshipLine highlighted={Boolean(focusedKey && (relationship.sourceNodeId === focusedKey || relationship.targetNodeId === focusedKey))} end={end} start={start} />
+      {showLabels ? <View style={[styles.edgeLabel, { left: (start.x + end.x) / 2 - 21, top: (start.y + end.y) / 2 - 9 }]}><Text style={styles.edgeLabelText}>{relationLabel(relationship.kind)}</Text></View> : null}
     </View>;
   }).concat([...sharedChildEdges.values()].map(({ partner, child }) => {
     const left = layout.positions.get(partner.sourceNodeId);
@@ -501,12 +507,12 @@ function RelationshipEdges({ layout, relationships }: { layout: TreeGraphLayout;
   }))}</View>;
 }
 
-function RelationshipLine({ end, start }: { end: { x: number; y: number }; start: { x: number; y: number } }) {
+function RelationshipLine({ end, highlighted = false, start }: { end: { x: number; y: number }; highlighted?: boolean; start: { x: number; y: number } }) {
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const length = Math.sqrt(deltaX ** 2 + deltaY ** 2);
   const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
-  return <View style={[styles.relationshipLine, { left: (start.x + end.x) / 2 - length / 2, top: (start.y + end.y) / 2 - 1, width: length, transform: [{ rotate: `${angle}deg` }] }]} />;
+  return <View style={[styles.relationshipLine, highlighted && styles.relationshipLineActive, { left: (start.x + end.x) / 2 - length / 2, top: (start.y + end.y) / 2 - 1, width: length, transform: [{ rotate: `${angle}deg` }] }]} />;
 }
 
 function PersonAvatar({ media, person, placeholder = false, profileAvatarUri = null, size }: { media: ReturnType<typeof useAppState>['media']; person: Person | null; placeholder?: boolean; profileAvatarUri?: string | null; size: number }) {
@@ -741,6 +747,8 @@ const styles = createThemedStyles(() => ({
   selfNode: { borderWidth: 1.5, borderColor: colors.life, backgroundColor: colors.sheet },
   placeholderNode: { borderStyle: 'dashed', borderColor: colors.lifeLine, backgroundColor: colors.paper },
   nodePressed: { opacity: 0.74, transform: [{ translateY: 2 }] },
+  nodeFocused: { borderWidth: 1.5, borderColor: colors.life, shadowOpacity: 0.16, shadowRadius: 20 },
+  relationshipLineActive: { backgroundColor: colors.life, height: 2, opacity: 1 },
   rootBadge: { position: 'absolute', zIndex: 2, top: 4, right: 2, minWidth: 25, paddingHorizontal: 6, paddingVertical: 3, overflow: 'hidden', borderRadius: 10, backgroundColor: colors.life, color: colors.onLife, fontSize: 8, textAlign: 'center' },
   placeholderBadge: { position: 'absolute', zIndex: 2, top: 4, right: 2, paddingHorizontal: 6, paddingVertical: 3, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: 10, backgroundColor: colors.paper, color: colors.life, fontSize: 8, textAlign: 'center' },
   avatar: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: colors.life },

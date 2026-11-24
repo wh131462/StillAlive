@@ -126,7 +126,7 @@ const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   hero: { padding: spacing.lg, borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.lifeDeep },
-  heroEyebrow: { color: colors.sun, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
+  heroEyebrow: { color: colors.sunInk, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.3 },
   heroTitle: { marginTop: spacing.sm, color: colors.onLife, fontFamily: typography.display, fontSize: 27, lineHeight: 34 },
   heroText: { marginTop: spacing.sm, color: colors.onLifeMuted, fontSize: 11, lineHeight: 19 },
   formCard: { marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, borderRadius: 6, backgroundColor: colors.sheet },

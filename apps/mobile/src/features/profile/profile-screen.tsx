@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigation, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -22,6 +22,8 @@ import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/component
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
+  const allowExitRef = useRef(false);
   const { createTag, discardMedia, media, preferences, saveMedia, tagDefinitions, tagGroups, tagSystemSettings, updatePreferences } = useAppState();
   const currentAvatar = preferences.profileAvatarMediaId ? media.find((item) => item.id === preferences.profileAvatarMediaId) : null;
   const [profileName, setProfileName] = useState(preferences.profileName);
@@ -46,6 +48,33 @@ export default function ProfileScreen() {
     if (!profileBirthday) return [];
     try { return [constellationForBirthday(profileBirthday), zodiacForBirthday(profileBirthday)]; } catch { return []; }
   }, [profileBirthday]);
+  const dirty = Boolean(pickedAsset)
+    || profileName !== preferences.profileName
+    || nickname !== preferences.nickname
+    || bio !== preferences.profileBio
+    || signature !== preferences.profileSignature
+    || gender !== preferences.profileGender
+    || birthDate !== preferences.birthDate
+    || birthDateCalendar !== preferences.birthDateCalendar
+    || birthDateIsLeapMonth !== preferences.birthDateIsLeapMonth
+    || mbti !== preferences.profileMbti
+    || customTagIds.join('|') !== preferences.profileCustomTagIds.join('|');
+
+  useEffect(() => navigation.addListener('beforeRemove', (event) => {
+    if (allowExitRef.current || !dirty) return;
+    event.preventDefault();
+    feedback.alert('放弃这次修改？', '尚未保存的个人资料会丢失。', [
+      { text: '继续编辑', style: 'cancel' },
+      {
+        text: '放弃修改',
+        style: 'destructive',
+        onPress: () => {
+          allowExitRef.current = true;
+          navigation.dispatch(event.data.action);
+        },
+      },
+    ]);
+  }), [dirty, navigation]);
 
   const changeBirthDateCalendar = (calendar: BirthdayCalendar) => {
     if (calendar === birthDateCalendar) return;
@@ -86,6 +115,7 @@ export default function ProfileScreen() {
         const previous = media.find((item) => item.id === previousAvatar);
         if (previous) await discardMedia(previous);
       }
+      allowExitRef.current = true;
       router.back();
     } catch (cause: unknown) {
       if (importedMedia) await discardMedia(importedMedia);
@@ -94,7 +124,7 @@ export default function ProfileScreen() {
   };
 
   return <SafeAreaView style={styles.safeArea}><AppKeyboardAvoidingView style={styles.flex}>
-    <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderTextAction disabled={saving} label={saving ? '保存中' : '保存'} onPress={() => void save()} />} title="个人信息" />
+    <ToolPageHeader backDisabled={saving} onBack={() => router.back()} right={<ToolPageHeaderTextAction disabled={saving} label={saving ? '保存中' : '保存'} onPress={() => void save()} />} title="个人信息" />
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <Pressable accessibilityHint="可以拍照或从照片中选择" accessibilityLabel={avatarUri ? '更换头像' : '添加头像'} accessibilityRole="button" onPress={() => setAvatarSourcePickerOpen(true)} style={({ pressed }) => [styles.avatarButton, pressed && styles.avatarPressed]}><View style={styles.avatar}>{avatarUri && !avatarFailed ? <Image onError={() => setAvatarFailed(true)} source={{ uri: avatarUri }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{(nickname || profileName).trim().slice(0, 1) || '我'}</Text>}<View style={styles.cameraBadge}><SymbolView name={{ android: 'photo_camera', ios: 'camera.fill', web: 'photo_camera' }} size={15} tintColor={colors.onLife} type="hierarchical" /></View></View></Pressable>
 

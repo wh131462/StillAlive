@@ -314,7 +314,9 @@ export default function MusicBoxScreen() {
   };
 
   const playTrack = (track: MusicTrack) => {
-    if (player.currentTrack?.id !== track.id) {
+    if (player.currentTrack?.id === track.id) {
+      if (!player.playing) player.toggle();
+    } else {
       void player.playTrack(track.id, visibleTracks.map((item) => item.id), 'self');
     }
     if (openingPlayerRef.current) return;
@@ -323,15 +325,19 @@ export default function MusicBoxScreen() {
   };
 
   const playAll = () => {
-    const first = displayTracks[0];
-    if (first) void player.playTrack(first.id, displayTracks.map((track) => track.id), 'self');
+    const first = visibleTracks[0];
+    if (!first) return;
+    void player.setMode('list').then(() => player.playTrack(first.id, visibleTracks.map((track) => track.id), 'self'));
   };
 
-  const shuffleAll = async () => {
-    if (!displayTracks.length) return;
-    await player.setMode('shuffle');
-    const first = displayTracks[Math.floor(Math.random() * displayTracks.length)];
-    await player.playTrack(first.id, displayTracks.map((track) => track.id), 'self');
+  const shuffleAll = () => {
+    if (!visibleTracks.length) return;
+    const shuffled = [...visibleTracks];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+    }
+    void player.setMode('shuffle').then(() => player.playTrack(shuffled[0].id, shuffled.map((track) => track.id), 'self'));
   };
 
   const toggleBatchMode = () => {

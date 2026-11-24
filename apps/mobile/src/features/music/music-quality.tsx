@@ -21,5 +21,5 @@ const styles = createThemedStyles(() => ({
   hqBadge: { borderColor: colors.sun, backgroundColor: colors.sunLight },
   text: { fontSize: 7.5, fontWeight: '800', letterSpacing: 0.55, lineHeight: 10 },
   sqText: { color: colors.life },
-  hqText: { color: colors.sun },
+  hqText: { color: colors.sunInk },
 }));

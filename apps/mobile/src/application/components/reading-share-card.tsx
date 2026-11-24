@@ -31,7 +31,7 @@ export function ReadingShareCard({ compact = false, onRemove, source, variant = 
       onPress={(event) => {
         if (!interactive) return;
         event.stopPropagation();
-        router.push({ pathname: '/reader', params: { id: interactive.id } } as never);
+        router.push({ pathname: '/reader', params: { id: interactive.id, ...(source.excerptIds[0] ? { excerptId: source.excerptIds[0] } : {}) } } as never);
       }}
       style={({ pressed }) => [styles.card, variant === 'composer' && styles.cardComposer, variant === 'share' && styles.cardShare, pressed && styles.cardPressed]}
     >

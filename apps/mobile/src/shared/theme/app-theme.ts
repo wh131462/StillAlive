@@ -68,7 +68,7 @@ export function createThemedStyles<T extends StyleSheet.NamedStyles<T>>(factory:
 
 export function nameTextStyle(style: NameStyleId): TextStyle {
   if (style === 'journal') return { color: colors.inkSoft, fontFamily: typography.display, fontStyle: 'italic', fontWeight: '600', letterSpacing: 0.25 };
-  if (style === 'sunlit') return { color: colors.sun, fontFamily: typography.body, fontWeight: '800', letterSpacing: 0.65 };
+  if (style === 'sunlit') return { color: colors.sunInk, fontFamily: typography.body, fontWeight: '800', letterSpacing: 0.65 };
   if (style === 'colorful') return { color: colors.life, fontFamily: typography.body, fontWeight: '800', letterSpacing: 0.5 };
   if (style === 'iridescent') return { color: colors.life, fontFamily: typography.body, fontWeight: '800', letterSpacing: 0.6 };
   if (style === 'quiet') return { color: colors.inkSoft, fontFamily: typography.body, fontWeight: '500', letterSpacing: 0.35 };

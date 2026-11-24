@@ -16,7 +16,7 @@ import { StyledName } from './styled-name';
 
 export default function PeopleScreen() {
   const router = useRouter();
-  const { createPerson, getPostsByPerson, media, people, personRelationships, posts, preferences } = useAppState();
+  const { createPerson, getPostsByPerson, media, people, personRelationships, posts, preferences, today } = useAppState();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
@@ -28,7 +28,8 @@ export default function PeopleScreen() {
     let active = true;
     void Promise.all(people.map(async (person) => {
       const relatedPosts = await getPostsByPerson(person.id);
-      return [person.id, { count: relatedPosts.length, latestDay: relatedPosts[0]?.dayKey ?? null }] as const;
+      const latestDay = relatedPosts.reduce<string | null>((latest, post) => !latest || post.dayKey > latest ? post.dayKey : latest, null);
+      return [person.id, { count: relatedPosts.length, latestDay }] as const;
     })).then((entries) => {
       if (!active) return;
       setSummaries(Object.fromEntries(entries));
@@ -149,7 +150,8 @@ export default function PeopleScreen() {
                     <StyledName numberOfLines={1} style={styles.personName} value={displayName} variant={preferences.friendNameStyle} />
                     {person.relationToMe ? <Text numberOfLines={1} style={styles.personRelation}>{person.relationToMe}</Text> : null}
                   </View>
-                  <Text numberOfLines={2} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>
+                  <Text numberOfLines={1} style={styles.personMeta}>{person.impression ?? '还没有留下关于 ta 的印象'}</Text>
+                  <Text style={styles.personStats}>{summaries[person.id] ? `${summaries[person.id].count} 条共同记录 · 最近 ${formatRelativeDay(summaries[person.id].latestDay, today)}` : '正在整理共同记录…'}</Text>
                 </View>
                 <SymbolView name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }} pointerEvents="none" size={18} tintColor={colors.inkFaint} type="hierarchical" />
               </Pressable>;
@@ -170,6 +172,19 @@ export default function PeopleScreen() {
       </DraggableBottomSheet>
     </SafeAreaView>
   );
+}
+
+function formatRelativeDay(dayKey: string | null, today: string): string {
+  if (!dayKey) return '还没有记录';
+  if (dayKey === today) return '今天';
+  const [year, month, day] = dayKey.split('-').map(Number);
+  const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
+  const value = new Date(year, month - 1, day).getTime();
+  const base = new Date(todayYear, todayMonth - 1, todayDay).getTime();
+  const days = Math.round((base - value) / 86_400_000);
+  if (days === 1) return '昨天';
+  if (days > 1 && days < 30) return `${days} 天前`;
+  return year === todayYear ? `${month} 月 ${day} 日` : `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`;
 }
 
 const styles = createThemedStyles(() => ({
@@ -216,7 +231,7 @@ const styles = createThemedStyles(() => ({
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: 12, lineHeight: 21 },
   emptyAction: { marginTop: spacing.lg, color: colors.life, fontSize: 11, fontWeight: '700' },
   list: { marginTop: 0, paddingHorizontal: spacing.md, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, borderRadius: 6, backgroundColor: colors.sheet },
-  personRow: { minHeight: 92, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  personRow: { minHeight: 100, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   personRowLast: { borderBottomWidth: 0 },
   personRowPressed: { opacity: 0.58 },
   avatar: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 26, backgroundColor: colors.life },
@@ -227,6 +242,7 @@ const styles = createThemedStyles(() => ({
   personName: { maxWidth: '64%', color: colors.ink, fontFamily: typography.display, fontSize: 17 },
   personRelation: { maxWidth: '34%', marginLeft: spacing.sm, paddingHorizontal: 7, paddingVertical: 3, overflow: 'hidden', borderRadius: 9, backgroundColor: colors.lifeLight, color: colors.life, fontSize: typography.size.meta },
   personMeta: { marginTop: 5, marginRight: spacing.md, color: colors.inkFaint, fontSize: 11, lineHeight: 17 },
+  personStats: { marginTop: 4, marginRight: spacing.md, color: colors.lifeDeep, fontFamily: typography.mono, fontSize: 9.5, lineHeight: 15 },
   noResults: { padding: spacing.lg, borderRadius: 6, backgroundColor: colors.sheet },
   noResultsText: { color: colors.inkSoft, fontSize: 12 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.backdrop },
