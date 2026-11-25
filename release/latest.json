@@ -1,6 +1,6 @@
 {
-  "versionCode": 30,
-  "versionName": "1.1.21",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.21.apk",
-  "releaseNotes": "阅读器升级：控制栏改为浮层，正文不再跳动，页边距、行距、段距、首行缩进与夜间模式都能在阅读器内调节。\n书摘集中管理：可按书查看、搜索、备注、写观后感与跳回原文，删除书籍后书摘仍保留。\n生日提醒现在新增开启引导与重要日子提醒；常驻快捷栏会跨日自动刷新，你可以直接在通知栏打卡。\n邀请链接可以保留和复制，并显示待回信状态；首页的回忆可以换一条，发布新记录后会自动定位到这条新记录。\n日历可以回看多年前的今天，人物页支持采纳记录生成的印象；我们还统一了轻提示与触感反馈，音乐播放器支持拖动进度。"
+  "versionCode": 31,
+  "versionName": "1.1.22",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.22.apk",
+  "releaseNotes": "新增 AI 对话与本地记忆：可配置多家服务商，基于记录问答，支持历史、来源与误删恢复；入口收进底部 AI 按钮，关闭 AI 时隐藏。\nAI 经确认可帮你记账、写记录或打卡，写入记忆前校验依据；编辑器可直接生成整条日记。\n账本、人物、书摘等页面接入 AI 解读，记忆随备份导出；修复 Markdown 渲染问题。"
 }
