@@ -51,6 +51,7 @@ export interface KnowledgeContextValue {
   recallMemories(question: string, subject?: MemorySubject): Promise<{ core: MemoryItem[]; recalled: MemoryHit[] }>;
   rememberMemory(input: { content: string; kind?: MemoryKind; subject?: MemorySubject }): Promise<void>;
   forgetMemory(memoryId: string): Promise<void>;
+  restoreMemory(memoryId: string): Promise<void>;
   suppressMemory(memoryId: string): Promise<void>;
   undoAutoMemories(): Promise<number>;
   clearMemories(): Promise<void>;
@@ -252,6 +253,7 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
   }, [refreshMemories, repository]);
 
   const forgetMemory = useCallback(async (memoryId: string) => markMemoryStatus(memoryId, 'deleted', new Date().toISOString()), [markMemoryStatus]);
+  const restoreMemory = useCallback(async (memoryId: string) => markMemoryStatus(memoryId, 'active', null), [markMemoryStatus]);
   const suppressMemory = useCallback(async (memoryId: string) => markMemoryStatus(memoryId, 'suppressed', new Date().toISOString()), [markMemoryStatus]);
 
   const undoAutoMemories = useCallback(async (): Promise<number> => {
@@ -377,6 +379,7 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     recallMemories,
     rememberMemory,
     forgetMemory,
+    restoreMemory,
     suppressMemory,
     undoAutoMemories,
     clearMemories,
@@ -385,7 +388,7 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     refreshMemories,
     stats,
     clearIndex,
-  }), [autoExtract, buildChatMessages, clearIndex, clearMemories, ensureIndexed, extractMemories, forgetMemory, indexError, indexing, knowledgeEnabled, lastIndexedAt, markMemoriesUsed, memories, memoryEnabled, recallMemories, refreshMemories, rememberMemory, search, setSetting, stats, suppressMemory, undoAutoMemories]);
+  }), [autoExtract, buildChatMessages, clearIndex, clearMemories, ensureIndexed, extractMemories, forgetMemory, indexError, indexing, knowledgeEnabled, lastIndexedAt, markMemoriesUsed, memories, memoryEnabled, recallMemories, refreshMemories, rememberMemory, restoreMemory, search, setSetting, stats, suppressMemory, undoAutoMemories]);
 
   return <KnowledgeContext.Provider value={value}>{children}</KnowledgeContext.Provider>;
 }
