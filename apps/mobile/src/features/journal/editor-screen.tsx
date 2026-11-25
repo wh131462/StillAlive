@@ -699,6 +699,7 @@ export default function EditorScreen() {
       feedback.alert('先写一点内容', '写几句之后，AI 才能接着帮你。');
       return;
     }
+    setAiPreview(null);
     setAiRunningAction(action);
     const controller = new AbortController();
     aiAbortRef.current = controller;
@@ -800,7 +801,7 @@ export default function EditorScreen() {
             <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.moreBar} contentContainerStyle={styles.expandedToolbarContent}>
               <ToolButton androidIcon="undo" icon="arrow.uturn.backward" label="撤销" onPress={() => sendCommand('undo')} />
               <ToolButton androidIcon="redo" icon="arrow.uturn.forward" label="重做" onPress={() => sendCommand('redo')} />
-              <ToolButton androidIcon="auto_awesome" icon="sparkles" label={aiRunningAction ? 'AI 生成中' : 'AI 写作'} onPress={openAiActions} />
+              {ai.enabled ? <ToolButton androidIcon="auto_awesome" icon="sparkles" label={aiRunningAction ? 'AI 生成中' : 'AI 写作'} onPress={openAiActions} /> : null}
               <ToolButton active={showTextSize} androidIcon="format_size" icon="textformat.size.larger" label="字号" onPress={() => setShowTextSize((value) => !value)} />
               <ToolButton active={activeFormats.includes('italic')} androidIcon="format_italic" icon="italic" label="斜体" onPress={() => sendCommand('italic')} />
               <ToolButton active={activeFormats.includes('strikethrough')} androidIcon="format_strikethrough" icon="strikethrough" label="删除线" onPress={() => sendCommand('strikethrough')} />

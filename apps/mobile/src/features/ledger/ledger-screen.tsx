@@ -11,6 +11,7 @@ import { useAi } from '../../application/ai/ai-provider';
 import { buildLedgerParseMessages, parseLedgerParseResponse } from '../../application/ai/ai-tasks';
 import type { LedgerParseResult } from '../../application/ai/ai-tasks';
 import { aiErrorMessage } from '../ai/ai-copy';
+import { isAiRequestError } from '../../infrastructure/ai/ai-types';
 import { feedback } from '../../shared/feedback';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
@@ -41,6 +42,7 @@ export default function LedgerScreen() {
   const [aiEntryText, setAiEntryText] = useState('');
   const [aiEntryBusy, setAiEntryBusy] = useState(false);
   const [aiDraft, setAiDraft] = useState<LedgerParseResult | null>(null);
+  const aiParseAbortRef = useRef<AbortController | null>(null);
 
   const monthTransactions = useMemo(() => ledgerTransactions.filter((item) => item.dayKey.startsWith(activeMonth)), [activeMonth, ledgerTransactions]);
   const visibleTransactions = useMemo(() => monthTransactions.filter((item) => filter === 'all' || item.type === filter), [filter, monthTransactions]);
@@ -85,22 +87,24 @@ export default function LedgerScreen() {
       return;
     }
     setAiEntryBusy(true);
+    const controller = new AbortController();
+    aiParseAbortRef.current = controller;
     try {
-      const result = await ai.chat(buildLedgerParseMessages({ text, today, categories: CATEGORIES }), { taskId: 'ledger.parse', maxOutputTokens: 300, temperature: 0.2 });
+      const result = await ai.chat(buildLedgerParseMessages({ text, today, categories: CATEGORIES }), { taskId: 'ledger.parse', maxOutputTokens: 300, temperature: 0.2, signal: controller.signal });
       const parsed = parseLedgerParseResponse(result.text, { today, categories: CATEGORIES });
       if (!parsed) {
         feedback.alert('没看懂这句话', '换个说法试试，例如“昨天午饭 32，打车 18”。');
         return;
       }
       setAiEntryOpen(false);
-      setAiEntryText('');
       setEditing(null);
       setAiDraft(parsed);
       setFormOpen(true);
     } catch (cause) {
-      feedback.alert('解析失败', aiErrorMessage(cause));
+      if (!(isAiRequestError(cause) && cause.code === 'cancelled')) feedback.alert('解析失败', aiErrorMessage(cause));
     } finally {
       setAiEntryBusy(false);
+      aiParseAbortRef.current = null;
     }
   };
 
@@ -134,7 +138,7 @@ export default function LedgerScreen() {
       <LedgerActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除" onPress={deleteActionTransaction} />
       <Pressable accessibilityRole="button" onPress={() => setActionTransaction(null)} style={({ pressed }) => [styles.actionCancel, pressed && styles.pressed]}><Text style={styles.actionCancelText}>取消</Text></Pressable>
     </DraggableBottomSheet>
-    <DraggableBottomSheet accessibilityLabel="一句话记账" keyboardAvoiding onClose={() => setAiEntryOpen(false)} open={aiEntryOpen} sheetStyle={styles.aiSheet}>
+    <DraggableBottomSheet accessibilityLabel="一句话记账" keyboardAvoiding onClose={() => { aiParseAbortRef.current?.abort(); setAiEntryOpen(false); }} open={aiEntryOpen} sheetStyle={styles.aiSheet}>
       <View style={styles.aiSheetHeader}>
         <Text style={styles.aiSheetTitle}>一句话记账</Text>
         <Text style={styles.aiSheetHint}>说一句花销，解析结果会先填进表单，确认后才保存。</Text>
@@ -144,7 +148,7 @@ export default function LedgerScreen() {
       </View>
       <TextInput autoFocus editable={!aiEntryBusy} multiline onChangeText={setAiEntryText} placeholder="例如：昨天午饭 32，打车 18" placeholderTextColor={colors.inkFaint} style={styles.aiInput} value={aiEntryText} />
       <View style={styles.aiActions}>
-        <Pressable accessibilityRole="button" onPress={() => setAiEntryOpen(false)} style={({ pressed }) => [styles.aiCancel, pressed && styles.pressed]}><Text style={styles.aiCancelText}>取消</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { aiParseAbortRef.current?.abort(); setAiEntryOpen(false); }} style={({ pressed }) => [styles.aiCancel, pressed && styles.pressed]}><Text style={styles.aiCancelText}>取消</Text></Pressable>
         <Pressable accessibilityRole="button" disabled={!aiEntryText.trim() || aiEntryBusy} onPress={() => void parseAiEntry()} style={({ pressed }) => [styles.aiConfirm, (!aiEntryText.trim() || aiEntryBusy) && styles.aiDisabled, pressed && styles.pressed]}><Text style={styles.aiConfirmText}>{aiEntryBusy ? '解析中…' : '解析'}</Text></Pressable>
       </View>
     </DraggableBottomSheet>

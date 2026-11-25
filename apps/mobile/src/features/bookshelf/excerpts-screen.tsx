@@ -83,9 +83,21 @@ export default function ExcerptsScreen() {
   const saveAiExplanation = () => {
     const excerpt = aiSheet.excerpt;
     if (!excerpt || !aiSheet.text) return;
-    void updateBookExcerpt({ ...excerpt, note: aiSheet.text })
-      .then(() => { feedback.notice('已写入备注'); setAiSheet((current) => ({ ...current, open: false })); })
-      .catch((cause: unknown) => feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。'));
+    const writeNote = (note: string) => {
+      void updateBookExcerpt({ ...excerpt, note })
+        .then(() => { feedback.notice('已写入备注'); setAiSheet((current) => ({ ...current, open: false })); })
+        .catch((cause: unknown) => feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。'));
+    };
+    const existing = excerpt.note?.trim();
+    if (existing) {
+      feedback.alert('这条摘抄已有备注', '要替换原来的备注，还是把 AI 解读追加到末尾？', [
+        { text: '取消', style: 'cancel' },
+        { text: '替换', style: 'destructive', onPress: () => writeNote(aiSheet.text) },
+        { text: '追加', onPress: () => writeNote(`${existing}\n\n${aiSheet.text}`) },
+      ]);
+      return;
+    }
+    writeNote(aiSheet.text);
   };
 
   const openActions = (excerpt: BookExcerpt) => feedback.alert('书摘操作', undefined, [

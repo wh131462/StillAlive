@@ -212,7 +212,7 @@ export default function PersonScreen() {
                 {person.bio ? <><Text style={styles.impressionLabel}>个人简介</Text><Text style={styles.impression}>{person.bio}</Text></> : null}
                 <Text style={styles.impressionLabel}>关于 ta 的印象</Text>
                 <Text style={[styles.impression, !person.impression && styles.impressionEmpty]}>{person.impression ?? '还没有留下印象'}</Text>
-                {ai.enabled && !privateHidden ? <Pressable accessibilityRole="button" disabled={aiSuggestionLoading} onPress={() => void generateAiImpression()} style={({ pressed }) => [styles.impressionAiButton, pressed && styles.featureRowPressed]}><Text style={styles.impressionAiText}>{aiSuggestionLoading ? 'AI 正在从记录里找…' : '✦ 让 AI 从记录里再给一句'}</Text></Pressable> : null}
+                {ai.enabled && !privateHidden ? <Pressable accessibilityRole="button" disabled={aiSuggestionLoading} onPress={() => void generateAiImpression()} style={({ pressed }) => [styles.impressionAiButton, pressed && styles.featureRowPressed]}><Text style={styles.impressionAiText}>{aiSuggestionLoading ? 'AI 正在从记录里找…' : '让 AI 从记录里再给一句'}</Text></Pressable> : null}
                 {person.privacyMode === 'private' ? <Text style={styles.privateBadge}>资料已隐藏</Text> : null}
               </View>
             </View>
