@@ -35,6 +35,8 @@ export function richTextContentCss(theme: EditorTheme): string {
     hr { display: block; width: 100%; height: 0; margin: 2em 0; border: 0; border-top: 1px solid ${theme.line}; background: transparent; }
     table { display: block; width: 100%; margin: 1.2em 0; overflow-x: auto; border-collapse: collapse; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.78em; }
     th, td { min-width: 110px; padding: 9px 10px; border: 1px solid ${theme.line}; text-align: left; }
+    th[align="right"], td[align="right"] { text-align: right; }
+    th[align="center"], td[align="center"] { text-align: center; }
     th { background: ${theme.paper}; font-weight: 700; }
   `;
 }
