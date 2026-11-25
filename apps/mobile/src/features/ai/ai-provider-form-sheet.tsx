@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { colors, spacing, typography } from '@still-alive/tokens';
 import { AI_PROVIDER_KIND_META, AI_PROVIDER_KINDS } from '../../infrastructure/ai/ai-adapters';
 import type { AiProviderKind, AiProviderProfile } from '../../infrastructure/ai/ai-types';
 import type { AiProviderInput } from '../../application/ai/ai-provider';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
+import { AiSegmentedControl } from './ai-segmented-control';
 import { aiErrorMessage } from './ai-copy';
 
 interface AiProviderFormSheetProps {
@@ -57,32 +58,25 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
 
   return <DraggableBottomSheet accessibilityLabel="服务商设置" dismissDisabled={saving} keyboardAvoiding open={open} onClose={onClose}>
     <View style={styles.header}>
-      <Text style={styles.eyebrow}>AI PROVIDER</Text>
       <Text style={styles.title}>{editing ? '编辑服务商' : '添加服务商'}</Text>
-      <Text style={styles.lead}>Key 只保存在本机安全存储，不进入备份，也不会随记录导出。</Text>
+      <Text style={styles.lead}>Key 只保存在本机安全存储，不进入备份。</Text>
     </View>
     <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.formScroll}>
       <View style={styles.form}>
-      <Text style={styles.fieldLabel}>类型</Text>
-      <View style={styles.kindRow}>
-        {AI_PROVIDER_KINDS.map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: kind === item }} key={item} onPress={() => selectKind(item)} style={({ pressed }) => [styles.kindChip, kind === item && styles.kindChipActive, pressed && styles.pressed]}>
-          <Text style={[styles.kindChipText, kind === item && styles.kindChipTextActive]}>{AI_PROVIDER_KIND_META[item].label}</Text>
-        </Pressable>)}
-      </View>
-      <Text style={styles.kindHint}>{AI_PROVIDER_KIND_META[kind].hint}</Text>
+        <AiSegmentedControl onChange={selectKind} options={AI_PROVIDER_KINDS.map((item) => ({ label: AI_PROVIDER_KIND_META[item].label, value: item }))} value={kind} />
+        <Text style={styles.kindHint}>{AI_PROVIDER_KIND_META[kind].hint}</Text>
 
-      <Text style={styles.fieldLabel}>名称（可选）</Text>
-      <TextInput autoCapitalize="none" onChangeText={setLabel} placeholder={AI_PROVIDER_KIND_META[kind].label} placeholderTextColor={colors.inkFaint} style={styles.input} value={label} />
+        <Text style={styles.fieldLabel}>名称</Text>
+        <TextInput autoCapitalize="none" onChangeText={setLabel} placeholder={`可选，默认 ${AI_PROVIDER_KIND_META[kind].label}`} placeholderTextColor={colors.inkFaint} style={styles.input} value={label} />
 
-      <Text style={styles.fieldLabel}>服务地址 *</Text>
-      <TextInput autoCapitalize="none" autoCorrect={false} keyboardType="url" onChangeText={setBaseUrl} placeholder={AI_PROVIDER_KIND_META[kind].baseUrlPlaceholder} placeholderTextColor={colors.inkFaint} style={styles.input} value={baseUrl} />
+        <Text style={styles.fieldLabel}>服务地址</Text>
+        <TextInput autoCapitalize="none" autoCorrect={false} keyboardType="url" onChangeText={setBaseUrl} placeholder={AI_PROVIDER_KIND_META[kind].baseUrlPlaceholder} placeholderTextColor={colors.inkFaint} style={styles.input} value={baseUrl} />
 
-      <Text style={styles.fieldLabel}>模型</Text>
-      <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setModelId} placeholder="保存后可点“检测”获取模型列表" placeholderTextColor={colors.inkFaint} style={styles.input} value={modelId} />
-      <Text style={styles.fieldHint}>可以先留空保存；填写模型名后才能对话。</Text>
+        <Text style={styles.fieldLabel}>模型</Text>
+        <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setModelId} placeholder="可以先留空，保存后再选择" placeholderTextColor={colors.inkFaint} style={styles.input} value={modelId} />
 
-      <Text style={styles.fieldLabel}>API Key {editing ? '（留空不修改）' : '*'}</Text>
-      <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setApiKey} placeholder={editing ? '留空表示不修改已保存的 Key' : '粘贴 API Key'} placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} value={apiKey} />
+        <Text style={styles.fieldLabel}>API Key</Text>
+        <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setApiKey} placeholder={editing ? '留空表示不修改' : '粘贴 API Key'} placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} value={apiKey} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
     </ScrollView>
@@ -94,27 +88,20 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
 }
 
 const styles = createThemedStyles(() => ({
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md },
-  eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
-  title: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 22 },
-  lead: { marginTop: 6, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.md },
+  title: { color: colors.ink, fontSize: typography.size.title, fontWeight: '700' },
+  lead: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.label, lineHeight: 17 },
   formScroll: { maxHeight: 460 },
   form: { paddingHorizontal: spacing.lg },
-  fieldLabel: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, fontWeight: '700' },
-  input: { minHeight: 44, marginTop: 4, paddingHorizontal: 2, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, color: colors.ink, fontSize: typography.size.body },
-  fieldHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
-  kindRow: { flexDirection: 'row', gap: spacing.lg, marginTop: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
-  kindChip: { minHeight: 40, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  kindChipActive: { borderBottomColor: colors.life },
-  kindChipText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
-  kindChipTextActive: { color: colors.life },
-  kindHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta },
-  error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta, lineHeight: 17 },
-  actions: { flexDirection: 'row', gap: spacing.sm, padding: spacing.lg },
-  primaryButton: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
-  primaryText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
-  secondaryButton: { minWidth: 96, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.paper },
-  secondaryText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
+  kindHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.label, lineHeight: 17 },
+  fieldLabel: { marginTop: spacing.lg, marginBottom: 6, color: colors.inkSoft, fontSize: typography.size.label },
+  input: { minHeight: 46, paddingHorizontal: spacing.md, borderRadius: 10, backgroundColor: colors.paper, color: colors.ink, fontSize: typography.size.bodyLarge },
+  error: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.label, lineHeight: 17 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  primaryButton: { flex: 1, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.life },
+  primaryText: { color: colors.onLife, fontSize: typography.size.bodyLarge, fontWeight: '600' },
+  secondaryButton: { minWidth: 88, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
+  secondaryText: { color: colors.inkSoft, fontSize: typography.size.bodyLarge },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.7 },
 }));

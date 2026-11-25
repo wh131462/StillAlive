@@ -1,19 +1,29 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography } from '@still-alive/tokens';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { colors, spacing, typography } from '@still-alive/tokens';
 import { useKnowledge } from '../../application/knowledge/knowledge-provider';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 import { feedback } from '../../shared/feedback';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { AiSegmentedControl } from './ai-segmented-control';
 import { formatRelativeTime } from './ai-copy';
+
+type MemoryFilter = 'all' | 'user' | 'auto' | 'hidden';
+
+const FILTERS: ReadonlyArray<{ label: string; value: MemoryFilter }> = [
+  { value: 'all', label: '全部' },
+  { value: 'user', label: '手写' },
+  { value: 'auto', label: '自动' },
+  { value: 'hidden', label: '已隐藏' },
+];
 
 export default function AiMemoryScreen() {
   const router = useRouter();
   const knowledge = useKnowledge();
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'user' | 'auto' | 'hidden'>('all');
+  const [filter, setFilter] = useState<MemoryFilter>('all');
   const refreshMemories = knowledge.refreshMemories;
 
   useEffect(() => {
@@ -26,8 +36,6 @@ export default function AiMemoryScreen() {
   const visible = filter === 'hidden'
     ? hidden
     : active.filter((item) => filter === 'all' || (filter === 'user' ? item.origin === 'user' : item.origin === 'ai_auto'));
-  const archivedCount = knowledge.memories.filter((item) => item.status === 'archived' || item.status === 'suppressed').length;
-  const autoCount = active.filter((item) => item.origin === 'ai_auto').length;
 
   const forget = useCallback((memoryId: string, content: string) => {
     feedback.alert('遗忘这条记忆？', `“${content.slice(0, 40)}${content.length > 40 ? '…' : ''}”\n\n遗忘后不会再被检索；原始记录不受影响。`, [
@@ -40,13 +48,16 @@ export default function AiMemoryScreen() {
     void knowledge.suppressMemory(memoryId).then(() => feedback.notice('已设为永不提及')).catch((cause: unknown) => feedback.alert('设置失败', cause instanceof Error ? cause.message : '请稍后重试'));
   }, [knowledge]);
 
+  const restore = useCallback((memoryId: string) => {
+    void knowledge.restoreMemory(memoryId).then(() => feedback.notice('已恢复这条记忆')).catch((cause: unknown) => feedback.alert('恢复失败', cause instanceof Error ? cause.message : '请稍后重试'));
+  }, [knowledge]);
+
   const undoAuto = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
       const count = await knowledge.undoAutoMemories();
-      if (count > 0) feedback.notice(`已撤销 ${count} 条自动记忆`);
-      else feedback.notice('没有可撤销的自动记忆');
+      feedback.notice(count > 0 ? `已撤销 ${count} 条自动记忆` : '没有可撤销的自动记忆');
     } catch (cause) {
       feedback.alert('撤销失败', cause instanceof Error ? cause.message : '请稍后重试');
     } finally {
@@ -64,102 +75,84 @@ export default function AiMemoryScreen() {
   return <SafeAreaView style={styles.safeArea}>
     <ToolPageHeader onBack={() => router.back()} right={<ToolPageHeaderTextAction accessibilityLabel="清空记忆" label="清空" onPress={clearAll} />} title="记忆" />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.introCard}>
-        <Text style={styles.eyebrow}>MEMORY / LOCAL</Text>
-        <Text style={styles.introTitle}>Agent 记得的事</Text>
-        <Text style={styles.introText}>记忆由你的问答与记录自动整理，全部保存在本机；每条都能找到来源记录，也可以随时遗忘。自动记忆不会覆盖你手动写下的内容。</Text>
-      </View>
-
-      <View style={styles.group}>
-        <SwitchRow checked={knowledge.memoryEnabled} hint="关闭后不再读取或写入任何记忆" label="启用记忆" onPress={() => void knowledge.setMemoryEnabled(!knowledge.memoryEnabled).then(() => feedback.notice(!knowledge.memoryEnabled ? '已启用记忆' : '已关闭记忆')).catch(() => feedback.alert('设置失败', '请稍后重试'))} />
+      <View style={styles.card}>
+        <SwitchRow checked={knowledge.memoryEnabled} label="启用记忆" onPress={() => void knowledge.setMemoryEnabled(!knowledge.memoryEnabled).catch(() => feedback.alert('设置失败', '请稍后重试'))} />
         <View style={styles.separator} />
-        <SwitchRow checked={knowledge.autoExtract} hint="每次问答后自动整理，可能多一次模型调用" label="自动记忆" onPress={() => void knowledge.setAutoExtract(!knowledge.autoExtract).then(() => feedback.notice(!knowledge.autoExtract ? '已开启自动记忆' : '已关闭自动记忆')).catch(() => feedback.alert('设置失败', '请稍后重试'))} />
+        <SwitchRow checked={knowledge.autoExtract} label="自动记忆" onPress={() => void knowledge.setAutoExtract(!knowledge.autoExtract).catch(() => feedback.alert('设置失败', '请稍后重试'))} />
+        <View style={styles.separator} />
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => void undoAuto()} style={({ pressed }) => [styles.actionRow, busy && styles.disabled, pressed && styles.pressed]}>
+          <Text style={styles.actionRowText}>撤销最近的自动记忆</Text>
+          {busy ? <ActivityIndicator color={colors.inkFaint} size="small" /> : null}
+        </Pressable>
+      </View>
+      <Text style={styles.footer}>关闭后不再读写记忆；自动记忆在每次问答后整理，会多一次模型调用。</Text>
+
+      <View style={styles.filterBar}>
+        <AiSegmentedControl onChange={(next) => setFilter(next)} options={FILTERS} value={filter} />
       </View>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryEyebrow}>ACTIVE MEMORY</Text>
-        <Text style={styles.summaryValue}>{active.length}</Text>
-        <Text style={styles.summaryLabel}>条生效记忆 · 自动整理 {autoCount} 条{archivedCount ? ` · 已归档 ${archivedCount} 条` : ''}</Text>
-      </View>
-
-      <View style={styles.actionRow}>
-        <Pressable accessibilityRole="button" disabled={busy} onPress={() => void undoAuto()} style={({ pressed }) => [styles.actionButton, busy && styles.disabled, pressed && styles.pressed]}><Text style={styles.actionText}>撤销最近自动记忆</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => void knowledge.refreshMemories().then(() => feedback.notice('已刷新')).catch(() => feedback.alert('刷新失败', '请稍后重试'))} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}><Text style={styles.actionText}>刷新</Text></Pressable>
-      </View>
-
-      <View style={styles.filterRow}>
-        {([['all', '全部'], ['user', '手写'], ['auto', '自动'], ['hidden', '已隐藏']] as const).map(([value, label]) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === value }} key={value} onPress={() => setFilter(value)} style={({ pressed }) => [styles.filterChip, filter === value && styles.filterChipActive, pressed && styles.pressed]}><Text style={[styles.filterText, filter === value && styles.filterTextActive]}>{label}{value === 'all' ? ` ${active.length}` : value === 'user' ? ` ${active.filter((item) => item.origin === 'user').length}` : value === 'auto' ? ` ${autoCount}` : ` ${hidden.length}`}</Text></Pressable>)}
-      </View>
-
-      <Text style={styles.sectionLabel}>{filter === 'hidden' ? '已隐藏的记忆（可恢复）' : '生效中的记忆'}</Text>
-      {!visible.length ? <View style={styles.emptyCard}><Text style={styles.emptyTitle}>{filter === 'hidden' ? '没有隐藏的记忆' : '还没有记忆'}</Text><Text style={styles.emptyText}>{filter === 'hidden' ? '遗忘或永不提及的记忆会出现在这里，可以随时恢复。' : '在 AI 对话里多聊几次，或在记录上点“记住这件事”，这里会慢慢长出属于你的记忆。'}</Text></View>
-        : visible.map((item) => <View key={item.id} style={styles.memoryRow}>
-          <View style={styles.memoryHead}>
-            <Text style={styles.memoryOrigin}>{item.origin === 'user' ? '手写' : item.origin === 'derived' ? '整理' : '自动'}{item.kind === 'episodic' ? ' · 经历' : item.kind === 'procedural' ? ' · 偏好' : ' · 事实'}{item.status === 'suppressed' ? ' · 永不提及' : item.status === 'archived' ? ' · 已归档' : ''}</Text>
-            <Text style={styles.memoryTime}>{formatRelativeTime(item.lastConfirmedAt ?? item.createdAt)}{item.useCount ? ` · 用过 ${item.useCount} 次` : ''}</Text>
-          </View>
-          <Text style={styles.memoryContent}>{item.content}</Text>
+      <Text style={styles.sectionHeader}>{filter === 'hidden' ? '已隐藏' : '生效中'} · {visible.length} 条</Text>
+      <View style={styles.card}>
+        {visible.length ? visible.map((item, index) => <View key={item.id} style={[styles.memoryRow, index === visible.length - 1 && styles.memoryRowLast]}>
+          <Text style={styles.memoryMeta}>
+            {item.origin === 'user' ? '手写' : item.origin === 'derived' ? '整理' : '自动'}
+            {item.kind === 'episodic' ? ' · 经历' : item.kind === 'procedural' ? ' · 偏好' : ' · 事实'}
+            {item.status === 'suppressed' ? ' · 永不提及' : item.status === 'archived' ? ' · 已归档' : ''}
+            {' · '}{formatRelativeTime(item.lastConfirmedAt ?? item.createdAt)}
+          </Text>
+          <Text selectable style={styles.memoryContent}>{item.content}</Text>
           <View style={styles.memoryActions}>
             {item.status === 'archived' || item.status === 'suppressed'
-              ? <Pressable accessibilityRole="button" onPress={() => void knowledge.restoreMemory(item.id).then(() => feedback.notice('已恢复这条记忆')).catch((cause: unknown) => feedback.alert('恢复失败', cause instanceof Error ? cause.message : '请稍后重试'))} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={[styles.miniActionText, styles.miniActionRestore]}>恢复</Text></Pressable>
-              : <Pressable accessibilityRole="button" onPress={() => suppress(item.id)} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={styles.miniActionText}>永不提及</Text></Pressable>}
-            <Pressable accessibilityRole="button" onPress={() => forget(item.id, item.content)} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={styles.miniActionText}>遗忘</Text></Pressable>
+              ? <Pressable accessibilityRole="button" hitSlop={8} onPress={() => restore(item.id)}><Text style={[styles.memoryAction, styles.memoryActionRestore]}>恢复</Text></Pressable>
+              : <Pressable accessibilityRole="button" hitSlop={8} onPress={() => suppress(item.id)}><Text style={styles.memoryAction}>永不提及</Text></Pressable>}
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => forget(item.id, item.content)}><Text style={[styles.memoryAction, styles.memoryActionDanger]}>遗忘</Text></Pressable>
           </View>
-        </View>)}
-
-      <View style={styles.footNote}><Text style={styles.footNoteText}>关闭 AI 总开关或删除全部数据会清理记忆。记忆会随备份导出；知识索引与汇总可重建，不会进入备份。</Text></View>
+        </View>) : <View style={styles.emptyRow}>
+          <Text style={styles.emptyTitle}>{filter === 'hidden' ? '没有隐藏的记忆' : '还没有记忆'}</Text>
+          <Text style={styles.emptyText}>{filter === 'hidden' ? '遗忘或永不提及的记忆会出现在这里，可以随时恢复。' : '在 AI 问答里多聊几次，或是在记录上点“记住这件事”，这里会慢慢积累。'}</Text>
+        </View>}
+      </View>
+      <Text style={styles.footer}>关闭 AI 或删除全部数据会清理记忆。记忆会随备份导出；知识索引与汇总可重建，不会进入备份。</Text>
     </ScrollView>
   </SafeAreaView>;
 }
 
-function SwitchRow({ checked, hint, label, onPress }: { checked: boolean; hint: string; label: string; onPress(): void }) {
-  return <Pressable accessibilityRole="switch" accessibilityState={{ checked }} onPress={onPress} style={styles.switchRow}><View style={styles.switchCopy}><Text style={styles.switchTitle}>{label}</Text><Text style={styles.switchHint}>{hint}</Text></View><View style={[styles.switchTrack, checked && styles.switchTrackOn]}><View style={[styles.switchThumb, checked && styles.switchThumbOn]} /></View></Pressable>;
+function SwitchRow({ checked, label, onPress }: { checked: boolean; label: string; onPress(): void }) {
+  return <View style={styles.switchRow}>
+    <Text style={styles.switchLabel}>{label}</Text>
+    <Switch
+      ios_backgroundColor={colors.line}
+      onValueChange={onPress}
+      thumbColor={colors.paper}
+      trackColor={{ false: colors.line, true: colors.life }}
+      value={checked}
+    />
+  </View>;
 }
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  introCard: { padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.sheet },
-  eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
-  introTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 },
-  introText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.body, lineHeight: 22 },
-  group: { marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.lineSoft },
-  switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
-  switchCopy: { minWidth: 0, flex: 1 },
-  switchTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
-  switchHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 16 },
-  switchTrack: { width: 44, height: 26, marginLeft: spacing.md, padding: 2, borderRadius: 13, backgroundColor: colors.line },
-  switchTrackOn: { backgroundColor: colors.life },
-  switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper },
-  switchThumbOn: { alignSelf: 'flex-end' },
-  summaryCard: { marginTop: spacing.lg, paddingVertical: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft },
-  summaryEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
-  summaryValue: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 38 },
-  summaryLabel: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },
-  actionRow: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.lg },
-  actionButton: { minHeight: 36, alignItems: 'center', justifyContent: 'center' },
-  actionText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
-  filterRow: { marginTop: spacing.lg, flexDirection: 'row', gap: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
-  filterChip: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  filterChipActive: { borderBottomColor: colors.life },
-  filterText: { color: colors.inkFaint, fontSize: typography.size.meta },
-  filterTextActive: { color: colors.life, fontWeight: '700' },
-  sectionLabel: { marginTop: spacing.lg, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
-  emptyCard: { paddingVertical: spacing.xl },
-  emptyTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
-  emptyText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
-  memoryRow: { paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
-  memoryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  memoryOrigin: { color: colors.life, fontSize: typography.size.meta, fontWeight: '800' },
-  memoryTime: { color: colors.inkFaint, fontSize: typography.size.meta },
-  memoryContent: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
-  memoryActions: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.lg },
-  miniAction: { minHeight: 30, alignItems: 'center', justifyContent: 'center' },
-  miniActionText: { color: colors.inkFaint, fontSize: typography.size.caption, fontWeight: '600' },
-  miniActionRestore: { color: colors.life },
-  footNote: { marginTop: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-  footNoteText: { color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
+  content: { paddingTop: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  card: { overflow: 'hidden', borderRadius: 12, backgroundColor: colors.sheet },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: colors.lineSoft },
+  switchRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  switchLabel: { color: colors.ink, fontSize: typography.size.bodyLarge },
+  actionRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  actionRowText: { color: colors.ink, fontSize: typography.size.bodyLarge },
+  footer: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.label, lineHeight: 18 },
+  filterBar: { marginTop: spacing.lg },
+  sectionHeader: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.label },
+  memoryRow: { paddingHorizontal: 16, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  memoryRowLast: { borderBottomWidth: 0 },
+  memoryMeta: { color: colors.inkFaint, fontSize: typography.size.caption },
+  memoryContent: { marginTop: 6, color: colors.ink, fontSize: typography.size.bodyLarge, lineHeight: 24 },
+  memoryActions: { marginTop: spacing.sm, flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg },
+  memoryAction: { color: colors.inkSoft, fontSize: typography.size.caption },
+  memoryActionRestore: { color: colors.life, fontWeight: '600' },
+  memoryActionDanger: { color: colors.danger },
+  emptyRow: { padding: 16 },
+  emptyTitle: { color: colors.ink, fontSize: typography.size.bodyLarge, fontWeight: '600' },
+  emptyText: { marginTop: 6, color: colors.inkFaint, fontSize: typography.size.caption, lineHeight: 18 },
   disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: 0.6 },
 }));

@@ -10,6 +10,7 @@ import { ReaderProvider } from '@epubjs-react-native/core';
 import { colors } from '@still-alive/tokens';
 import { AppStateProvider, useAppState } from '../src/application/state/app-state';
 import { AiProvider } from '../src/application/ai/ai-provider';
+import { ChatHistoryProvider } from '../src/application/ai/chat-history-provider';
 import { KnowledgeProvider } from '../src/application/knowledge/knowledge-provider';
 import { migrateDatabase } from '../src/infrastructure/database/sqlite-schema';
 import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/infrastructure/notifications/expo-notifications';
@@ -64,13 +65,15 @@ export default function RootLayout() {
           <SQLiteProvider databaseName="still-alive.db" onInit={initializeDatabase}>
             <AppStateProvider>
               <AiProvider>
-                <KnowledgeProvider>
-                  <ReaderProvider>
-                    <MusicPlayerProvider>
-                      <ThemedNavigator />
-                    </MusicPlayerProvider>
-                  </ReaderProvider>
-                </KnowledgeProvider>
+                <ChatHistoryProvider>
+                  <KnowledgeProvider>
+                    <ReaderProvider>
+                      <MusicPlayerProvider>
+                        <ThemedNavigator />
+                      </MusicPlayerProvider>
+                    </ReaderProvider>
+                  </KnowledgeProvider>
+                </ChatHistoryProvider>
               </AiProvider>
             </AppStateProvider>
           </SQLiteProvider>
@@ -103,7 +106,7 @@ function ThemedNavigator() {
         style={launchScreenVisible || preferences.appearanceTheme === 'midnight' ? 'light' : 'dark'}
       />
       <Stack screenOptions={{ contentStyle: { backgroundColor: colors.paper }, headerShown: false }}>
-        <Stack.Screen name="ai" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="ai" options={{ animation: 'slide_from_bottom', animationDuration: 280, gestureEnabled: false }} />
         <Stack.Screen
           name="music-player"
           options={{ animation: 'slide_from_bottom', animationDuration: 280, gestureDirection: 'vertical', gestureEnabled: true }}
