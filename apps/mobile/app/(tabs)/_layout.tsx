@@ -1,13 +1,35 @@
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
+import { BlurView } from 'expo-blur';
 import { useFonts } from 'expo-font';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography } from '@still-alive/tokens';
 import { useAppState } from '../../src/application/state/app-state';
 import { useAi } from '../../src/application/ai/ai-provider';
 import { applyColorTheme, createThemedStyles } from '../../src/shared/theme/app-theme';
+
+type ThemeColors = typeof colors;
+
+function hexToRgba(value: string, alpha: number): string {
+  const match = /^#([0-9a-f]{6})$/iu.exec(value.trim());
+  if (!match?.[1]) return value;
+  const numeric = Number.parseInt(match[1], 16);
+  const red = (numeric >> 16) & 0xff;
+  const green = (numeric >> 8) & 0xff;
+  const blue = numeric & 0xff;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+
+function aiGlassFill(theme: ThemeColors, alpha: number): string {
+  return hexToRgba(theme.sheet, alpha);
+}
+
+function aiGlassAccent(base: string, alpha: number): string {
+  return hexToRgba(base, alpha);
+}
 
 const TAB_ITEMS = [
   { key: 'space', href: '/', label: '空间', glyph: '\uf426' },
@@ -23,7 +45,7 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.paper } }}
-      tabBar={() => <AppTabBar fontsLoaded={fontsLoaded} />}
+      tabBar={() => <AppTabBar dark={preferences.appearanceTheme === 'midnight'} fontsLoaded={fontsLoaded} />}
     >
       <Tabs.Screen name="index" options={{ title: '空间' }} />
       <Tabs.Screen name="time" options={{ title: '日历' }} />
@@ -33,7 +55,7 @@ export default function TabsLayout() {
   );
 }
 
-function AppTabBar({ fontsLoaded }: { fontsLoaded: boolean }) {
+function AppTabBar({ dark, fontsLoaded }: { dark: boolean; fontsLoaded: boolean }) {
   const router = useRouter();
   const { configLoaded, enabled: aiEnabled } = useAi();
   const showAi = configLoaded && aiEnabled;
@@ -50,9 +72,16 @@ function AppTabBar({ fontsLoaded }: { fontsLoaded: boolean }) {
         {TAB_ITEMS.slice(2).map((item) => <TabItem active={isActive(item.href)} fontsLoaded={fontsLoaded} item={item} key={item.key} onPress={() => router.navigate(item.href as RelativePathString)} />)}
       </> : TAB_ITEMS.map((item) => <TabItem active={isActive(item.href)} fontsLoaded={fontsLoaded} item={item} key={item.key} onPress={() => router.navigate(item.href as RelativePathString)} />)}
     </View>
-    {showAi ? <Pressable accessibilityLabel="AI 对话" accessibilityHint="在设置里关闭 AI 后会隐藏这个按钮" accessibilityRole="button" accessibilityState={{ selected: aiActive }} onPress={() => router.push('/ai' as RelativePathString)} style={({ pressed }) => [styles.aiButton, aiActive && styles.aiButtonActive, pressed && styles.aiButtonPressed]}>
-      <Text style={[styles.aiText, aiActive && styles.aiTextActive]}>AI</Text>
-    </Pressable> : null}
+    {showAi ? <View pointerEvents="box-none" style={styles.aiHalo}>
+      <Pressable accessibilityLabel="AI 对话" accessibilityHint="在设置里关闭 AI 后会隐藏这个按钮" accessibilityRole="button" accessibilityState={{ selected: aiActive }} onPress={() => router.push('/ai' as RelativePathString)} style={({ pressed }) => [styles.aiButton, aiActive && styles.aiButtonActive, pressed && styles.aiButtonPressed]}>
+        {Platform.OS === 'web' ? <View pointerEvents="none" style={styles.aiBlurFallback} /> : <BlurView experimentalBlurMethod="dimezisBlurView" intensity={dark ? 38 : 46} pointerEvents="none" style={StyleSheet.absoluteFill} tint={dark ? 'dark' : 'light'} />}
+        <View pointerEvents="none" style={[styles.aiSheen, dark && styles.aiSheenDark]} />
+        <View pointerEvents="none" style={[styles.aiAccentWash, aiActive && styles.aiAccentWashActive]} />
+        <View pointerEvents="none" style={[styles.aiInnerRing, dark && styles.aiInnerRingDark]} />
+        <Text style={[styles.aiText, aiActive && styles.aiTextActive]}>AI</Text>
+        <View pointerEvents="none" style={[styles.aiGlint, aiActive && styles.aiGlintActive]} />
+      </Pressable>
+    </View> : null}
   </View>;
 }
 
@@ -73,10 +102,20 @@ const styles = createThemedStyles(() => ({
   tabLabel: { color: colors.inkFaint, fontFamily: typography.body, fontSize: 10 },
   tabLabelActive: { color: colors.life, fontWeight: '700' },
   centerGap: { width: 72 },
-  aiButton: { position: 'absolute', top: -21, left: '50%', marginLeft: -27, width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 27, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.paper, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
-  aiButtonActive: { borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
-  aiButtonPressed: { opacity: 0.75 },
-  aiText: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 16, fontWeight: '700', letterSpacing: 1.4 },
+  aiHalo: { position: 'absolute', top: -23, left: '50%', marginLeft: -29, width: 58, height: 58, borderRadius: 29, shadowColor: colors.ink, shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  aiButton: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 29, borderWidth: 1, borderColor: colors.line, backgroundColor: aiGlassFill(colors, 0.58) },
+  aiButtonActive: { borderColor: colors.lifeLine, backgroundColor: aiGlassFill(colors, 0.7) },
+  aiButtonPressed: { opacity: 0.82, transform: [{ scale: 0.97 }] },
+  aiBlurFallback: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: aiGlassFill(colors, 0.7) },
+  aiSheen: { position: 'absolute', top: 0, left: 5, right: 5, height: '52%', borderTopLeftRadius: 25, borderTopRightRadius: 25, backgroundColor: 'rgba(255, 255, 255, 0.34)' },
+  aiSheenDark: { backgroundColor: 'rgba(255, 255, 255, 0.10)' },
+  aiAccentWash: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: aiGlassAccent(colors.life, 0.08) },
+  aiAccentWashActive: { backgroundColor: aiGlassAccent(colors.life, 0.18) },
+  aiInnerRing: { position: 'absolute', top: 1, left: 1, right: 1, bottom: 1, borderRadius: 28, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.55)' },
+  aiInnerRingDark: { borderColor: 'rgba(255, 255, 255, 0.2)' },
+  aiText: { color: colors.inkSoft, fontFamily: typography.display, fontSize: 16, fontWeight: '700', letterSpacing: 1.6 },
   aiTextActive: { color: colors.life },
+  aiGlint: { position: 'absolute', bottom: 9, width: 10, height: 1.5, borderRadius: 1, backgroundColor: aiGlassAccent(colors.life, 0.5) },
+  aiGlintActive: { width: 18, backgroundColor: colors.life },
   pressed: { opacity: 0.65 },
 }));

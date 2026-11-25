@@ -103,6 +103,7 @@ function ThemedNavigator() {
         style={launchScreenVisible || preferences.appearanceTheme === 'midnight' ? 'light' : 'dark'}
       />
       <Stack screenOptions={{ contentStyle: { backgroundColor: colors.paper }, headerShown: false }}>
+        <Stack.Screen name="ai" options={{ gestureEnabled: false }} />
         <Stack.Screen
           name="music-player"
           options={{ animation: 'slide_from_bottom', animationDuration: 280, gestureDirection: 'vertical', gestureEnabled: true }}
