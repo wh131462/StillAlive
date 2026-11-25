@@ -82,6 +82,7 @@ function taskLabel(record: AiUsageRecord): string {
   if (record.taskId === 'chat' || record.taskId === 'chat.answer') return '问答';
   if (record.taskId === 'connection.probe') return '检测';
   if (record.taskId === 'memory.extract') return '记忆整理';
+  if (record.taskId.startsWith('editor.')) return '写作';
   return '其它';
 }
 

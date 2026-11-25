@@ -79,6 +79,7 @@ export default function EditorScreen() {
   const [aiActionSheetOpen, setAiActionSheetOpen] = useState(false);
   const [aiRunningAction, setAiRunningAction] = useState<EditorAiAction | null>(null);
   const [aiPreview, setAiPreview] = useState<{ action: EditorAiAction; text: string } | null>(null);
+  const [aiGeneratePrompt, setAiGeneratePrompt] = useState('');
   const aiAbortRef = useRef<AbortController | null>(null);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
   const [showMore, setShowMore] = useState(false);
@@ -683,7 +684,7 @@ export default function EditorScreen() {
 
   const openAiActions = () => {
     if (!ai.enabled) {
-      feedback.alert('AI 功能未启用', '启用后可以让 AI 帮你润色、续写或起标题。', [
+      feedback.alert('AI 功能未启用', '启用后可以让 AI 直接写一条，也可以润色、续写或起标题。', [
         { text: '取消', style: 'cancel' },
         { text: '去设置', onPress: () => router.push('/ai-settings' as never) },
       ]);
@@ -692,22 +693,30 @@ export default function EditorScreen() {
     setAiActionSheetOpen(true);
   };
 
-  const runAiAction = async (action: EditorAiAction) => {
+  const runAiAction = async (action: EditorAiAction, options?: { prompt?: string }) => {
     setAiActionSheetOpen(false);
     const draft = body.trim();
-    if (!draft) {
-      feedback.alert('先写一点内容', '写几句之后，AI 才能接着帮你。');
+    if (action !== 'generate' && !draft) {
+      feedback.alert('先写一点内容', '写几句之后，AI 才能接着帮你；也可以直接用「生成一条」。');
       return;
     }
     setAiPreview(null);
     setAiRunningAction(action);
     const controller = new AbortController();
     aiAbortRef.current = controller;
+    const peopleNames = people.filter((person) => selectedPersonIds.includes(person.id)).map((person) => personDisplayName(person));
     try {
-      const result = await ai.chat(buildEditorMessages({ action, draft, dayKey: targetDay }), {
-        taskId: action === 'polish' ? 'editor.polish' : action === 'continue' ? 'editor.continue' : action === 'title' ? 'editor.title' : 'editor.organize',
-        maxOutputTokens: action === 'title' ? 120 : 800,
-        temperature: 0.4,
+      const result = await ai.chat(buildEditorMessages({
+        action,
+        draft,
+        dayKey: targetDay,
+        prompt: options?.prompt ?? aiGeneratePrompt,
+        locationName,
+        people: peopleNames,
+      }), {
+        taskId: action === 'generate' ? 'editor.generate' : action === 'polish' ? 'editor.polish' : action === 'continue' ? 'editor.continue' : action === 'title' ? 'editor.title' : 'editor.organize',
+        maxOutputTokens: action === 'title' ? 120 : action === 'generate' ? 900 : 800,
+        temperature: action === 'generate' ? 0.7 : 0.55,
         signal: controller.signal,
       });
       setAiPreview({ action, text: result.text.trim() });
@@ -801,7 +810,6 @@ export default function EditorScreen() {
             <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.moreBar} contentContainerStyle={styles.expandedToolbarContent}>
               <ToolButton androidIcon="undo" icon="arrow.uturn.backward" label="撤销" onPress={() => sendCommand('undo')} />
               <ToolButton androidIcon="redo" icon="arrow.uturn.forward" label="重做" onPress={() => sendCommand('redo')} />
-              {ai.enabled ? <ToolButton androidIcon="auto_awesome" icon="sparkles" label={aiRunningAction ? 'AI 生成中' : 'AI 写作'} onPress={openAiActions} /> : null}
               <ToolButton active={showTextSize} androidIcon="format_size" icon="textformat.size.larger" label="字号" onPress={() => setShowTextSize((value) => !value)} />
               <ToolButton active={activeFormats.includes('italic')} androidIcon="format_italic" icon="italic" label="斜体" onPress={() => sendCommand('italic')} />
               <ToolButton active={activeFormats.includes('strikethrough')} androidIcon="format_strikethrough" icon="strikethrough" label="删除线" onPress={() => sendCommand('strikethrough')} />
@@ -825,6 +833,7 @@ export default function EditorScreen() {
             <ToolButton androidIcon="alternate_email" icon="at" label="提及人物" onPress={openPersonPicker} />
             <ToolButton androidIcon="perm_media" icon="photo.on.rectangle" label="插入图片或视频" onPress={openImageSourcePicker} />
             <ToolButton active={recorderState.isRecording} androidIcon="mic" icon="mic" label={recorderState.isRecording ? '停止录音' : '插入语音'} onPress={handleRecordPress} />
+            {ai.enabled ? <ToolButton active={Boolean(aiRunningAction)} androidIcon="auto_awesome" icon="sparkles" label={aiRunningAction ? 'AI 生成中' : 'AI 写作'} onPress={openAiActions} /> : null}
             <ToolButton active={showMore} androidIcon="more_horiz" icon="ellipsis" label="更多格式" onPress={() => { setShowMore((value) => !value); setShowTextSize(false); }} />
           </ScrollView>
         </View>
@@ -896,17 +905,33 @@ export default function EditorScreen() {
           <View style={styles.aiGenerating}><ActivityIndicator color={colors.life} size="small" /><Text style={styles.aiGeneratingTitle}>AI 正在写</Text><Text style={styles.aiGeneratingHint}>生成完成后会先给你预览，不会自动写入正文。</Text><Pressable accessibilityRole="button" onPress={cancelAiGeneration} style={({ pressed }) => [styles.aiGeneratingCancel, pressed && styles.pressed]}><Text style={styles.aiGeneratingCancelText}>取消</Text></Pressable></View>
         </DraggableBottomSheet>
 
-        <DraggableBottomSheet accessibilityLabel="AI 写作" onClose={() => setAiActionSheetOpen(false)} open={aiActionSheetOpen} sheetStyle={styles.aiSheet}>
+        <DraggableBottomSheet accessibilityLabel="AI 写作" keyboardAvoiding onClose={() => setAiActionSheetOpen(false)} open={aiActionSheetOpen} sheetStyle={styles.aiSheet}>
           <Text style={styles.aiSheetTitle}>AI 写作</Text>
-          <Text style={styles.aiSheetHint}>基于当前草稿生成；结果先预览，不会自动保存。</Text>
-          <AiActionOption label="润色这段" hint="更顺、更具体，保留原意" onPress={() => void runAiAction('polish')} />
-          <AiActionOption label="继续写" hint="接着草稿再写 2–3 句" onPress={() => void runAiAction('continue')} />
-          <AiActionOption label="起一个标题" hint="不超过 14 个汉字" onPress={() => void runAiAction('title')} />
-          <AiActionOption label="整理成一条记录" hint="调整顺序、删掉重复" onPress={() => void runAiAction('organize')} />
+          <Text style={styles.aiSheetHint}>可以直接生成一条新记录；结果先预览，不会自动保存。</Text>
+          <View style={styles.aiGenerateBlock}>
+            <TextInput
+              maxLength={300}
+              multiline
+              onChangeText={setAiGeneratePrompt}
+              placeholder="想写点什么？不填也可以，会按今天来写"
+              placeholderTextColor={colors.inkFaint}
+              style={styles.aiGenerateInput}
+              value={aiGeneratePrompt}
+            />
+            <View style={styles.aiQuickRow}>
+              {['今天下午的散步', '最近有点累', '今天发生的一件小事'].map((sample) => <Pressable accessibilityRole="button" key={sample} onPress={() => setAiGeneratePrompt(sample)} style={({ pressed }) => [styles.aiQuickChip, pressed && styles.pressed]}><Text style={styles.aiQuickText}>{sample}</Text></Pressable>)}
+            </View>
+            <Pressable accessibilityRole="button" onPress={() => void runAiAction('generate')} style={({ pressed }) => [styles.aiGenerateButton, pressed && styles.pressed]}><Text style={styles.aiGenerateButtonText}>直接生成一条</Text></Pressable>
+          </View>
+          <View style={styles.aiDividerRow}><View style={styles.aiDivider} /><Text style={styles.aiDividerText}>或基于当前草稿</Text><View style={styles.aiDivider} /></View>
+          <AiActionOption disabled={!body.trim()} label="润色这段" hint="更顺、更具体，保留原意" onPress={() => void runAiAction('polish')} />
+          <AiActionOption disabled={!body.trim()} label="继续写" hint="接着草稿再写 2–3 句" onPress={() => void runAiAction('continue')} />
+          <AiActionOption disabled={!body.trim()} label="起一个标题" hint="不超过 14 个汉字" onPress={() => void runAiAction('title')} />
+          <AiActionOption disabled={!body.trim()} label="整理成一条记录" hint="调整顺序、删掉重复" onPress={() => void runAiAction('organize')} />
         </DraggableBottomSheet>
 
         <DraggableBottomSheet accessibilityLabel="AI 生成结果" onClose={() => setAiPreview(null)} open={Boolean(aiPreview)} sheetStyle={styles.aiSheet}>
-          <Text style={styles.aiSheetTitle}>{aiPreview?.action === 'title' ? 'AI 标题' : 'AI 草稿'}</Text>
+          <Text style={styles.aiSheetTitle}>{aiPreview?.action === 'title' ? 'AI 标题' : aiPreview?.action === 'generate' ? 'AI 写的记录' : 'AI 草稿'}</Text>
           <Text style={styles.aiSheetHint}>请确认后再写入正文；写入后仍可用撤销恢复。</Text>
           <ScrollView style={styles.aiPreviewScroll}><Text selectable style={styles.aiPreviewText}>{aiPreview?.text ?? ''}</Text></ScrollView>
           <View style={styles.aiPreviewActions}>
@@ -962,8 +987,8 @@ function mediaFileExtension(item: Media): string {
   return '.jpg';
 }
 
-function AiActionOption({ hint, label, onPress }: { hint: string; label: string; onPress(): void }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.aiActionOption, pressed && styles.pressed]}><View style={styles.aiActionCopy}><Text style={styles.aiActionLabel}>{label}</Text><Text style={styles.aiActionHint}>{hint}</Text></View><Text style={styles.aiActionChevron}>›</Text></Pressable>;
+function AiActionOption({ disabled = false, hint, label, onPress }: { disabled?: boolean; hint: string; label: string; onPress(): void }) {
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.aiActionOption, disabled && styles.aiActionDisabled, pressed && styles.pressed]}><View style={styles.aiActionCopy}><Text style={styles.aiActionLabel}>{label}</Text><Text style={styles.aiActionHint}>{hint}</Text></View><Text style={styles.aiActionChevron}>›</Text></Pressable>;
 }
 
 function TableActionButton({ active = false, androidIcon, destructive = false, icon, label, onPress, text }: { active?: boolean; androidIcon: AndroidSymbol; destructive?: boolean; icon: SFSymbol; label: string; onPress(): void; text: string }) {
@@ -1146,6 +1171,17 @@ const styles = createThemedStyles(() => ({
   aiSheet: { paddingBottom: spacing.lg },
   aiSheetTitle: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 22 },
   aiSheetHint: { paddingHorizontal: spacing.lg, marginTop: 5, marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
+  aiGenerateBlock: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
+  aiGenerateInput: { minHeight: 84, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: typography.size.body, textAlignVertical: 'top' },
+  aiQuickRow: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  aiQuickChip: { minHeight: 32, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.sheet },
+  aiQuickText: { color: colors.life, fontSize: typography.size.meta },
+  aiGenerateButton: { marginTop: spacing.md, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
+  aiGenerateButtonText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
+  aiDividerRow: { marginHorizontal: spacing.lg, marginVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  aiDivider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.lineSoft },
+  aiDividerText: { color: colors.inkFaint, fontSize: typography.size.meta },
+  aiActionDisabled: { opacity: 0.4 },
   aiActionOption: { minHeight: 62, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
   aiActionCopy: { minWidth: 0, flex: 1 },
   aiActionLabel: { color: colors.ink, fontSize: 14, fontWeight: '700' },
