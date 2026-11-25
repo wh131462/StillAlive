@@ -32,6 +32,7 @@ export default function AiMemoryScreen() {
   useFocusEffect(useCallback(() => { void refreshMemories().catch(() => undefined); }, [refreshMemories]));
 
   const active = knowledge.memories.filter((item) => item.status === 'active' && item.validTo === null);
+  const autoActive = active.filter((item) => item.origin === 'ai_auto');
   const hidden = knowledge.memories.filter((item) => item.status === 'archived' || item.status === 'suppressed');
   const visible = filter === 'hidden'
     ? hidden
@@ -65,6 +66,26 @@ export default function AiMemoryScreen() {
     }
   }, [busy, knowledge]);
 
+  const cleanupAuto = useCallback(() => {
+    if (busy || !autoActive.length) return;
+    feedback.alert('清理自动整理的记忆？', `将遗忘 ${autoActive.length} 条自动记忆，手写记忆保留；清理后可在“已隐藏”里逐条恢复。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '清理', style: 'destructive', onPress: () => {
+        setBusy(true);
+        void (async () => {
+          try {
+            for (const item of autoActive) await knowledge.forgetMemory(item.id);
+            feedback.notice(`已清理 ${autoActive.length} 条自动记忆`);
+          } catch (cause) {
+            feedback.alert('清理失败', cause instanceof Error ? cause.message : '请稍后重试');
+          } finally {
+            setBusy(false);
+          }
+        })();
+      } },
+    ]);
+  }, [autoActive, busy, knowledge]);
+
   const clearAll = useCallback(() => {
     feedback.alert('清空全部记忆？', '只删除本机记忆，日记、人物和其它记录不受影响。清空后无法恢复。', [
       { text: '取消', style: 'cancel' },
@@ -84,8 +105,14 @@ export default function AiMemoryScreen() {
           <Text style={styles.actionRowText}>撤销最近的自动记忆</Text>
           {busy ? <ActivityIndicator color={colors.inkFaint} size="small" /> : null}
         </Pressable>
+        {autoActive.length ? <>
+          <View style={styles.separator} />
+          <Pressable accessibilityRole="button" disabled={busy} onPress={cleanupAuto} style={({ pressed }) => [styles.actionRow, busy && styles.disabled, pressed && styles.pressed]}>
+            <Text style={styles.actionRowText}>清理 {autoActive.length} 条自动记忆</Text>
+          </Pressable>
+        </> : null}
       </View>
-      <Text style={styles.footer}>关闭后不再读写记忆；自动记忆在每次问答后整理，会多一次模型调用。</Text>
+      <Text style={styles.footer}>关闭后不再读写记忆；自动记忆只在原文能验证时才会写入，会多两次模型调用。</Text>
 
       <View style={styles.filterBar}>
         <AiSegmentedControl onChange={(next) => setFilter(next)} options={FILTERS} value={filter} />
