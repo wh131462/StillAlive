@@ -1,4 +1,6 @@
 import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
+import type { AiProviderProfile, AiUsageRecord } from '../ai/ai-types';
+import type { KnowledgeAggregate, KnowledgeChunk, KnowledgeSourceSignature, MemoryItem, MemoryRevision, MemorySourceRef, MemorySourceRow } from '../../features/ai/domain/knowledge-types';
 
 export interface StillAliveRepository {
   checkIn(dayKey: DayKey): Promise<CheckIn>;
@@ -105,4 +107,35 @@ export interface StillAliveRepository {
   getReadingNoteSource(postId: string): Promise<ReadingNoteSource | null>;
   saveReadingNoteSource(source: ReadingNoteSource): Promise<void>;
   deleteReadingNoteSource(postId: string): Promise<void>;
+  listAiProviders(): Promise<AiProviderProfile[]>;
+  saveAiProvider(provider: AiProviderProfile): Promise<void>;
+  deleteAiProvider(providerId: string): Promise<void>;
+  setDefaultAiProvider(providerId: string): Promise<void>;
+  getAiEnabled(): Promise<boolean>;
+  setAiEnabled(enabled: boolean): Promise<void>;
+  getAiSetting(key: string): Promise<string | null>;
+  setAiSetting(key: string, value: string): Promise<void>;
+  createAiUsageRecord(record: AiUsageRecord): Promise<void>;
+  listAiUsageRecords(): Promise<AiUsageRecord[]>;
+  listKnowledgeSources(): Promise<KnowledgeSourceSignature[]>;
+  replaceKnowledgeSource(input: { sourceKind: KnowledgeChunk['sourceKind']; sourceId: string; contentHash: string; indexedAt: string; chunks: KnowledgeChunk[] }): Promise<void>;
+  replaceKnowledgeSources(inputs: Array<{ sourceKind: KnowledgeChunk['sourceKind']; sourceId: string; contentHash: string; indexedAt: string; chunks: KnowledgeChunk[] }>): Promise<void>;
+  deleteKnowledgeSources(keys: Array<{ sourceKind: KnowledgeChunk['sourceKind']; sourceId: string }>): Promise<void>;
+  searchKnowledgeFts(match: string, limit: number): Promise<KnowledgeChunk[]>;
+  searchKnowledgeLike(patterns: string[], limit: number): Promise<KnowledgeChunk[]>;
+  saveKnowledgeAggregates(items: KnowledgeAggregate[]): Promise<void>;
+  listKnowledgeAggregates(): Promise<KnowledgeAggregate[]>;
+  getKnowledgeState(key: string): Promise<string | null>;
+  setKnowledgeState(key: string, value: string): Promise<void>;
+  clearKnowledgeIndex(): Promise<void>;
+  listPostPersons(): Promise<Array<{ postId: string; personId: string }>>;
+  saveMemoryItem(item: MemoryItem): Promise<void>;
+  updateMemoryItem(item: MemoryItem): Promise<void>;
+  listMemoryItems(): Promise<MemoryItem[]>;
+  getMemoryItem(memoryId: string): Promise<MemoryItem | null>;
+  saveMemorySources(memoryId: string, sources: MemorySourceRef[]): Promise<void>;
+  listMemorySources(): Promise<MemorySourceRow[]>;
+  saveMemoryRevision(revision: MemoryRevision): Promise<void>;
+  listMemoryRevisions(memoryId: string): Promise<MemoryRevision[]>;
+  clearAllMemory(): Promise<void>;
 }

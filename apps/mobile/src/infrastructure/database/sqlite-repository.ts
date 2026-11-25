@@ -2,9 +2,12 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from './repository-contract';
 import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
-import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, LedgerTransactionRow, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow } from './database-models';
+import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, LedgerTransactionRow, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow, AiProviderProfileRow, AiUsageRecordRow, KnowledgeAggregateRow, KnowledgeChunkRow, KnowledgeSourceRow, MemoryItemRow, MemoryRevisionRowModel, MemorySourceRowModel } from './database-models';
 import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapLedgerTransaction, mapMedia, mapMusicTrack, mapPerson, mapPersonEvent, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
 import { writePersistentError } from '../platform/persistent-log';
+import { AI_USAGE_TASK_IDS } from '../ai/ai-types';
+import type { AggregateGenerator, KnowledgeAggregate, KnowledgeChunk, KnowledgeSourceKind, KnowledgeSourceSignature, MemoryItem, MemoryKind, MemoryOrigin, MemoryRevision, MemorySourceRef, MemorySourceRow, MemoryStatus, MemorySubjectType } from '../../features/ai/domain/knowledge-types';
+import type { AiProviderProfile, AiUsageRecord, AiUsageTaskId } from '../ai/ai-types';
 
 function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
   if (mimeType.startsWith('audio/')) return 'audio';
@@ -1186,12 +1189,294 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; DELETE FROM ai_provider_profiles; DELETE FROM ai_usage_records; DELETE FROM ai_settings; DELETE FROM knowledge_chunks; DELETE FROM knowledge_sources; DELETE FROM knowledge_aggregates; DELETE FROM knowledge_state; DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
+    });
+  }
+
+  async listAiProviders(): Promise<AiProviderProfile[]> {
+    const rows = await this.db.getAllAsync<AiProviderProfileRow>('SELECT * FROM ai_provider_profiles ORDER BY is_default DESC, created_at ASC');
+    return rows.map(mapAiProviderProfile);
+  }
+
+  async saveAiProvider(provider: AiProviderProfile): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      if (provider.isDefault) await transaction.runAsync('UPDATE ai_provider_profiles SET is_default = 0 WHERE id <> ?', provider.id);
+      await transaction.runAsync(
+        `INSERT INTO ai_provider_profiles (id, label, kind, base_url, model_id, key_hint, supports_stream, supports_balance, enabled, is_default, last_probe_at, last_probe_status, last_probe_latency_ms, last_probe_message, models_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET label = excluded.label, kind = excluded.kind, base_url = excluded.base_url, model_id = excluded.model_id, key_hint = excluded.key_hint,
+           supports_stream = excluded.supports_stream, supports_balance = excluded.supports_balance, enabled = excluded.enabled, is_default = excluded.is_default,
+           last_probe_at = excluded.last_probe_at, last_probe_status = excluded.last_probe_status, last_probe_latency_ms = excluded.last_probe_latency_ms,
+           last_probe_message = excluded.last_probe_message, models_json = excluded.models_json, updated_at = excluded.updated_at`,
+        provider.id, provider.label, provider.kind, provider.baseUrl, provider.modelId, provider.keyHint,
+        provider.supportsStream ? 1 : 0, provider.supportsBalance ? 1 : 0, provider.enabled ? 1 : 0, provider.isDefault ? 1 : 0,
+        provider.lastProbeAt, provider.lastProbeStatus, provider.lastProbeLatencyMs, provider.lastProbeMessage, provider.modelsJson,
+        provider.createdAt, provider.updatedAt,
+      );
+      if (!provider.isDefault) {
+        const defaultRow = await transaction.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM ai_provider_profiles WHERE is_default = 1 AND enabled = 1');
+        if ((defaultRow?.count ?? 0) === 0 && provider.enabled) {
+          await transaction.runAsync('UPDATE ai_provider_profiles SET is_default = 1 WHERE id = ?', provider.id);
+        }
+      }
+    });
+  }
+
+  async deleteAiProvider(providerId: string): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM ai_provider_profiles WHERE id = ?', providerId);
+      const defaultRow = await transaction.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM ai_provider_profiles WHERE is_default = 1');
+      if ((defaultRow?.count ?? 0) === 0) {
+        const next = await transaction.getFirstAsync<{ id: string }>('SELECT id FROM ai_provider_profiles WHERE enabled = 1 ORDER BY created_at ASC LIMIT 1');
+        if (next) await transaction.runAsync('UPDATE ai_provider_profiles SET is_default = 1 WHERE id = ?', next.id);
+      }
+    });
+  }
+
+  async setDefaultAiProvider(providerId: string): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('UPDATE ai_provider_profiles SET is_default = 0');
+      await transaction.runAsync('UPDATE ai_provider_profiles SET is_default = 1, enabled = 1, updated_at = ? WHERE id = ?', new Date().toISOString(), providerId);
+    });
+  }
+
+  async getAiEnabled(): Promise<boolean> {
+    const row = await this.db.getFirstAsync<{ value: string }>("SELECT value FROM ai_settings WHERE key = 'enabled'");
+    return row?.value === 'true';
+  }
+
+  async setAiEnabled(enabled: boolean): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      "INSERT INTO ai_settings (key, value) VALUES ('enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      enabled ? 'true' : 'false',
+    ));
+  }
+
+  async getAiSetting(key: string): Promise<string | null> {
+    const row = await this.db.getFirstAsync<{ value: string }>('SELECT value FROM ai_settings WHERE key = ?', key);
+    return row?.value ?? null;
+  }
+
+  async setAiSetting(key: string, value: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO ai_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, value));
+  }
+
+  async createAiUsageRecord(record: AiUsageRecord): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO ai_usage_records (id, provider_id, provider_kind, model_id, task_id, status, error_code, input_tokens, cached_input_tokens, output_tokens, duration_ms, estimated_cost_micros, currency, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      record.id, record.providerId, record.providerKind, record.modelId, record.taskId, record.status, record.errorCode,
+      record.inputTokens, record.cachedInputTokens, record.outputTokens, record.durationMs, record.estimatedCostMicros, record.currency, record.createdAt,
+    ));
+  }
+
+  async listAiUsageRecords(): Promise<AiUsageRecord[]> {
+    const rows = await this.db.getAllAsync<AiUsageRecordRow>('SELECT * FROM ai_usage_records ORDER BY created_at DESC LIMIT 2000');
+    return rows.map(mapAiUsageRecord);
+  }
+
+  async listKnowledgeSources(): Promise<KnowledgeSourceSignature[]> {
+    const rows = await this.db.getAllAsync<KnowledgeSourceRow>('SELECT source_kind, source_id, content_hash, chunk_count, indexed_at FROM knowledge_sources');
+    return rows.map((row) => ({
+      sourceKind: row.source_kind as KnowledgeSourceKind,
+      sourceId: row.source_id,
+      contentHash: row.content_hash,
+      chunkCount: row.chunk_count,
+      indexedAt: row.indexed_at,
+    }));
+  }
+
+  async replaceKnowledgeSource(input: { sourceKind: KnowledgeSourceKind; sourceId: string; contentHash: string; indexedAt: string; chunks: KnowledgeChunk[] }): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM knowledge_chunks WHERE source_kind = ? AND source_id = ?', input.sourceKind, input.sourceId);
+      for (const chunk of input.chunks) {
+        await transaction.runAsync(
+          `INSERT INTO knowledge_chunks (id, source_kind, source_id, chunk_index, day_key, person_ids_json, tag_keys_json, title, context_prefix, body_text, char_start, char_end, is_private, token_estimate, content_hash, source_updated_at, indexed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          chunk.id, chunk.sourceKind, chunk.sourceId, chunk.chunkIndex, chunk.dayKey, JSON.stringify(chunk.personIds), JSON.stringify(chunk.tagKeys),
+          chunk.title, chunk.contextPrefix, chunk.bodyText, chunk.charStart, chunk.charEnd, chunk.isPrivate ? 1 : 0, chunk.tokenEstimate,
+          chunk.contentHash, chunk.sourceUpdatedAt, chunk.indexedAt,
+        );
+      }
+      await transaction.runAsync(
+        `INSERT INTO knowledge_sources (source_kind, source_id, content_hash, chunk_count, indexed_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(source_kind, source_id) DO UPDATE SET content_hash = excluded.content_hash, chunk_count = excluded.chunk_count, indexed_at = excluded.indexed_at`,
+        input.sourceKind, input.sourceId, input.contentHash, input.chunks.length, input.indexedAt,
+      );
+    });
+  }
+
+  async replaceKnowledgeSources(inputs: Array<{ sourceKind: KnowledgeSourceKind; sourceId: string; contentHash: string; indexedAt: string; chunks: KnowledgeChunk[] }>): Promise<void> {
+    if (!inputs.length) return;
+    await this.withTransaction(async (transaction) => {
+      for (const input of inputs) {
+        await transaction.runAsync('DELETE FROM knowledge_chunks WHERE source_kind = ? AND source_id = ?', input.sourceKind, input.sourceId);
+        for (const chunk of input.chunks) {
+          await transaction.runAsync(
+            `INSERT INTO knowledge_chunks (id, source_kind, source_id, chunk_index, day_key, person_ids_json, tag_keys_json, title, context_prefix, body_text, char_start, char_end, is_private, token_estimate, content_hash, source_updated_at, indexed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            chunk.id, chunk.sourceKind, chunk.sourceId, chunk.chunkIndex, chunk.dayKey, JSON.stringify(chunk.personIds), JSON.stringify(chunk.tagKeys),
+            chunk.title, chunk.contextPrefix, chunk.bodyText, chunk.charStart, chunk.charEnd, chunk.isPrivate ? 1 : 0, chunk.tokenEstimate,
+            chunk.contentHash, chunk.sourceUpdatedAt, chunk.indexedAt,
+          );
+        }
+        await transaction.runAsync(
+          `INSERT INTO knowledge_sources (source_kind, source_id, content_hash, chunk_count, indexed_at) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(source_kind, source_id) DO UPDATE SET content_hash = excluded.content_hash, chunk_count = excluded.chunk_count, indexed_at = excluded.indexed_at`,
+          input.sourceKind, input.sourceId, input.contentHash, input.chunks.length, input.indexedAt,
+        );
+      }
+    });
+  }
+
+  async deleteKnowledgeSources(keys: Array<{ sourceKind: KnowledgeSourceKind; sourceId: string }>): Promise<void> {
+    if (!keys.length) return;
+    await this.withTransaction(async (transaction) => {
+      for (const key of keys) {
+        await transaction.runAsync('DELETE FROM knowledge_chunks WHERE source_kind = ? AND source_id = ?', key.sourceKind, key.sourceId);
+        await transaction.runAsync('DELETE FROM knowledge_sources WHERE source_kind = ? AND source_id = ?', key.sourceKind, key.sourceId);
+      }
+    });
+  }
+
+  async searchKnowledgeFts(match: string, limit: number): Promise<KnowledgeChunk[]> {
+    const rows = await this.db.getAllAsync<KnowledgeChunkRow & { rank: number }>(
+      `SELECT c.*, bm25(knowledge_chunks_fts) AS rank FROM knowledge_chunks_fts
+       JOIN knowledge_chunks c ON c.rowid = knowledge_chunks_fts.rowid
+       WHERE knowledge_chunks_fts MATCH ? ORDER BY rank LIMIT ?`,
+      match,
+      limit,
+    );
+    return rows.map(mapKnowledgeChunk);
+  }
+
+  async searchKnowledgeLike(patterns: string[], limit: number): Promise<KnowledgeChunk[]> {
+    if (!patterns.length) return [];
+    const found = new Map<string, KnowledgeChunk>();
+    for (const pattern of patterns) {
+      const rows = await this.db.getAllAsync<KnowledgeChunkRow>(
+        'SELECT * FROM knowledge_chunks WHERE body_text LIKE ? OR context_prefix LIKE ? OR title LIKE ? ORDER BY day_key DESC LIMIT ?',
+        pattern,
+        pattern,
+        pattern,
+        limit,
+      );
+      for (const row of rows) {
+        if (found.size >= limit) break;
+        if (!found.has(row.id)) found.set(row.id, mapKnowledgeChunk(row));
+      }
+    }
+    return [...found.values()];
+  }
+
+  async saveKnowledgeAggregates(items: KnowledgeAggregate[]): Promise<void> {
+    if (!items.length) return;
+    await this.withTransaction(async (transaction) => {
+      for (const item of items) {
+        await transaction.runAsync(
+          `INSERT INTO knowledge_aggregates (id, kind, scope_key, title, body_markdown, stats_json, source_refs_json, generator, model_id, source_revision, stale, generated_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(kind, scope_key, generator) DO UPDATE SET title = excluded.title, body_markdown = excluded.body_markdown, stats_json = excluded.stats_json,
+             source_refs_json = excluded.source_refs_json, model_id = excluded.model_id, source_revision = excluded.source_revision, stale = excluded.stale, updated_at = excluded.updated_at`,
+          item.id, item.kind, item.scopeKey, item.title, item.bodyMarkdown, item.statsJson, JSON.stringify(item.sourceRefs), item.generator, item.modelId,
+          item.sourceRevision, item.stale ? 1 : 0, item.generatedAt, item.updatedAt,
+        );
+      }
+    });
+  }
+
+  async listKnowledgeAggregates(): Promise<KnowledgeAggregate[]> {
+    const rows = await this.db.getAllAsync<KnowledgeAggregateRow>('SELECT * FROM knowledge_aggregates ORDER BY kind, scope_key');
+    return rows.map(mapKnowledgeAggregate);
+  }
+
+  async getKnowledgeState(key: string): Promise<string | null> {
+    const row = await this.db.getFirstAsync<{ value: string }>('SELECT value FROM knowledge_state WHERE key = ?', key);
+    return row?.value ?? null;
+  }
+
+  async setKnowledgeState(key: string, value: string): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync('INSERT INTO knowledge_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, value));
+  }
+
+  async clearKnowledgeIndex(): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.execAsync('DELETE FROM knowledge_chunks; DELETE FROM knowledge_sources; DELETE FROM knowledge_aggregates;');
+    });
+  }
+
+  async listPostPersons(): Promise<Array<{ postId: string; personId: string }>> {
+    const rows = await this.db.getAllAsync<{ post_id: string; person_id: string }>('SELECT post_id, person_id FROM post_persons ORDER BY post_id, person_id');
+    return rows.map((row) => ({ postId: row.post_id, personId: row.person_id }));
+  }
+
+  async saveMemoryItem(item: MemoryItem): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO memory_items (id, kind, subject_type, subject_id, content, confidence, importance, status, origin, valid_from, valid_to, recorded_at, last_confirmed_at, extraction_batch_id, last_used_at, use_count, content_hash, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      item.id, item.kind, item.subjectType, item.subjectId, item.content, item.confidence, item.importance, item.status, item.origin,
+      item.validFrom, item.validTo, item.recordedAt, item.lastConfirmedAt, item.extractionBatchId, item.lastUsedAt, item.useCount,
+      item.contentHash, item.createdAt, item.updatedAt,
+    ));
+  }
+
+  async updateMemoryItem(item: MemoryItem): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `UPDATE memory_items SET kind = ?, subject_type = ?, subject_id = ?, content = ?, confidence = ?, importance = ?, status = ?, origin = ?,
+        valid_from = ?, valid_to = ?, last_confirmed_at = ?, extraction_batch_id = ?, last_used_at = ?, use_count = ?, content_hash = ?, updated_at = ?
+       WHERE id = ?`,
+      item.kind, item.subjectType, item.subjectId, item.content, item.confidence, item.importance, item.status, item.origin,
+      item.validFrom, item.validTo, item.lastConfirmedAt, item.extractionBatchId, item.lastUsedAt, item.useCount, item.contentHash, item.updatedAt, item.id,
+    ));
+  }
+
+  async listMemoryItems(): Promise<MemoryItem[]> {
+    const rows = await this.db.getAllAsync<MemoryItemRow>('SELECT * FROM memory_items ORDER BY updated_at DESC');
+    return rows.map(mapMemoryItem);
+  }
+
+  async getMemoryItem(memoryId: string): Promise<MemoryItem | null> {
+    const row = await this.db.getFirstAsync<MemoryItemRow>('SELECT * FROM memory_items WHERE id = ?', memoryId);
+    return row ? mapMemoryItem(row) : null;
+  }
+
+  async saveMemorySources(memoryId: string, sources: MemorySourceRef[]): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM memory_sources WHERE memory_id = ?', memoryId);
+      for (const source of sources) {
+        await transaction.runAsync('INSERT OR IGNORE INTO memory_sources (memory_id, source_kind, source_id) VALUES (?, ?, ?)', memoryId, source.sourceKind, source.sourceId);
+      }
+    });
+  }
+
+  async listMemorySources(): Promise<MemorySourceRow[]> {
+    const rows = await this.db.getAllAsync<MemorySourceRowModel>('SELECT memory_id, source_kind, source_id FROM memory_sources ORDER BY memory_id');
+    return rows.map((row) => ({ memoryId: row.memory_id, sourceKind: row.source_kind, sourceId: row.source_id }));
+  }
+
+  async saveMemoryRevision(revision: MemoryRevision): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      'INSERT INTO memory_revisions (id, memory_id, action, before_json, after_json, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      revision.id, revision.memoryId, revision.action, revision.beforeJson, revision.afterJson, revision.reason, revision.createdAt,
+    ));
+  }
+
+  async listMemoryRevisions(memoryId: string): Promise<MemoryRevision[]> {
+    const rows = await this.db.getAllAsync<MemoryRevisionRowModel>('SELECT * FROM memory_revisions WHERE memory_id = ? ORDER BY created_at DESC', memoryId);
+    return rows.map((row) => ({
+      id: row.id, memoryId: row.memory_id, action: row.action, beforeJson: row.before_json, afterJson: row.after_json,
+      reason: row.reason, createdAt: row.created_at,
+    }));
+  }
+
+  async clearAllMemory(): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.execAsync('DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items;');
     });
   }
 
   async exportBackupSnapshot(): Promise<BackupSnapshot> {
-    const [checkInRows, ledgerTransactionRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, personRelationshipNodes, personRelationships, personEvents, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, bookLists, bookListEntries, books, bookExcerpts, readingNoteSources] = await Promise.all([
+    const [checkInRows, ledgerTransactionRows, posts, draftRows, people, media, postPersonRows, settingRows, tagDefinitions, tagGroups, tagSystemSettings, personTags, personRelationshipNodes, personRelationships, personEvents, albums, albumMedia, personBooks, musicTracks, musicCollectionEntries, musicPlaylists, musicPlaylistEntries, bookLists, bookListEntries, books, bookExcerpts, readingNoteSources, memoryItemRows, memorySourceRows, memoryRevisionRows] = await Promise.all([
       this.db.getAllAsync<CheckInRow>('SELECT id, day_key, city, created_at FROM checkins ORDER BY day_key'),
       this.db.getAllAsync<LedgerTransactionRow>('SELECT id, type, amount_cents, category, day_key, note, created_at, updated_at FROM ledger_transactions ORDER BY day_key, created_at'),
       this.listPosts(),
@@ -1219,6 +1504,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       this.listBooks(),
       this.listBookExcerpts(),
       this.db.getAllAsync<{ post_id: string; book_id: string | null; excerpt_ids_json: string; quote_snapshots_json: string }>('SELECT post_id, book_id, excerpt_ids_json, quote_snapshots_json FROM reading_note_sources ORDER BY post_id'),
+      this.db.getAllAsync<MemoryItemRow>("SELECT * FROM memory_items WHERE origin IN ('user', 'ai_auto') AND status <> 'deleted' ORDER BY created_at"),
+      this.db.getAllAsync<MemorySourceRowModel>('SELECT memory_id, source_kind, source_id FROM memory_sources ORDER BY memory_id'),
+      this.db.getAllAsync<MemoryRevisionRowModel>('SELECT * FROM memory_revisions ORDER BY memory_id, created_at'),
     ]);
     return {
       checkIns: checkInRows.map(mapCheckIn),
@@ -1248,12 +1536,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       books,
       bookExcerpts,
       readingNoteSources: readingNoteSources.map((row) => ({ postId: row.post_id, bookId: row.book_id, excerptIds: parseStringList(row.excerpt_ids_json), quoteSnapshots: parseQuoteSnapshots(row.quote_snapshots_json) })),
+      memoryItems: memoryItemRows.map(mapMemoryItem),
+      memorySources: memorySourceRows.map((row) => ({ memoryId: row.memory_id, sourceKind: row.source_kind, sourceId: row.source_id })),
+      memoryRevisions: memoryRevisionRows.map((row) => ({ id: row.id, memoryId: row.memory_id, action: row.action, beforeJson: row.before_json, afterJson: row.after_json, reason: row.reason, createdAt: row.created_at })),
     };
   }
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings;');
+      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
       }
@@ -1303,9 +1594,164 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       for (const relation of snapshot.personBooks ?? []) await transaction.runAsync('INSERT INTO person_books (person_id, book_id, created_at) VALUES (?, ?, ?)', relation.personId, relation.bookId, relation.createdAt);
       for (const excerpt of snapshot.bookExcerpts ?? []) await transaction.runAsync('INSERT INTO book_excerpts (id, book_id, book_title, text, location, note, location_type, chapter_title, context_before, context_after, source_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', excerpt.id, excerpt.bookId, excerpt.bookTitle ?? null, excerpt.text, excerpt.location, excerpt.note, excerpt.locationType ?? null, excerpt.chapterTitle ?? null, excerpt.contextBefore ?? null, excerpt.contextAfter ?? null, excerpt.sourceKind ?? 'manual', excerpt.createdAt);
       for (const source of snapshot.readingNoteSources ?? []) await transaction.runAsync('INSERT INTO reading_note_sources (post_id, book_id, excerpt_ids_json, quote_snapshots_json) VALUES (?, ?, ?, ?)', source.postId, source.bookId, JSON.stringify(source.excerptIds), JSON.stringify(source.quoteSnapshots));
+      for (const item of snapshot.memoryItems ?? []) {
+        await transaction.runAsync(
+          `INSERT INTO memory_items (id, kind, subject_type, subject_id, content, confidence, importance, status, origin, valid_from, valid_to, recorded_at, last_confirmed_at, extraction_batch_id, last_used_at, use_count, content_hash, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          item.id, item.kind, item.subjectType, item.subjectId, item.content, item.confidence, item.importance, item.status, item.origin,
+          item.validFrom, item.validTo, item.recordedAt, item.lastConfirmedAt, item.extractionBatchId, item.lastUsedAt, item.useCount,
+          item.contentHash, item.createdAt, item.updatedAt,
+        );
+      }
+      for (const source of snapshot.memorySources ?? []) {
+        await transaction.runAsync('INSERT OR IGNORE INTO memory_sources (memory_id, source_kind, source_id) VALUES (?, ?, ?)', source.memoryId, source.sourceKind, source.sourceId);
+      }
+      for (const revision of snapshot.memoryRevisions ?? []) {
+        await transaction.runAsync('INSERT OR IGNORE INTO memory_revisions (id, memory_id, action, before_json, after_json, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', revision.id, revision.memoryId, revision.action, revision.beforeJson, revision.afterJson, revision.reason, revision.createdAt);
+      }
       for (const [key, value] of Object.entries(snapshot.settings)) {
         await transaction.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', key, value);
       }
     });
+  }
+}
+
+function mapAiProviderProfile(row: AiProviderProfileRow): AiProviderProfile {
+  return {
+    id: row.id,
+    label: row.label,
+    kind: row.kind,
+    baseUrl: row.base_url,
+    modelId: row.model_id,
+    keyHint: row.key_hint,
+    supportsStream: row.supports_stream === 1,
+    supportsBalance: row.supports_balance === 1,
+    enabled: row.enabled === 1,
+    isDefault: row.is_default === 1,
+    lastProbeAt: row.last_probe_at,
+    lastProbeStatus: parseProbeStatus(row.last_probe_status),
+    lastProbeLatencyMs: row.last_probe_latency_ms,
+    lastProbeMessage: row.last_probe_message,
+    modelsJson: row.models_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function parseProbeStatus(value: string | null): AiProviderProfile['lastProbeStatus'] {
+  return value === 'ok' || value === 'auth_failed' || value === 'network_failed' || value === 'model_missing' || value === 'unsupported' || value === 'unknown'
+    ? value
+    : null;
+}
+
+function mapAiUsageRecord(row: AiUsageRecordRow): AiUsageRecord {
+  return {
+    id: row.id,
+    providerId: row.provider_id,
+    providerKind: row.provider_kind,
+    modelId: row.model_id,
+    taskId: parseAiUsageTaskId(row.task_id),
+    status: row.status,
+    errorCode: parseAiErrorCode(row.error_code),
+    inputTokens: row.input_tokens,
+    cachedInputTokens: row.cached_input_tokens,
+    outputTokens: row.output_tokens,
+    durationMs: row.duration_ms,
+    estimatedCostMicros: row.estimated_cost_micros,
+    currency: row.currency === 'CNY' || row.currency === 'USD' ? row.currency : null,
+    createdAt: row.created_at,
+  };
+}
+
+function parseAiUsageTaskId(value: string): AiUsageTaskId {
+  return (AI_USAGE_TASK_IDS as readonly string[]).includes(value) ? (value as AiUsageTaskId) : 'unknown';
+}
+
+function parseAiErrorCode(value: string | null): AiUsageRecord['errorCode'] {
+  return value === 'auth_failed' || value === 'insufficient_balance' || value === 'model_missing' || value === 'rate_limited'
+    || value === 'provider_error' || value === 'timeout' || value === 'cancelled' || value === 'network_failed'
+    || value === 'invalid_config' || value === 'unsupported' || value === 'unknown'
+    ? value
+    : null;
+}
+
+function mapKnowledgeChunk(row: KnowledgeChunkRow): KnowledgeChunk {
+  return {
+    id: row.id,
+    sourceKind: row.source_kind as KnowledgeSourceKind,
+    sourceId: row.source_id,
+    chunkIndex: row.chunk_index,
+    dayKey: (row.day_key as KnowledgeChunk['dayKey']) ?? null,
+    personIds: parseJsonStringList(row.person_ids_json),
+    tagKeys: parseJsonStringList(row.tag_keys_json),
+    title: row.title ?? '',
+    contextPrefix: row.context_prefix,
+    bodyText: row.body_text,
+    charStart: row.char_start,
+    charEnd: row.char_end,
+    isPrivate: row.is_private === 1,
+    tokenEstimate: row.token_estimate,
+    contentHash: row.content_hash,
+    sourceUpdatedAt: row.source_updated_at,
+    indexedAt: row.indexed_at,
+  };
+}
+
+function mapKnowledgeAggregate(row: KnowledgeAggregateRow): KnowledgeAggregate {
+  let refs: KnowledgeAggregate['sourceRefs'] = [];
+  try {
+    const parsed = JSON.parse(row.source_refs_json) as unknown;
+    if (Array.isArray(parsed)) refs = parsed.flatMap((item) => (item && typeof item === 'object' && 'kind' in item && 'id' in item && typeof item.kind === 'string' && typeof item.id === 'string' ? [{ kind: item.kind, id: item.id }] : []));
+  } catch {
+    refs = [];
+  }
+  return {
+    id: row.id,
+    kind: row.kind as KnowledgeAggregate['kind'],
+    scopeKey: row.scope_key,
+    title: row.title,
+    bodyMarkdown: row.body_markdown,
+    statsJson: row.stats_json,
+    sourceRefs: refs,
+    generator: row.generator as AggregateGenerator,
+    modelId: row.model_id,
+    sourceRevision: row.source_revision,
+    stale: row.stale === 1,
+    generatedAt: row.generated_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapMemoryItem(row: MemoryItemRow): MemoryItem {
+  return {
+    id: row.id,
+    kind: row.kind as MemoryKind,
+    subjectType: row.subject_type as MemorySubjectType,
+    subjectId: row.subject_id,
+    content: row.content,
+    confidence: row.confidence,
+    importance: (row.importance === 1 || row.importance === 3 ? row.importance : 2) as MemoryItem['importance'],
+    status: row.status as MemoryStatus,
+    origin: row.origin as MemoryOrigin,
+    validFrom: row.valid_from,
+    validTo: row.valid_to,
+    recordedAt: row.recorded_at,
+    lastConfirmedAt: row.last_confirmed_at,
+    extractionBatchId: row.extraction_batch_id,
+    lastUsedAt: row.last_used_at,
+    useCount: row.use_count,
+    contentHash: row.content_hash,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function parseJsonStringList(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
   }
 }

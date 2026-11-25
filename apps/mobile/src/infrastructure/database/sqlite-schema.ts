@@ -638,6 +638,193 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     await addColumnIfMissing(db, 'profile_collection_requests', 'invitation_url', 'TEXT');
     await db.execAsync('PRAGMA user_version = 40;');
   }
+  if (currentVersion < 41) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS ai_provider_profiles (
+      id TEXT PRIMARY KEY NOT NULL,
+      label TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('openai-compatible', 'anthropic', 'deepseek')),
+      base_url TEXT NOT NULL,
+      model_id TEXT NOT NULL DEFAULT '',
+      key_hint TEXT NOT NULL DEFAULT '',
+      supports_stream INTEGER NOT NULL DEFAULT 1,
+      supports_balance INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      last_probe_at TEXT,
+      last_probe_status TEXT,
+      last_probe_latency_ms INTEGER,
+      last_probe_message TEXT,
+      models_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_provider_profiles_default_idx ON ai_provider_profiles(is_default) WHERE is_default = 1;
+
+    CREATE TABLE IF NOT EXISTS ai_usage_records (
+      id TEXT PRIMARY KEY NOT NULL,
+      provider_id TEXT NOT NULL,
+      provider_kind TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'cancelled')),
+      error_code TEXT,
+      input_tokens INTEGER,
+      cached_input_tokens INTEGER,
+      output_tokens INTEGER,
+      duration_ms INTEGER NOT NULL,
+      estimated_cost_micros INTEGER,
+      currency TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ai_usage_records_created_idx ON ai_usage_records(created_at DESC);
+    CREATE INDEX IF NOT EXISTS ai_usage_records_provider_idx ON ai_usage_records(provider_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS ai_settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
+    PRAGMA user_version = 41;
+  `);
+  if (currentVersion < 42) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS knowledge_sources (
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      chunk_count INTEGER NOT NULL,
+      indexed_at TEXT NOT NULL,
+      PRIMARY KEY (source_kind, source_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id TEXT PRIMARY KEY NOT NULL,
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      day_key TEXT,
+      person_ids_json TEXT,
+      tag_keys_json TEXT,
+      title TEXT,
+      context_prefix TEXT NOT NULL,
+      body_text TEXT NOT NULL,
+      char_start INTEGER NOT NULL DEFAULT 0,
+      char_end INTEGER NOT NULL DEFAULT 0,
+      is_private INTEGER NOT NULL DEFAULT 0,
+      token_estimate INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      source_updated_at TEXT,
+      indexed_at TEXT NOT NULL,
+      UNIQUE(source_kind, source_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS knowledge_chunks_day_idx ON knowledge_chunks(day_key DESC);
+    CREATE INDEX IF NOT EXISTS knowledge_chunks_source_idx ON knowledge_chunks(source_kind, source_id);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks_fts USING fts5(
+      context_prefix,
+      body_text,
+      title,
+      content='knowledge_chunks',
+      content_rowid='rowid',
+      tokenize='trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS knowledge_chunks_ai AFTER INSERT ON knowledge_chunks BEGIN
+      INSERT INTO knowledge_chunks_fts(rowid, context_prefix, body_text, title)
+        VALUES (new.rowid, new.context_prefix, new.body_text, new.title);
+    END;
+    CREATE TRIGGER IF NOT EXISTS knowledge_chunks_ad AFTER DELETE ON knowledge_chunks BEGIN
+      INSERT INTO knowledge_chunks_fts(knowledge_chunks_fts, rowid, context_prefix, body_text, title)
+        VALUES ('delete', old.rowid, old.context_prefix, old.body_text, old.title);
+    END;
+    CREATE TRIGGER IF NOT EXISTS knowledge_chunks_au AFTER UPDATE ON knowledge_chunks BEGIN
+      INSERT INTO knowledge_chunks_fts(knowledge_chunks_fts, rowid, context_prefix, body_text, title)
+        VALUES ('delete', old.rowid, old.context_prefix, old.body_text, old.title);
+      INSERT INTO knowledge_chunks_fts(rowid, context_prefix, body_text, title)
+        VALUES (new.rowid, new.context_prefix, new.body_text, new.title);
+    END;
+
+    CREATE TABLE IF NOT EXISTS knowledge_aggregates (
+      id TEXT PRIMARY KEY NOT NULL,
+      kind TEXT NOT NULL,
+      scope_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body_markdown TEXT NOT NULL,
+      stats_json TEXT,
+      source_refs_json TEXT NOT NULL,
+      generator TEXT NOT NULL DEFAULT 'deterministic',
+      model_id TEXT,
+      source_revision TEXT NOT NULL,
+      stale INTEGER NOT NULL DEFAULT 0,
+      generated_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(kind, scope_key, generator)
+    );
+    CREATE INDEX IF NOT EXISTS knowledge_aggregates_lookup_idx ON knowledge_aggregates(kind, scope_key, stale);
+
+    CREATE TABLE IF NOT EXISTS knowledge_state (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('semantic', 'episodic', 'procedural')),
+      subject_type TEXT NOT NULL CHECK(subject_type IN ('self', 'person', 'topic')),
+      subject_id TEXT,
+      content TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      importance INTEGER NOT NULL DEFAULT 2 CHECK(importance BETWEEN 1 AND 3),
+      status TEXT NOT NULL CHECK(status IN ('pending', 'active', 'archived', 'suppressed', 'deleted')),
+      origin TEXT NOT NULL CHECK(origin IN ('user', 'derived', 'ai_auto')),
+      valid_from TEXT,
+      valid_to TEXT,
+      recorded_at TEXT NOT NULL,
+      last_confirmed_at TEXT,
+      extraction_batch_id TEXT,
+      last_used_at TEXT,
+      use_count INTEGER NOT NULL DEFAULT 0,
+      content_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS memory_items_status_idx ON memory_items(status, subject_type, subject_id);
+    CREATE INDEX IF NOT EXISTS memory_items_batch_idx ON memory_items(extraction_batch_id);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_items_fts USING fts5(
+      content,
+      content='memory_items',
+      content_rowid='rowid',
+      tokenize='trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS memory_items_ai AFTER INSERT ON memory_items BEGIN
+      INSERT INTO memory_items_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS memory_items_ad AFTER DELETE ON memory_items BEGIN
+      INSERT INTO memory_items_fts(memory_items_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS memory_items_au AFTER UPDATE ON memory_items BEGIN
+      INSERT INTO memory_items_fts(memory_items_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+      INSERT INTO memory_items_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+
+    CREATE TABLE IF NOT EXISTS memory_sources (
+      memory_id TEXT NOT NULL REFERENCES memory_items(id) ON DELETE CASCADE,
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      PRIMARY KEY (memory_id, source_kind, source_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_revisions (
+      id TEXT PRIMARY KEY NOT NULL,
+      memory_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      before_json TEXT,
+      after_json TEXT,
+      reason TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS memory_revisions_memory_idx ON memory_revisions(memory_id, created_at DESC);
+
+    PRAGMA user_version = 42;
+  `);
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }

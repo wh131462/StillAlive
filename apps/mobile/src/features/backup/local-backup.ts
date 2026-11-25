@@ -368,6 +368,19 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
   );
   const albumByMedia = new Map(albumMedia.map((item) => [item.mediaId, item.albumId]));
 
+  const memoryItems = mergeUpdatedById(current.memoryItems ?? [], incoming.memoryItems ?? []);
+  const memoryIds = new Set(memoryItems.map((item) => item.id));
+  const memorySources = mergeRelations(
+    current.memorySources ?? [],
+    (incoming.memorySources ?? []).filter((item) => memoryIds.has(item.memoryId)),
+    (item) => `${item.memoryId}:${item.sourceKind}:${item.sourceId}`,
+  );
+  const memoryRevisions = mergeRelations(
+    current.memoryRevisions ?? [],
+    (incoming.memoryRevisions ?? []).filter((item) => memoryIds.has(item.memoryId)),
+    (item) => item.id,
+  );
+
   return {
     checkIns: mergeCheckIns(current.checkIns, incoming.checkIns),
     ledgerTransactions,
@@ -429,6 +442,9 @@ export function mergeBackupSnapshots(current: BackupSnapshot, incoming: BackupSn
     books: books.items,
     bookExcerpts,
     readingNoteSources: mergeReadingNoteSources(current.readingNoteSources ?? [], incoming.readingNoteSources ?? [], books.incomingIds, postIds, bookIds, excerptIds),
+    memoryItems,
+    memorySources,
+    memoryRevisions,
   };
 }
 
@@ -814,6 +830,9 @@ function migrateSnapshot(value: BackupSnapshot): void {
   value.books ??= [];
   value.bookExcerpts ??= [];
   value.readingNoteSources ??= [];
+  value.memoryItems ??= [];
+  value.memorySources ??= [];
+  value.memoryRevisions ??= [];
   for (const book of value.books) {
     if (book.format === 'pdf' && book.location?.match(/^page:\d+$/)) book.location = book.location.replace(/^page:/, 'pdf:');
     book.locationType ??= book.format === 'pdf' ? 'pdf-page' : book.location?.startsWith('epubcfi(') ? 'epub-cfi' : book.location?.startsWith('reflow:') || book.location?.startsWith('reflow-href:') ? 'reflow-cfi' : null;
