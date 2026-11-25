@@ -75,6 +75,7 @@ export default function AiSearchScreen() {
 
   useEffect(() => {
     if (answer && answer.question !== trimmed) setAnswer(null);
+    setAskError(null);
   }, [answer, trimmed]);
 
   const directResults = useMemo<DirectResult[]>(() => {
@@ -181,6 +182,7 @@ export default function AiSearchScreen() {
       {!trimmed ? <View style={styles.emptyState}>
         <Text style={styles.emptyTitle}>搜索记录，或直接问一句</Text>
         <Text style={styles.emptyText}>搜记录、人物、书摘、音乐和账本；AI 启用时，问题会在这里直接得到带来源的回答。</Text>
+        {!ai.enabled ? <Pressable accessibilityRole="button" onPress={() => router.push('/ai-settings' as RelativePathString)}><Text style={styles.emptyAiHint}>AI 未启用；启用后可以直接在这里问一句。</Text></Pressable> : null}
         <View style={styles.suggestionRow}>{SUGGESTIONS.map((suggestion) => <Pressable accessibilityRole="button" key={suggestion} onPress={() => { Keyboard.dismiss(); setQuery(suggestion); }} style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}><Text style={styles.suggestionText}>{suggestion}</Text></Pressable>)}</View>
       </View> : null}
 
@@ -223,7 +225,7 @@ const styles = createThemedStyles(() => ({
   askErrorRow: { paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   askErrorText: { flex: 1, color: colors.danger, fontSize: typography.size.meta },
   askRetry: { color: colors.life, fontSize: typography.size.meta, fontWeight: '700' },
-  answerCard: { marginTop: spacing.md, padding: spacing.lg, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet },
+  answerCard: { marginTop: spacing.md, paddingVertical: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft },
   answerLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   answerText: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
   answerSources: { marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
@@ -231,23 +233,24 @@ const styles = createThemedStyles(() => ({
   sourceTitle: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
   sourceMeta: { marginTop: 2, color: colors.inkFaint, fontSize: typography.size.meta },
   answerMemory: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta },
-  answerActions: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm },
+  answerActions: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   answerPrimary: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
   answerPrimaryText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
-  answerSecondary: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.paper },
-  answerSecondaryText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
+  answerSecondary: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center' },
+  answerSecondaryText: { color: colors.inkFaint, fontSize: typography.size.caption, fontWeight: '600' },
   emptyState: { paddingVertical: spacing.xl },
   emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 22 },
   emptyText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.body, lineHeight: 21 },
+  emptyAiHint: { marginTop: spacing.md, color: colors.life, fontSize: typography.size.meta },
   suggestionRow: { marginTop: spacing.lg, gap: 2 },
   suggestion: { minHeight: 38, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center' },
   suggestionText: { color: colors.inkSoft, fontSize: typography.size.body },
   resultSummary: { marginTop: spacing.md, color: colors.inkFaint, fontSize: typography.size.meta },
   loadingRow: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   loadingText: { color: colors.inkFaint, fontSize: typography.size.meta },
-  group: { marginTop: spacing.lg },
+  group: { marginTop: spacing.xl },
   groupLabel: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.1 },
-  resultRow: { minHeight: 56, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  resultRow: { minHeight: 54, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   resultTitle: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   resultSnippet: { marginTop: 3, color: colors.inkSoft, fontSize: typography.size.meta, lineHeight: 17 },
   resultMeta: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },

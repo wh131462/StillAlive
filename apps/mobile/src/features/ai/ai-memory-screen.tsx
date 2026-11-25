@@ -13,7 +13,7 @@ export default function AiMemoryScreen() {
   const router = useRouter();
   const knowledge = useKnowledge();
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'user' | 'auto'>('all');
+  const [filter, setFilter] = useState<'all' | 'user' | 'auto' | 'hidden'>('all');
   const refreshMemories = knowledge.refreshMemories;
 
   useEffect(() => {
@@ -22,7 +22,10 @@ export default function AiMemoryScreen() {
   useFocusEffect(useCallback(() => { void refreshMemories().catch(() => undefined); }, [refreshMemories]));
 
   const active = knowledge.memories.filter((item) => item.status === 'active' && item.validTo === null);
-  const visible = active.filter((item) => filter === 'all' || (filter === 'user' ? item.origin === 'user' : item.origin === 'ai_auto'));
+  const hidden = knowledge.memories.filter((item) => item.status === 'archived' || item.status === 'suppressed');
+  const visible = filter === 'hidden'
+    ? hidden
+    : active.filter((item) => filter === 'all' || (filter === 'user' ? item.origin === 'user' : item.origin === 'ai_auto'));
   const archivedCount = knowledge.memories.filter((item) => item.status === 'archived' || item.status === 'suppressed').length;
   const autoCount = active.filter((item) => item.origin === 'ai_auto').length;
 
@@ -85,20 +88,22 @@ export default function AiMemoryScreen() {
       </View>
 
       <View style={styles.filterRow}>
-        {([['all', '全部'], ['user', '手写'], ['auto', '自动']] as const).map(([value, label]) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === value }} key={value} onPress={() => setFilter(value)} style={({ pressed }) => [styles.filterChip, filter === value && styles.filterChipActive, pressed && styles.pressed]}><Text style={[styles.filterText, filter === value && styles.filterTextActive]}>{label}{value === 'all' ? ` ${active.length}` : value === 'user' ? ` ${active.filter((item) => item.origin === 'user').length}` : ` ${autoCount}`}</Text></Pressable>)}
+        {([['all', '全部'], ['user', '手写'], ['auto', '自动'], ['hidden', '已隐藏']] as const).map(([value, label]) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === value }} key={value} onPress={() => setFilter(value)} style={({ pressed }) => [styles.filterChip, filter === value && styles.filterChipActive, pressed && styles.pressed]}><Text style={[styles.filterText, filter === value && styles.filterTextActive]}>{label}{value === 'all' ? ` ${active.length}` : value === 'user' ? ` ${active.filter((item) => item.origin === 'user').length}` : value === 'auto' ? ` ${autoCount}` : ` ${hidden.length}`}</Text></Pressable>)}
       </View>
 
-      <Text style={styles.sectionLabel}>生效中的记忆</Text>
-      {!visible.length ? <View style={styles.emptyCard}><Text style={styles.emptyTitle}>还没有记忆</Text><Text style={styles.emptyText}>在「问问我的记录」里多聊几次，或之后在记录上点“记住这件事”，这里会慢慢长出属于你的记忆。</Text></View>
+      <Text style={styles.sectionLabel}>{filter === 'hidden' ? '已隐藏的记忆（可恢复）' : '生效中的记忆'}</Text>
+      {!visible.length ? <View style={styles.emptyCard}><Text style={styles.emptyTitle}>{filter === 'hidden' ? '没有隐藏的记忆' : '还没有记忆'}</Text><Text style={styles.emptyText}>{filter === 'hidden' ? '遗忘或永不提及的记忆会出现在这里，可以随时恢复。' : '在 AI 对话里多聊几次，或在记录上点“记住这件事”，这里会慢慢长出属于你的记忆。'}</Text></View>
         : visible.map((item) => <View key={item.id} style={styles.memoryRow}>
           <View style={styles.memoryHead}>
-            <Text style={styles.memoryOrigin}>{item.origin === 'user' ? '手写' : item.origin === 'derived' ? '整理' : '自动'}{item.kind === 'episodic' ? ' · 经历' : item.kind === 'procedural' ? ' · 偏好' : ' · 事实'}</Text>
+            <Text style={styles.memoryOrigin}>{item.origin === 'user' ? '手写' : item.origin === 'derived' ? '整理' : '自动'}{item.kind === 'episodic' ? ' · 经历' : item.kind === 'procedural' ? ' · 偏好' : ' · 事实'}{item.status === 'suppressed' ? ' · 永不提及' : item.status === 'archived' ? ' · 已归档' : ''}</Text>
             <Text style={styles.memoryTime}>{formatRelativeTime(item.lastConfirmedAt ?? item.createdAt)}{item.useCount ? ` · 用过 ${item.useCount} 次` : ''}</Text>
           </View>
           <Text style={styles.memoryContent}>{item.content}</Text>
           <View style={styles.memoryActions}>
+            {item.status === 'archived' || item.status === 'suppressed'
+              ? <Pressable accessibilityRole="button" onPress={() => void knowledge.restoreMemory(item.id).then(() => feedback.notice('已恢复这条记忆')).catch((cause: unknown) => feedback.alert('恢复失败', cause instanceof Error ? cause.message : '请稍后重试'))} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={[styles.miniActionText, styles.miniActionRestore]}>恢复</Text></Pressable>
+              : <Pressable accessibilityRole="button" onPress={() => suppress(item.id)} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={styles.miniActionText}>永不提及</Text></Pressable>}
             <Pressable accessibilityRole="button" onPress={() => forget(item.id, item.content)} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={styles.miniActionText}>遗忘</Text></Pressable>
-            <Pressable accessibilityRole="button" onPress={() => suppress(item.id)} style={({ pressed }) => [styles.miniAction, pressed && styles.pressed]}><Text style={styles.miniActionText}>永不提及</Text></Pressable>
           </View>
         </View>)}
 
@@ -118,7 +123,7 @@ const styles = createThemedStyles(() => ({
   eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   introTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 24 },
   introText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.body, lineHeight: 22 },
-  group: { marginTop: spacing.lg, overflow: 'hidden', borderRadius: radius.md, backgroundColor: colors.sheet },
+  group: { marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: spacing.md, backgroundColor: colors.lineSoft },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },
   switchCopy: { minWidth: 0, flex: 1 },
@@ -128,30 +133,31 @@ const styles = createThemedStyles(() => ({
   switchTrackOn: { backgroundColor: colors.life },
   switchThumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper },
   switchThumbOn: { alignSelf: 'flex-end' },
-  summaryCard: { marginTop: spacing.lg, padding: spacing.lg, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet },
+  summaryCard: { marginTop: spacing.lg, paddingVertical: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft },
   summaryEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   summaryValue: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 38 },
   summaryLabel: { marginTop: 4, color: colors.inkFaint, fontSize: typography.size.meta },
-  actionRow: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm },
-  actionButton: { minHeight: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.sheet },
+  actionRow: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.lg },
+  actionButton: { minHeight: 36, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
-  filterRow: { marginTop: spacing.lg, flexDirection: 'row', gap: spacing.sm },
-  filterChip: { minHeight: 34, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.sheet },
-  filterChipActive: { backgroundColor: colors.lifeLight },
+  filterRow: { marginTop: spacing.lg, flexDirection: 'row', gap: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  filterChip: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  filterChipActive: { borderBottomColor: colors.life },
   filterText: { color: colors.inkFaint, fontSize: typography.size.meta },
   filterTextActive: { color: colors.life, fontWeight: '700' },
   sectionLabel: { marginTop: spacing.lg, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
-  emptyCard: { padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.sheet },
+  emptyCard: { paddingVertical: spacing.xl },
   emptyTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   emptyText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
-  memoryRow: { marginBottom: spacing.sm, padding: spacing.md, borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sheet },
+  memoryRow: { paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   memoryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   memoryOrigin: { color: colors.life, fontSize: typography.size.meta, fontWeight: '800' },
   memoryTime: { color: colors.inkFaint, fontSize: typography.size.meta },
   memoryContent: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
-  memoryActions: { marginTop: spacing.md, paddingTop: spacing.sm, flexDirection: 'row', gap: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
+  memoryActions: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.lg },
   miniAction: { minHeight: 30, alignItems: 'center', justifyContent: 'center' },
   miniActionText: { color: colors.inkFaint, fontSize: typography.size.caption, fontWeight: '600' },
+  miniActionRestore: { color: colors.life },
   footNote: { marginTop: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   footNoteText: { color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
   disabled: { opacity: 0.5 },

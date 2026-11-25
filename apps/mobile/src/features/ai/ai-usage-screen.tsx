@@ -7,7 +7,7 @@ import { useAi } from '../../application/ai/ai-provider';
 import type { AiUsageRecord } from '../../infrastructure/ai/ai-types';
 import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { createThemedStyles } from '../../shared/theme/app-theme';
-import { formatTokens, groupUsage, summarizeUsage } from './ai-copy';
+import { formatTokens, groupUsage, summarizeUsage, usageErrorLabel } from './ai-copy';
 
 type RangeId = 'today' | 'week' | 'month' | 'all';
 const RANGES: Array<{ id: RangeId; label: string; days: number | null }> = [
@@ -19,7 +19,7 @@ const RANGES: Array<{ id: RangeId; label: string; days: number | null }> = [
 
 export default function AiUsageScreen() {
   const router = useRouter();
-  const { usage, refreshUsage } = useAi();
+  const { usage, refreshUsage, providers } = useAi();
   const [range, setRange] = useState<RangeId>('week');
 
   const records = useMemo(() => filterByRange(usage, range), [range, usage]);
@@ -51,7 +51,7 @@ export default function AiUsageScreen() {
       <Text style={styles.sectionLabel}>按模型</Text>
       {groups.length ? groups.map((group) => <View key={group.key} style={styles.groupRow}>
         <View style={styles.groupCopy}>
-          <Text numberOfLines={1} style={styles.groupTitle}>{group.label}</Text>
+          <Text numberOfLines={1} style={styles.groupTitle}>{providers.find((provider) => group.key.startsWith(`${provider.id}:`))?.label ?? '模型'} · {group.label}</Text>
           <Text style={styles.groupMeta}>{group.summary.requests} 次请求 · 输入 {formatTokens(group.summary.inputTokens)} / 输出 {formatTokens(group.summary.outputTokens)}</Text>
         </View>
         <Text style={styles.groupDuration}>{Math.round(group.summary.durationMs / 1000)}s</Text>
@@ -62,7 +62,7 @@ export default function AiUsageScreen() {
         <View style={[styles.recordDot, record.status === 'success' ? styles.recordDotOk : record.status === 'cancelled' ? styles.recordDotMuted : styles.recordDotWarn]} />
         <View style={styles.recordCopy}>
           <Text numberOfLines={1} style={styles.recordTitle}>{record.modelId || '未命名模型'} · {record.taskId === 'chat' ? '对话' : record.taskId === 'connection.probe' ? '检测' : '其它'}</Text>
-          <Text style={styles.recordMeta}>{formatRecordTime(record.createdAt)} · 输入 {formatTokens(record.inputTokens)} / 输出 {formatTokens(record.outputTokens)} · {Math.round(record.durationMs)}ms{record.errorCode ? ` · ${record.errorCode}` : ''}</Text>
+          <Text style={styles.recordMeta}>{formatRecordTime(record.createdAt)} · 输入 {formatTokens(record.inputTokens)} / 输出 {formatTokens(record.outputTokens)} · {Math.round(record.durationMs)}ms{record.errorCode ? ` · ${usageErrorLabel(record.errorCode)}` : ''}</Text>
         </View>
       </View>)}
 
@@ -72,6 +72,10 @@ export default function AiUsageScreen() {
 }
 
 function filterByRange(records: AiUsageRecord[], range: RangeId): AiUsageRecord[] {
+  if (range === 'today') {
+    const todayKey = new Date().toDateString();
+    return records.filter((record) => new Date(record.createdAt).toDateString() === todayKey);
+  }
   const days = RANGES.find((item) => item.id === range)?.days ?? null;
   if (days === null) return records;
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;

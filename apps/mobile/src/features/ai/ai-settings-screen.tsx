@@ -128,7 +128,7 @@ export default function AiSettingsScreen() {
       </View>
 
       <View style={styles.group}>
-        <SwitchRow checked={enabled} label="启用 AI 功能" hint={enabled ? '所有 AI 入口可见；请求只在点击后发出' : '关闭后所有 AI 入口隐藏，不会发起请求'} onPress={() => void toggleEnabled(!enabled)} />
+        <SwitchRow checked={enabled} label="启用 AI 功能" hint={enabled ? '底部 AI 按钮与所有 AI 入口可见；请求只在点击后发出' : '关闭后底部 AI 按钮与所有 AI 入口隐藏，不会发起请求'} onPress={() => void toggleEnabled(!enabled)} />
       </View>
 
       <Text style={styles.sectionLabel}>服务商</Text>
@@ -181,8 +181,10 @@ export default function AiSettingsScreen() {
         </View>
         <Pressable accessibilityRole="button" disabled={busy !== null} onPress={() => void indexKnowledge()} style={({ pressed }) => [styles.smallButton, busy !== null && styles.disabled, pressed && styles.pressed]}><Text style={styles.smallButtonText}>{knowledge.indexing ? '整理中…' : '立即整理'}</Text></Pressable>
       </View>
-      <Pressable accessibilityRole="button" onPress={() => router.push('/ai' as RelativePathString)} style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}><View><Text style={styles.usageTitle}>AI 对话</Text><Text style={styles.usageHint}>完整对话与记忆回溯；日常更推荐从搜索直接问一句</Text></View><Text style={styles.usageChevron}>›</Text></Pressable>
-      <Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)} style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}><View><Text style={styles.usageTitle}>记忆</Text><Text style={styles.usageHint}>{knowledge.memories.filter((item) => item.status === 'active').length} 条生效 · 自动整理{knowledge.autoExtract ? '已开启' : '已关闭'}</Text></View><Text style={styles.usageChevron}>›</Text></Pressable>
+      {enabled ? <>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/ai' as RelativePathString)} style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}><View><Text style={styles.usageTitle}>AI 对话</Text><Text style={styles.usageHint}>完整对话与记忆回溯；日常更推荐从底部 AI 按钮进入</Text></View><Text style={styles.usageChevron}>›</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)} style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}><View><Text style={styles.usageTitle}>记忆</Text><Text style={styles.usageHint}>{knowledge.memories.filter((item) => item.status === 'active').length} 条生效 · 自动整理{knowledge.autoExtract ? '已开启' : '已关闭'}</Text></View><Text style={styles.usageChevron}>›</Text></Pressable>
+      </> : null}
 
       <View style={styles.footNote}><Text style={styles.footNoteText}>关闭 AI 或删除全部数据会清理本机保存的 Key。服务商价格与余额可能变化，估算值不能替代账单。</Text></View>
     </ScrollView>
@@ -231,16 +233,16 @@ function CardAction({ danger = false, disabled = false, label, onPress }: { dang
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-  introCard: { padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.sheet },
+  introCard: { paddingVertical: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   eyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
   introTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 26 },
   introText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.body, lineHeight: 22 },
-  group: { marginTop: spacing.lg, overflow: 'hidden', borderRadius: radius.md, backgroundColor: colors.sheet },
+  group: { marginTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
   sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2 },
-  emptyCard: { padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.sheet },
+  emptyCard: { paddingVertical: spacing.xl },
   emptyTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   emptyText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
-  providerCard: { marginBottom: spacing.md, padding: spacing.md, borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sheet },
+  providerCard: { paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   providerHead: { flexDirection: 'row', alignItems: 'flex-start' },
   providerCopy: { minWidth: 0, flex: 1 },
   providerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -253,21 +255,21 @@ const styles = createThemedStyles(() => ({
   statusDotWarn: { backgroundColor: colors.sun },
   providerStatus: { flex: 1, color: colors.inkFaint, fontSize: typography.size.meta },
   providerStatusWarn: { color: colors.danger },
-  providerActions: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  cardAction: { minHeight: 36, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.paper },
-  cardActionText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
+  providerActions: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
+  cardAction: { minHeight: 30, alignItems: 'center', justifyContent: 'center' },
+  cardActionText: { color: colors.life, fontSize: typography.size.meta, fontWeight: '700' },
   cardActionDanger: { color: colors.danger },
-  addButton: { minHeight: 48, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: radius.md, backgroundColor: colors.lifeLight },
+  addButton: { minHeight: 46, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft },
   addButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' },
   disabledHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
-  usageCard: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
+  usageCard: { paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   usageTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   usageHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   usageChevron: { marginLeft: spacing.md, color: colors.inkFaint, fontSize: 24 },
   knowledgeCopy: { minWidth: 0, flex: 1 },
-  smallButton: { marginLeft: spacing.md, minHeight: 36, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.lifeLight },
+  smallButton: { marginLeft: spacing.md, minHeight: 34, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   smallButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' },
-  linkCard: { marginTop: spacing.sm, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, backgroundColor: colors.sheet },
+  linkCard: { paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   footNote: { marginTop: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   footNoteText: { color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
   switchRow: { minHeight: 76, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center' },

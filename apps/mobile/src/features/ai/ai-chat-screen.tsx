@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { RelativePathString } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import * as Clipboard from 'expo-clipboard';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
@@ -42,6 +42,7 @@ export default function AiChatScreen() {
   const [thinking, setThinking] = useState(false);
   const [pendingMemoryBatch, setPendingMemoryBatch] = useState<number | null>(null);
   const autoAskedRef = useRef(false);
+  const extractingMemoryRef = useRef(false);
   const ensureIndexed = knowledge.ensureIndexed;
 
   const pinnedContext = useMemo(() => {
@@ -90,11 +91,12 @@ export default function AiChatScreen() {
       setMessages((current) => [...current, { id: `assistant_${Date.now()}`, role: 'assistant', text: answer.text.trim(), question: trimmed, sources: result.hits, memoryCount, failed: false }]);
       scrollToEnd();
       void knowledge.markMemoriesUsed([...coreMemories.map((item) => item.id), ...recalledMemories.map((hit) => hit.item.id)]).catch(() => undefined);
-      if (knowledge.autoExtract && knowledge.memoryEnabled) {
+      if (knowledge.autoExtract && knowledge.memoryEnabled && !extractingMemoryRef.current) {
+        extractingMemoryRef.current = true;
         const sourcesSummary = result.structured.renderedText || result.hits.map((hit) => `${hit.title}：${hit.snippet}`).join('\n');
         void knowledge.extractMemories({ question: trimmed, answer: answer.text, sourcesSummary }).then((count) => {
           if (count > 0) setPendingMemoryBatch(count);
-        }).catch(() => undefined);
+        }).catch(() => undefined).finally(() => { extractingMemoryRef.current = false; });
       }
     } catch (cause) {
       if (isAiRequestError(cause) && cause.code === 'cancelled') {
@@ -116,6 +118,23 @@ export default function AiChatScreen() {
     autoAskedRef.current = true;
     void send(question);
   }, [ai.enabled, params.ask, params.auto, send]);
+
+  const handleBack = useCallback(() => {
+    if (!messages.length) { router.back(); return; }
+    feedback.alert('离开对话？', '当前对话不会保存；记忆与历史记录不受影响。', [
+      { text: '取消', style: 'cancel' },
+      { text: '离开', style: 'destructive', onPress: () => router.back() },
+    ]);
+  }, [messages.length, router]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!messages.length) return false;
+      handleBack();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [handleBack, messages.length]);
 
   const stop = () => {
     abortRef.current?.abort();
@@ -149,7 +168,7 @@ export default function AiChatScreen() {
 
   return <SafeAreaView style={styles.safeArea}>
     <ToolPageHeader
-      onBack={() => router.back()}
+      onBack={handleBack}
       right={<View style={styles.headerActions}>
         <ToolPageHeaderAction accessibilityLabel="搜索本机记录" onPress={() => router.push('/search' as RelativePathString)}><SymbolView name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }} size={19} tintColor={colors.inkSoft} type="hierarchical" /></ToolPageHeaderAction>
         <ToolPageHeaderTextAction accessibilityLabel="管理记忆" label="记忆" onPress={() => router.push('/ai-memory' as RelativePathString)} />
@@ -165,24 +184,29 @@ export default function AiChatScreen() {
         {!messages.length ? <View style={styles.intro}>
           <Text style={styles.introEyebrow}>ASK YOUR RECORDS</Text>
           <Text style={styles.introTitle}>可以问记录里的任何事</Text>
-          <Text style={styles.introText}>回答只依据本机记录与记忆；命中的片段会在你发送问题时交给所选服务商。没有相关记录时会直接说没有。</Text>
-          <View style={styles.suggestionRow}>{SUGGESTIONS.map((suggestion) => <Pressable accessibilityRole="button" disabled={!ai.enabled} key={suggestion} onPress={() => void send(suggestion)} style={({ pressed }) => [styles.suggestion, !ai.enabled && styles.disabled, pressed && styles.pressed]}><Text style={styles.suggestionText}>{suggestion}</Text></Pressable>)}</View>
+          <Text style={styles.introText}>回答只依据本机记录与记忆；命中的片段只在你发送问题时交给所选服务商。没有相关记录时，它会直接说没有。</Text>
+          <View style={styles.suggestionRow}>{SUGGESTIONS.map((suggestion) => <Pressable accessibilityRole="button" disabled={!ai.enabled} key={suggestion} onPress={() => void send(suggestion)} style={({ pressed }) => [styles.suggestion, !ai.enabled && styles.disabled, pressed && styles.pressed]}><Text style={styles.suggestionText}>{suggestion}</Text><Text style={styles.suggestionArrow}>›</Text></Pressable>)}</View>
         </View> : null}
         {messages.length ? <View style={styles.conversationBar}><Text style={styles.conversationLabel}>{messages.filter((item) => item.role === 'user').length} 轮问答</Text><Pressable accessibilityRole="button" onPress={startNewConversation}><Text style={styles.newChatAction}>新对话</Text></Pressable></View> : null}
-        {messages.map((message) => <View key={message.id} style={[styles.bubble, message.role === 'user' ? styles.userBubble : styles.assistantBubble, message.failed && styles.failedBubble]}>
-          {message.role === 'assistant' ? <View style={styles.assistantHead}><Text style={styles.assistantLabel}>AI</Text><Pressable accessibilityLabel="复制回答" accessibilityRole="button" hitSlop={8} onPress={() => { void Clipboard.setStringAsync(message.text); feedback.notice('已复制回答'); }}><Text style={styles.copyAction}>复制</Text></Pressable></View> : null}
-          <Text style={[styles.bubbleText, message.role === 'user' ? styles.userBubbleText : styles.assistantText]}>{message.text}</Text>
-          {message.failed ? <Pressable accessibilityRole="button" onPress={() => retryMessage(message)} style={({ pressed }) => [styles.retryRow, pressed && styles.pressed]}><SymbolView name={{ android: 'refresh', ios: 'arrow.clockwise', web: 'refresh' }} size={14} tintColor={colors.life} type="hierarchical" /><Text style={styles.retryText}>重试</Text></Pressable> : null}
-          {message.role === 'assistant' && message.sources.length ? <View style={styles.sources}>
-            <Text style={styles.sourcesLabel}>来源</Text>
-            {message.sources.slice(0, 5).map((hit) => <Pressable accessibilityRole="button" key={hit.id} onPress={() => openSource(hit)} style={({ pressed }) => [styles.sourceRow, pressed && styles.pressed]}>
-              <Text numberOfLines={1} style={styles.sourceTitle}>{hit.citationId} · {hit.title}</Text>
-              <Text numberOfLines={1} style={styles.sourceMeta}>{[hit.dayKey?.replaceAll('-', '.'), hit.persons.map((person) => person.name).join('、')].filter(Boolean).join(' · ') || '本机记录'}</Text>
-            </Pressable>)}
-          </View> : null}
-          {message.role === 'assistant' && message.memoryCount > 0 ? <Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)}><Text style={styles.memoryNote}>本次参考了 {message.memoryCount} 条记忆 · 查看</Text></Pressable> : null}
-        </View>)}
-        {thinking ? <View style={[styles.bubble, styles.assistantBubble]}><ActivityIndicator color={colors.life} size="small" /><Text style={styles.thinkingText}>正在检索本机记录…</Text></View> : null}
+        {messages.map((message) => message.role === 'user'
+          ? <View key={message.id} style={styles.userTurn}>
+            <Text style={styles.turnAuthorRight}>你</Text>
+            <Text style={styles.userText}>{message.text}</Text>
+          </View>
+          : <View key={message.id} style={[styles.aiTurn, message.failed && styles.failedTurn]}>
+            <View style={styles.turnHead}><Text style={styles.turnAuthor}>AI</Text><Pressable accessibilityLabel="复制回答" accessibilityRole="button" hitSlop={8} onPress={() => { void Clipboard.setStringAsync(message.text); feedback.notice('已复制回答'); }}><Text style={styles.copyAction}>复制</Text></Pressable></View>
+            <Text selectable style={styles.assistantText}>{message.text}</Text>
+            {message.failed ? <Pressable accessibilityRole="button" onPress={() => retryMessage(message)} style={({ pressed }) => [styles.retryRow, pressed && styles.pressed]}><SymbolView name={{ android: 'refresh', ios: 'arrow.clockwise', web: 'refresh' }} size={14} tintColor={colors.life} type="hierarchical" /><Text style={styles.retryText}>重试</Text></Pressable> : null}
+            {message.sources.length ? <View style={styles.footnotes}>
+              <Text style={styles.footnotesLabel}>来源</Text>
+              {message.sources.slice(0, 5).map((hit) => <Pressable accessibilityRole="button" key={hit.id} onPress={() => openSource(hit)} style={({ pressed }) => [styles.footnoteRow, pressed && styles.pressed]}>
+                <Text numberOfLines={1} style={styles.footnoteTitle}>{hit.citationId} {hit.title}</Text>
+                <Text numberOfLines={1} style={styles.footnoteMeta}>{[hit.dayKey?.replaceAll('-', '.'), hit.persons.map((person) => person.name).join('、')].filter(Boolean).join(' · ') || '本机记录'}</Text>
+              </Pressable>)}
+            </View> : null}
+            {message.memoryCount > 0 ? <Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)}><Text style={styles.memoryNote}>参考了 {message.memoryCount} 条记忆 · 查看</Text></Pressable> : null}
+          </View>)}
+        {thinking ? <View style={styles.aiTurn}><View style={styles.thinkingRow}><ActivityIndicator color={colors.life} size="small" /><Text style={styles.thinkingText}>正在翻你的记录…</Text></View></View> : null}
         {pendingMemoryBatch ? <View style={styles.memoryToast}><Text style={styles.memoryToastText}>已自动记住 {pendingMemoryBatch} 件事</Text><View style={styles.memoryToastActions}><Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)}><Text style={styles.memoryToastAction}>查看</Text></Pressable><Pressable accessibilityRole="button" onPress={() => void undoMemories()}><Text style={styles.memoryToastAction}>撤销</Text></Pressable></View></View> : null}
       </ScrollView>
       <View style={styles.composer}>
@@ -207,52 +231,52 @@ const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   flex: { flex: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
-  content: { padding: spacing.lg, paddingBottom: spacing.md },
-  noticeCard: { margin: spacing.lg, marginBottom: 0, padding: spacing.lg, borderRadius: radius.md, backgroundColor: colors.sheet },
-  noticeTitle: { color: colors.ink, fontSize: 15, fontWeight: '700' },
-  noticeText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 18 },
-  noticeButton: { marginTop: spacing.md, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
-  noticeButtonText: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' },
-  indexBanner: { marginHorizontal: spacing.lg, marginTop: spacing.sm, paddingHorizontal: spacing.md, minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.sheet },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  noticeCard: { margin: spacing.lg, padding: spacing.lg, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, backgroundColor: colors.sheet },
+  noticeTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 18 },
+  noticeText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.meta, lineHeight: 18 },
+  noticeButton: { marginTop: spacing.md, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
+  noticeButtonText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
+  indexBanner: { marginHorizontal: spacing.lg, marginTop: spacing.sm, minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   indexBannerText: { color: colors.inkFaint, fontSize: typography.size.meta },
-  intro: { paddingVertical: spacing.lg },
-  introEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.3 },
-  introTitle: { marginTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 26, lineHeight: 34 },
-  introText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.body, lineHeight: 22 },
-  suggestionRow: { marginTop: spacing.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  suggestion: { minHeight: 40, paddingVertical: spacing.sm, paddingHorizontal: 2, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  intro: { paddingTop: spacing.lg, paddingBottom: spacing.md },
+  introEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.4 },
+  introTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 30, lineHeight: 38, letterSpacing: -0.4 },
+  introText: { marginTop: spacing.sm, color: colors.inkSoft, fontSize: typography.size.body, lineHeight: 23 },
+  suggestionRow: { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
+  suggestion: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
   suggestionText: { color: colors.inkSoft, fontSize: typography.size.body },
-  bubble: { maxWidth: '92%', marginBottom: spacing.md, padding: spacing.md, borderRadius: radius.md },
-  assistantHead: { marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  assistantLabel: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.2, fontWeight: '700' },
-  copyAction: { color: colors.inkFaint, fontSize: typography.size.meta },
-  assistantText: { color: colors.ink, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },
-  sourcesLabel: { marginBottom: 2, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
-  userBubble: { alignSelf: 'flex-end', backgroundColor: colors.lifeLight },
-  assistantBubble: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, backgroundColor: colors.paper },
-  failedBubble: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.dangerLine },
-  bubbleText: { color: colors.ink, fontSize: typography.size.body, lineHeight: 22 },
-  userBubbleText: { color: colors.ink },
-  thinkingText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta },
-  conversationBar: { marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  suggestionArrow: { color: colors.inkFaint, fontSize: 18 },
+  conversationBar: { paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   conversationLabel: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: typography.size.meta },
   newChatAction: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
+  userTurn: { marginTop: spacing.lg, alignSelf: 'flex-end', maxWidth: '88%', alignItems: 'flex-end' },
+  turnAuthorRight: { color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1, marginBottom: 4 },
+  userText: { color: colors.ink, fontSize: typography.size.body, lineHeight: 23, textAlign: 'right' },
+  aiTurn: { marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
+  failedTurn: { borderTopColor: colors.dangerLine },
+  turnHead: { marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  turnAuthor: { color: colors.life, fontFamily: typography.mono, fontSize: typography.size.meta, letterSpacing: 1.4, fontWeight: '700' },
+  copyAction: { color: colors.inkFaint, fontSize: typography.size.meta },
+  assistantText: { color: colors.ink, fontFamily: typography.display, fontSize: 16, lineHeight: 27 },
   retryRow: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 4 },
   retryText: { color: colors.life, fontSize: typography.size.meta, fontWeight: '700' },
-  memoryToastActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  sources: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
-  sourceRow: { paddingVertical: 5 },
-  sourceTitle: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
-  sourceMeta: { marginTop: 2, color: colors.inkFaint, fontSize: typography.size.meta },
+  footnotes: { marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
+  footnotesLabel: { marginBottom: 4, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 },
+  footnoteRow: { paddingVertical: 4 },
+  footnoteTitle: { color: colors.inkSoft, fontSize: typography.size.caption },
+  footnoteMeta: { marginTop: 2, color: colors.inkFaint, fontSize: typography.size.meta },
   memoryNote: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta },
-  memoryToast: { marginBottom: spacing.md, paddingHorizontal: spacing.md, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.sm, backgroundColor: colors.lifeLight },
+  thinkingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  thinkingText: { color: colors.inkFaint, fontSize: typography.size.meta },
+  memoryToast: { marginTop: spacing.lg, minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft },
   memoryToastText: { color: colors.inkSoft, fontSize: typography.size.meta },
-  memoryToastAction: { color: colors.life, fontSize: typography.size.caption, fontWeight: '800' },
-  composer: { padding: spacing.md, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft, backgroundColor: colors.sheet },
-  input: { minHeight: 44, maxHeight: 120, flex: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, fontSize: typography.size.body, backgroundColor: colors.sheet },
-  sendButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.life },
+  memoryToastActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  memoryToastAction: { color: colors.life, fontSize: typography.size.caption, fontWeight: '700' },
+  composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft, backgroundColor: colors.paper },
+  input: { minHeight: 42, maxHeight: 120, flex: 1, paddingVertical: spacing.sm, paddingHorizontal: 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, color: colors.ink, fontSize: typography.size.body },
+  sendButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.life },
   stopButton: { backgroundColor: colors.danger },
-  sendButtonText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
-  disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.7 },
+  disabled: { opacity: 0.4 },
+  pressed: { opacity: 0.65 },
 }));

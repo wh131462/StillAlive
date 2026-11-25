@@ -53,6 +53,24 @@ export function formatBalance(balance: AiBalance): string {
   ].join('\n');
 }
 
+export function usageErrorLabel(code: AiUsageRecord['errorCode']): string {
+  if (!code) return '';
+  const labels: Record<NonNullable<AiUsageRecord['errorCode']>, string> = {
+    auth_failed: '鉴权失败',
+    insufficient_balance: '余额不足',
+    model_missing: '模型不存在',
+    rate_limited: '请求过频',
+    provider_error: '服务商异常',
+    timeout: '超时',
+    cancelled: '已取消',
+    network_failed: '网络不可用',
+    invalid_config: '配置问题',
+    unsupported: '不支持',
+    unknown: '未知错误',
+  };
+  return labels[code];
+}
+
 export interface AiUsageSummary {
   requests: number;
   succeeded: number;

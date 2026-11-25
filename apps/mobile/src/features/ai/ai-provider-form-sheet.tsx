@@ -55,7 +55,7 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
     }
   };
 
-  return <DraggableBottomSheet accessibilityLabel="服务商设置" keyboardAvoiding open={open} onClose={onClose}>
+  return <DraggableBottomSheet accessibilityLabel="服务商设置" dismissDisabled={saving} keyboardAvoiding open={open} onClose={onClose}>
     <View style={styles.header}>
       <Text style={styles.eyebrow}>AI PROVIDER</Text>
       <Text style={styles.title}>{editing ? '编辑服务商' : '添加服务商'}</Text>
@@ -74,14 +74,14 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
       <Text style={styles.fieldLabel}>名称（可选）</Text>
       <TextInput autoCapitalize="none" onChangeText={setLabel} placeholder={AI_PROVIDER_KIND_META[kind].label} placeholderTextColor={colors.inkFaint} style={styles.input} value={label} />
 
-      <Text style={styles.fieldLabel}>服务地址</Text>
+      <Text style={styles.fieldLabel}>服务地址 *</Text>
       <TextInput autoCapitalize="none" autoCorrect={false} keyboardType="url" onChangeText={setBaseUrl} placeholder={AI_PROVIDER_KIND_META[kind].baseUrlPlaceholder} placeholderTextColor={colors.inkFaint} style={styles.input} value={baseUrl} />
 
       <Text style={styles.fieldLabel}>模型</Text>
       <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setModelId} placeholder="保存后可点“检测”获取模型列表" placeholderTextColor={colors.inkFaint} style={styles.input} value={modelId} />
       <Text style={styles.fieldHint}>可以先留空保存；填写模型名后才能对话。</Text>
 
-      <Text style={styles.fieldLabel}>API Key</Text>
+      <Text style={styles.fieldLabel}>API Key {editing ? '（留空不修改）' : '*'}</Text>
       <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setApiKey} placeholder={editing ? '留空表示不修改已保存的 Key' : '粘贴 API Key'} placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} value={apiKey} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
@@ -103,9 +103,9 @@ const styles = createThemedStyles(() => ({
   fieldLabel: { marginTop: spacing.md, color: colors.inkSoft, fontSize: 12, fontWeight: '700' },
   input: { minHeight: 44, marginTop: 4, paddingHorizontal: 2, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, color: colors.ink, fontSize: typography.size.body },
   fieldHint: { marginTop: 5, color: colors.inkFaint, fontSize: typography.size.meta },
-  kindRow: { flexDirection: 'row', gap: spacing.sm, marginTop: 6 },
-  kindChip: { minHeight: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.sm },
-  kindChipActive: { borderColor: colors.life, backgroundColor: colors.lifeLight },
+  kindRow: { flexDirection: 'row', gap: spacing.lg, marginTop: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  kindChip: { minHeight: 40, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  kindChipActive: { borderBottomColor: colors.life },
   kindChipText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
   kindChipTextActive: { color: colors.life },
   kindHint: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta },
