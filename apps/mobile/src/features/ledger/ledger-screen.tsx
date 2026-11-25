@@ -16,13 +16,11 @@ import { feedback } from '../../shared/feedback';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
 import { createThemedStyles } from '../../shared/theme/app-theme';
+import { LEDGER_CATEGORIES } from './domain/ledger-categories';
 import { DatePickerField } from '../people/date-time-picker';
 import type { DateParts } from '../people/date-time-picker';
 
-const CATEGORIES: Record<LedgerTransactionType, string[]> = {
-  expense: ['餐饮', '交通', '购物', '居住', '娱乐', '医疗', '教育', '其他'],
-  income: ['工资', '奖金', '兼职', '理财', '红包', '退款', '报销', '其他'],
-};
+
 const AMOUNT_KEYPAD_ROWS = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['0', '.']] as const;
 const KEYPAD_HEIGHT = 200;
 const KEYPAD_ROW_GAP = spacing.xs;
@@ -90,8 +88,8 @@ export default function LedgerScreen() {
     const controller = new AbortController();
     aiParseAbortRef.current = controller;
     try {
-      const result = await ai.chat(buildLedgerParseMessages({ text, today, categories: CATEGORIES }), { taskId: 'ledger.parse', maxOutputTokens: 300, temperature: 0.2, signal: controller.signal });
-      const parsed = parseLedgerParseResponse(result.text, { today, categories: CATEGORIES });
+      const result = await ai.chat(buildLedgerParseMessages({ text, today, categories: LEDGER_CATEGORIES }), { taskId: 'ledger.parse', maxOutputTokens: 300, temperature: 0.2, signal: controller.signal });
+      const parsed = parseLedgerParseResponse(result.text, { today, categories: LEDGER_CATEGORIES });
       if (!parsed) {
         feedback.alert('没看懂这句话', '换个说法试试，例如“昨天午饭 32，打车 18”。');
         return;
@@ -169,7 +167,7 @@ function LedgerActionOption({ destructive = false, icon, label, onPress }: { des
 function TransactionSheet({ draft, editing, open, onClose, onCreate, onUpdate, today }: { draft: LedgerParseResult | null; editing: LedgerTransaction | null; open: boolean; onClose(): void; onCreate(transaction: LedgerTransaction): Promise<void>; onUpdate(transaction: LedgerTransaction): Promise<void>; today: DayKey }) {
   const [type, setType] = useState<LedgerTransactionType>('expense');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(CATEGORIES.expense[0]);
+  const [category, setCategory] = useState(LEDGER_CATEGORIES.expense[0]);
   const [dayParts, setDayParts] = useState<DateParts>(() => parseDayKey(today));
   const [note, setNote] = useState('');
   const deleteRepeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -177,7 +175,7 @@ function TransactionSheet({ draft, editing, open, onClose, onCreate, onUpdate, t
   useEffect(() => {
     if (!open) return;
     const initialType = editing?.type ?? draft?.type ?? 'expense';
-    setType(initialType); setAmount(editing ? (editing.amountCents / 100).toFixed(2) : draft ? draft.amount.toFixed(2) : ''); setCategory(editing?.category ?? draft?.category ?? CATEGORIES[initialType][0]); setDayParts(parseDayKey(editing?.dayKey ?? (draft?.dayKey as DayKey | undefined) ?? today)); setNote(editing?.note ?? draft?.note ?? '');
+    setType(initialType); setAmount(editing ? (editing.amountCents / 100).toFixed(2) : draft ? draft.amount.toFixed(2) : ''); setCategory(editing?.category ?? draft?.category ?? LEDGER_CATEGORIES[initialType][0]); setDayParts(parseDayKey(editing?.dayKey ?? (draft?.dayKey as DayKey | undefined) ?? today)); setNote(editing?.note ?? draft?.note ?? '');
     return () => {
       if (deleteRepeatRef.current) clearInterval(deleteRepeatRef.current);
       deleteRepeatRef.current = null;
@@ -198,12 +196,12 @@ function TransactionSheet({ draft, editing, open, onClose, onCreate, onUpdate, t
     <View style={sheetLayoutStyles.sheetContent}>
       <View style={sheetLayoutStyles.sheetHeader}><Text style={sheetLayoutStyles.sheetTitle}>{editing ? '编辑账单' : '记一笔'}</Text></View>
       <View style={sheetLayoutStyles.controlRow}>
-        <View style={sheetLayoutStyles.typeRow}>{(['expense', 'income'] as const).map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: type === item }} key={item} onPress={() => { if (item === type) return; setType(item); setCategory(CATEGORIES[item][0]); }} style={[sheetLayoutStyles.typeButton, type === item && sheetLayoutStyles.typeButtonActive]}><Text style={[sheetLayoutStyles.typeButtonText, type === item && sheetLayoutStyles.typeButtonTextActive]}>{item === 'expense' ? '支出' : '收入'}</Text></Pressable>)}</View>
+        <View style={sheetLayoutStyles.typeRow}>{(['expense', 'income'] as const).map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: type === item }} key={item} onPress={() => { if (item === type) return; setType(item); setCategory(LEDGER_CATEGORIES[item][0]); }} style={[sheetLayoutStyles.typeButton, type === item && sheetLayoutStyles.typeButtonActive]}><Text style={[sheetLayoutStyles.typeButtonText, type === item && sheetLayoutStyles.typeButtonTextActive]}>{item === 'expense' ? '支出' : '收入'}</Text></Pressable>)}</View>
         <DatePickerField fieldStyle={sheetLayoutStyles.compactDateField} formatValue={(value) => `${value.month} 月 ${value.day} 日`} label="日期" maximumDate={new Date(2100, 11, 31)} onChange={setDayParts} value={dayParts} />
       </View>
       <View accessible accessibilityLabel={`金额 ${amount || '0.00'} 元`} style={sheetLayoutStyles.amountDisplay}><Text style={sheetLayoutStyles.currency}>¥</Text><Text adjustsFontSizeToFit minimumFontScale={0.55} numberOfLines={1} style={sheetLayoutStyles.amountText}>{amount || '0.00'}</Text></View>
       <View style={sheetLayoutStyles.amountDivider} />
-      <View accessibilityLabel={`选择${type === 'expense' ? '支出' : '收入'}分类`} style={sheetLayoutStyles.categoryGrid}>{CATEGORIES[type].map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: category === item }} key={item} onPress={() => setCategory(item)} style={sheetLayoutStyles.categoryButton}><View style={[sheetLayoutStyles.categoryIcon, category === item && sheetLayoutStyles.categoryIconActive]}><Text style={[sheetLayoutStyles.categoryIconText, category === item && sheetLayoutStyles.categoryIconTextActive]}>{item.slice(0, 1)}</Text></View><Text style={[sheetLayoutStyles.categoryButtonText, category === item && sheetLayoutStyles.categoryButtonTextActive]}>{item}</Text></Pressable>)}</View>
+      <View accessibilityLabel={`选择${type === 'expense' ? '支出' : '收入'}分类`} style={sheetLayoutStyles.categoryGrid}>{LEDGER_CATEGORIES[type].map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: category === item }} key={item} onPress={() => setCategory(item)} style={sheetLayoutStyles.categoryButton}><View style={[sheetLayoutStyles.categoryIcon, category === item && sheetLayoutStyles.categoryIconActive]}><Text style={[sheetLayoutStyles.categoryIconText, category === item && sheetLayoutStyles.categoryIconTextActive]}>{item.slice(0, 1)}</Text></View><Text style={[sheetLayoutStyles.categoryButtonText, category === item && sheetLayoutStyles.categoryButtonTextActive]}>{item}</Text></Pressable>)}</View>
       <TextInput accessibilityLabel="备注" maxLength={200} onChangeText={setNote} onSubmitEditing={() => Keyboard.dismiss()} placeholder="添加备注（可选）" placeholderTextColor={colors.inkFaint} returnKeyType="done" style={sheetLayoutStyles.noteInput} value={note} />
       <View style={sheetLayoutStyles.spacer} />
       <View accessibilityLabel="金额键盘" style={sheetLayoutStyles.keypadAndConfirm}>
