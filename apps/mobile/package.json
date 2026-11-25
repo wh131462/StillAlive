@@ -9,6 +9,11 @@
           "expo-dom-webview",
           "expo-audio"
         ]
+      },
+      "ios": {
+        "buildFromSource": [
+          "expo-media-library"
+        ]
       }
     }
   },
