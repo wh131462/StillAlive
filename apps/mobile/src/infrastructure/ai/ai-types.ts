@@ -102,6 +102,7 @@ export const AI_USAGE_TASK_IDS = [
   'ledger.parse',
   'excerpt.explain',
   'memory.extract',
+  'memory.verify',
   'aggregate.summarize',
   'unknown',
 ] as const;
@@ -133,6 +134,8 @@ export interface AiConversationSource {
   route: string;
   dayKey: string | null;
   personNames: string[];
+  /** me：我的信息（记录/账本/记忆等）；people：人物资料 */
+  origin?: 'me' | 'people';
 }
 
 export interface AiChatMessage {

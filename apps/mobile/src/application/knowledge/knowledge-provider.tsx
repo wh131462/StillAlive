@@ -9,9 +9,9 @@ import type { KnowledgeIndexResult } from './indexer';
 import { buildQueryTerms, packKnowledgeHits, routeForKnowledgeSource, scoreChunks } from '../../features/ai/domain/retrieval';
 import { routeStructuredQueries, resolveStructuredQueries } from '../../features/ai/domain/intent-resolvers';
 import type { CombinedStructuredResult } from '../../features/ai/domain/intent-resolvers';
-import { createMemoryRevisionJson, planMemoryWrite, scoreMemories, selectCoreMemories } from '../../features/ai/domain/memory-rules';
+import { createMemoryRevisionJson, normalizeMemoryEvidence, planMemoryWrite, scoreMemories, selectCoreMemories } from '../../features/ai/domain/memory-rules';
 import type { MemoryHit } from '../../features/ai/domain/memory-rules';
-import { buildChatAnswerMessages, buildMemoryExtractMessages, parseMemoryExtractionResponse } from '../ai/ai-tasks';
+import { buildChatAnswerMessages, buildMemoryExtractMessages, buildMemoryVerifyMessages, parseMemoryExtractionResponse, parseMemoryVerificationResponse } from '../ai/ai-tasks';
 import type { ChatPromptInput } from '../ai/ai-tasks';
 import { createLocalEntityId, hashText } from '../../features/ai/domain/knowledge-types';
 import type {
@@ -47,7 +47,7 @@ export interface KnowledgeContextValue {
   setAutoExtract(value: boolean): Promise<void>;
   ensureIndexed(force?: boolean): Promise<KnowledgeIndexResult>;
   search(input: KnowledgeQuery): Promise<KnowledgeSearchResult>;
-  buildChatMessages(input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }>;
+  buildChatMessages(input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string; today?: string }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }>;
   recallMemories(question: string, subject?: MemorySubject): Promise<{ core: MemoryItem[]; recalled: MemoryHit[] }>;
   rememberMemory(input: { content: string; kind?: MemoryKind; subject?: MemorySubject }): Promise<void>;
   forgetMemory(memoryId: string): Promise<void>;
@@ -301,11 +301,31 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
         knownPeople,
         existingMemories: existing.filter((item) => item.status === 'active').slice(0, 20).map((item) => item.content),
       }), { taskId: 'memory.extract', maxOutputTokens: 400, temperature: 0.2 });
-      const drafts = parseMemoryExtractionResponse(result.text, new Set(knownPeople.map((person) => person.id)));
+      const parsedDrafts = parseMemoryExtractionResponse(result.text, new Set(knownPeople.map((person) => person.id)));
+      if (!parsedDrafts.length) return 0;
+      // 只有能在用户问题或检索资料里找到原文依据、且模型有基本把握的记忆才写入。
+      const groundedText = normalizeMemoryEvidence(`${input.question}\n${input.sourcesSummary}`);
+      const questionIsAssertive = !/[?？]|[吗呢吧]|多少|几个|几号|谁|什么|哪|是否|是不是/u.test(input.question);
+      const drafts = parsedDrafts.filter((draft) => {
+        if (draft.confidence < 0.55) return false;
+        const evidence = normalizeMemoryEvidence(draft.evidence);
+        if (evidence.length < 4 || !groundedText.includes(evidence)) return false;
+        // 问题本身是提问时，不能只拿问题里的话当依据。
+        if (!normalizeMemoryEvidence(input.sourcesSummary).includes(evidence) && !questionIsAssertive) return false;
+        return true;
+      });
       if (!drafts.length) return 0;
+      // 第二道校验：让模型只依据原文判断候选是否被支持，不支持就不存。
+      const verified = await ai.chat(buildMemoryVerifyMessages({
+        candidates: drafts.map((draft) => ({ content: draft.content, evidence: draft.evidence })),
+        sourceText: `${input.question}\n${input.sourcesSummary}`,
+      }), { taskId: 'memory.verify', maxOutputTokens: 300, temperature: 0.1 });
+      const supported = parseMemoryVerificationResponse(verified.text, drafts.length);
+      const verifiedDrafts = drafts.filter((_draft, index) => supported.has(index));
+      if (!verifiedDrafts.length) return 0;
       batchId = createLocalEntityId('memory_batch');
       let created = 0;
-      for (const draft of drafts) {
+      for (const draft of verifiedDrafts) {
         const written = await writeMemoryPlan({
           content: draft.content,
           kind: draft.kind,
@@ -345,7 +365,7 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     setLastIndexedAt(null);
   }, [repository]);
 
-  const buildChatMessages = useCallback(async (input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }> => {
+  const buildChatMessages = useCallback(async (input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string; today?: string }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }> => {
     const result = await search({ text: input.question, tokenBudget: 5200 });
     const { core, recalled } = await recallMemories(input.question);
     const messages = buildChatAnswerMessages({
@@ -358,9 +378,10 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
       coreMemories: core,
       recalledMemories: recalled,
       history: input.history,
+      today: input.today ?? appState.today,
     });
     return { messages, result, coreMemories: core, recalledMemories: recalled };
-  }, [recallMemories, search]);
+  }, [appState.today, recallMemories, search]);
 
   const value = useMemo<KnowledgeContextValue>(() => ({
     knowledgeEnabled,

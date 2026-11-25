@@ -14,6 +14,7 @@ export interface ChatHistoryContextValue {
   open(conversationId: string | null): Promise<void>;
   start(question: string): Promise<AiConversation>;
   append(message: AiChatMessage): Promise<void>;
+  update(message: AiChatMessage): Promise<void>;
   rename(conversationId: string, title: string): Promise<void>;
   remove(conversationId: string): Promise<void>;
   clearAll(): Promise<void>;
@@ -98,6 +99,12 @@ export function ChatHistoryProvider({ children }: PropsWithChildren) {
     replaceConversation(next);
   }, [repository, replaceConversation]);
 
+  const update = useCallback(async (message: AiChatMessage): Promise<void> => {
+    await repository.saveAiChatMessage(message);
+    messagesRef.current = messagesRef.current.map((item) => item.id === message.id ? message : item);
+    setMessages(messagesRef.current);
+  }, [repository]);
+
   const rename = useCallback(async (conversationId: string, title: string): Promise<void> => {
     const conversation = conversationsRef.current.find((item) => item.id === conversationId);
     const trimmed = title.trim();
@@ -142,6 +149,7 @@ export function ChatHistoryProvider({ children }: PropsWithChildren) {
     open,
     start,
     append,
+    update,
     rename,
     remove,
     clearAll,

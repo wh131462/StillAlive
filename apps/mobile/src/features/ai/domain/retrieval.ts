@@ -120,7 +120,8 @@ export function packKnowledgeHits(input: {
 export function formatHitsForPrompt(hits: KnowledgeHit[]): string {
   return hits.map((hit) => {
     const meta = [hit.dayKey?.replaceAll('-', '.'), hit.persons.map((person) => person.name).join('、')].filter(Boolean).join(' · ');
-    return `[${hit.citationId}]${meta ? `（${meta}）` : ''} ${hit.title}\n${hit.snippet}`;
+    const origin = hit.sourceKind === 'person' || hit.sourceKind === 'person_event' ? '人物资料' : '我的记录';
+    return `[${hit.citationId}]（${origin}${meta ? ` · ${meta}` : ''}）${hit.title}\n${hit.snippet}`;
   }).join('\n\n');
 }
 

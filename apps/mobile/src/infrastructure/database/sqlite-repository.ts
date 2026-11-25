@@ -1764,6 +1764,7 @@ function parseAiConversationSources(value: string | null): AiConversationSource[
         route: typeof candidate.route === 'string' ? candidate.route : '',
         dayKey: typeof candidate.dayKey === 'string' ? candidate.dayKey : null,
         personNames: Array.isArray(candidate.personNames) ? candidate.personNames.filter((name): name is string => typeof name === 'string') : [],
+        ...(candidate.origin === 'me' || candidate.origin === 'people' ? { origin: candidate.origin } : {}),
       }];
     });
   } catch {

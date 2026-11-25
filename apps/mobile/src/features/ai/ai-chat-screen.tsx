@@ -14,6 +14,10 @@ import type { KnowledgeHit } from '../../features/ai/domain/knowledge-types';
 import type { AiChatMessage, AiConversationSource, AiMessage } from '../../infrastructure/ai/ai-types';
 import { isAiRequestError } from '../../infrastructure/ai/ai-types';
 import { aiErrorMessage, formatRelativeTime } from '../ai/ai-copy';
+import { parseActionProposals, prepareAction } from '../../features/ai/domain/app-actions';
+import type { PreparedAiAction } from '../../features/ai/domain/app-actions';
+import { personDisplayName } from '../people/person-profile';
+import type { LedgerTransaction } from '@still-alive/types';
 import MarkdownView from '../journal/markdown-view.dom';
 import { ToolPageHeader, ToolPageHeaderAction } from '../../shared/components/tool-page-header';
 import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-avoiding-view';
@@ -36,7 +40,17 @@ function toSource(hit: KnowledgeHit): AiConversationSource {
     route: hit.route,
     dayKey: hit.dayKey ?? null,
     personNames: hit.persons.map((person) => person.name),
+    origin: hit.sourceKind === 'person' || hit.sourceKind === 'person_event' ? 'people' : 'me',
   };
+}
+
+function structuredFactRoute(source: { kind: string; id: string } | null): string {
+  if (!source) return '';
+  if (source.kind === 'person') return `/person/${source.id}`;
+  if (source.kind === 'post') return `/post/${source.id}`;
+  if (source.kind === 'excerpt') return '/excerpts';
+  if (source.kind === 'music') return '/music-box';
+  return '';
 }
 
 function createMessage(input: Pick<AiChatMessage, 'conversationId' | 'role' | 'text' | 'question'> & Partial<Pick<AiChatMessage, 'failed' | 'memoryCount' | 'sources'>>): AiChatMessage {
@@ -71,7 +85,7 @@ export default function AiChatScreen() {
   const ai = useAi();
   const chat = useChatHistory();
   const knowledge = useKnowledge();
-  const { posts } = useAppState();
+  const { checkInToday, createLedgerTransaction, createPerson, people, posts, savePost, today, todayCheckIn } = useAppState();
   const scrollRef = useRef<ScrollView>(null);
   const abortRef = useRef<AbortController | null>(null);
   const autoStartedRef = useRef(false);
@@ -81,6 +95,7 @@ export default function AiChatScreen() {
   const [failure, setFailure] = useState<FailureState | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pendingMemoryBatch, setPendingMemoryBatch] = useState<number | null>(null);
+  const [actionState, setActionState] = useState<Record<string, { status: 'running' | 'error'; error?: string }>>({});
   const ensureIndexed = knowledge.ensureIndexed;
 
   const pinnedContext = useMemo(() => {
@@ -114,7 +129,7 @@ export default function AiChatScreen() {
     }
     const reuseConversation = !options?.fresh && Boolean(chat.activeConversation);
     const history: AiMessage[] = reuseConversation
-      ? chat.messages.filter((message) => !message.failed).slice(-MAX_HISTORY_TURNS).map((message) => ({ role: message.role, content: message.text }))
+      ? chat.messages.filter((message) => !message.failed).slice(-MAX_HISTORY_TURNS).map((message) => ({ role: message.role, content: parseActionProposals(message.text).visibleText }))
       : [];
     setFailure(null);
     setInput('');
@@ -129,7 +144,16 @@ export default function AiChatScreen() {
       const { messages: promptMessages, result, coreMemories, recalledMemories } = await knowledge.buildChatMessages({ question: trimmed, history, ...(pinnedContext ? { pinnedContext } : {}) });
       const answer = await ai.chat(promptMessages, { taskId: 'chat.answer', maxOutputTokens: 1200, temperature: 0.65, signal: controller.signal });
       const memoryCount = coreMemories.length + recalledMemories.length;
-      await chat.append(createMessage({ conversationId: conversation.id, role: 'assistant', text: answer.text.trim(), question: trimmed, memoryCount, sources: result.hits.slice(0, 5).map(toSource) }));
+      const structuredSources: AiConversationSource[] = result.structured.facts.map((fact) => ({
+        citationId: fact.citationId,
+        title: `${fact.label}：${fact.value}`,
+        route: structuredFactRoute(fact.source),
+        dayKey: null,
+        personNames: [],
+        origin: fact.source?.kind === 'person' ? 'people' : 'me',
+      }));
+      const sources = [...structuredSources, ...result.hits.slice(0, 5).map(toSource)];
+      await chat.append(createMessage({ conversationId: conversation.id, role: 'assistant', text: answer.text.trim(), question: trimmed, memoryCount, sources }));
       scrollToEnd();
       void knowledge.markMemoriesUsed([...coreMemories.map((item) => item.id), ...recalledMemories.map((hit) => hit.item.id)]).catch(() => undefined);
       if (knowledge.autoExtract && knowledge.memoryEnabled && !extractingMemoryRef.current) {
@@ -209,6 +233,52 @@ export default function AiChatScreen() {
     if (count > 0) feedback.notice(`已撤销 ${count} 条自动记忆`);
   }, [knowledge]);
 
+  const personIdsForNames = useCallback((names: string[]): string[] => {
+    if (!names.length) return [];
+    return people.filter((person) => [personDisplayName(person), person.name, person.nickname ?? ''].some((value) => names.includes(value))).map((person) => person.id);
+  }, [people]);
+
+  const executeAppAction = useCallback(async (message: AiChatMessage, prepared: PreparedAiAction, key: string) => {
+    const action = prepared.action;
+    if (!action) return;
+    setActionState((current) => ({ ...current, [key]: { status: 'running' } }));
+    try {
+      if (action.tool === 'ledger.create') {
+        const now = new Date().toISOString();
+        const transaction: LedgerTransaction = {
+          id: `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+          type: action.type,
+          amountCents: action.amountCents,
+          category: action.category,
+          dayKey: action.dayKey,
+          note: action.note,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await createLedgerTransaction(transaction);
+      } else if (action.tool === 'post.create') {
+        await savePost(action.body, personIdsForNames(action.personNames), action.dayKey, action.locationName);
+      } else if (action.tool === 'person.create') {
+        await createPerson(action.name);
+      } else if (action.tool === 'memory.remember') {
+        await knowledge.rememberMemory({ content: action.content, kind: 'semantic' });
+      } else if (action.tool === 'checkin.today') {
+        if (!todayCheckIn) await checkInToday();
+      }
+      const stripped = parseActionProposals(message.text).visibleText;
+      const summary = prepared.fields.map((field) => `${field.label} ${field.value}`).join('，');
+      await chat.update({ ...message, text: `${stripped}\n\n（已执行 · ${prepared.title}：${summary}）` });
+      feedback.notice(todayCheckIn && action.tool === 'checkin.today' ? '今天已经打过卡了' : '已执行');
+    } catch (cause) {
+      setActionState((current) => ({ ...current, [key]: { status: 'error', error: cause instanceof Error ? cause.message : '执行失败，请稍后重试。' } }));
+    }
+  }, [chat, checkInToday, createLedgerTransaction, createPerson, knowledge, personIdsForNames, savePost, todayCheckIn]);
+
+  const dismissAppAction = useCallback(async (message: AiChatMessage) => {
+    const stripped = parseActionProposals(message.text).visibleText;
+    await chat.update({ ...message, text: `${stripped}\n\n（已忽略这个操作）` }).catch((cause: unknown) => feedback.alert('操作失败', aiErrorMessage(cause)));
+  }, [chat]);
+
   const groups = useMemo(() => {
     const map = new Map<string, typeof chat.conversations>();
     for (const conversation of chat.conversations) {
@@ -243,24 +313,34 @@ export default function AiChatScreen() {
 
         {chat.messages.map((message) => message.role === 'user'
           ? <View key={message.id} style={styles.userRow}><View style={styles.bubble}><Text selectable style={styles.userText}>{message.text}</Text></View></View>
-          : <View key={message.id} style={styles.answerBlock}>
-            {message.text.trim()
-              ? <View pointerEvents="none" style={styles.answerMarkdown}><MarkdownView citations={message.sources.map((source) => source.citationId)} dom={{ containerStyle: styles.answerMarkdown, matchContents: true, scrollEnabled: false, style: styles.answerMarkdown }} markdown={message.text} media={[]} theme={editorTheme()} variant="chat" /></View>
+          : (() => {
+            const parsed = parseActionProposals(message.text);
+            return <View key={message.id} style={styles.answerBlock}>
+            {parsed.visibleText.trim()
+              ? <View pointerEvents="none" style={styles.answerMarkdown}><MarkdownView citations={message.sources.map((source) => source.citationId)} dom={{ containerStyle: styles.answerMarkdown, matchContents: true, scrollEnabled: false, style: styles.answerMarkdown }} markdown={parsed.visibleText} media={[]} theme={editorTheme()} variant="chat" /></View>
               : null}
+            {parsed.proposals.map((proposal, index) => {
+              const prepared = prepareAction(proposal, { today });
+              const key = `${message.id}:${index}`;
+              return <AiActionCard actionState={actionState[key]} key={key} onDismiss={() => void dismissAppAction(message)} onRun={() => void executeAppAction(message, prepared, key)} prepared={prepared} />;
+            })}
             {message.sources.length ? <View style={styles.sources}>
               {message.sources.map((source, index) => <Pressable accessibilityRole="button" key={`${message.id}_${source.route}_${index}`} onPress={() => openSource(source)} style={({ pressed }) => [styles.sourceRow, pressed && styles.pressed]}>
-                <Text style={styles.sourceId}>{source.citationId}</Text>
-                <Text numberOfLines={1} style={styles.sourceTitle}>{source.title}</Text>
-                <Text numberOfLines={1} style={styles.sourceMeta}>{[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).join(' · ')}</Text>
+                <View style={styles.sourceBadge}><Text style={styles.sourceBadgeText}>{source.citationId}</Text></View>
+                <View style={styles.sourceCopy}>
+                  <Text numberOfLines={1} style={styles.sourceTitle}>{source.title}</Text>
+                  <Text numberOfLines={1} style={styles.sourceMeta}>{source.origin === 'people' || (!source.origin && source.route.startsWith('/person/')) ? '人物资料' : '我的信息'}{[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).length ? ` · ${[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).join(' · ')}` : ''}</Text>
+                </View>
               </Pressable>)}
             </View> : null}
             <View style={styles.answerActions}>
-              <Pressable accessibilityLabel="复制回答" accessibilityRole="button" hitSlop={10} onPress={() => { void Clipboard.setStringAsync(message.text); feedback.notice('已复制'); }} style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}><SymbolView name={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} size={16} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
+              <Pressable accessibilityLabel="复制回答" accessibilityRole="button" hitSlop={10} onPress={() => { void Clipboard.setStringAsync(parsed.visibleText); feedback.notice('已复制'); }} style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}><SymbolView name={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} size={16} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
               {message.memoryCount > 0 ? <Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)} style={({ pressed }) => [styles.memoryAction, pressed && styles.pressed]}><Text style={styles.memoryActionText}>{message.memoryCount} 条记忆</Text></Pressable> : null}
             </View>
-          </View>)}
+          </View>;
+          })())}
 
-        {thinking ? <View style={styles.thinkingRow}><ActivityIndicator color={colors.inkFaint} size="small" /><Text style={styles.thinkingText}>正在翻你的记录…</Text><Pressable accessibilityRole="button" hitSlop={10} onPress={stop}><Text style={styles.thinkingStop}>停止</Text></Pressable></View> : null}
+        {thinking ? <View style={styles.thinkingRow}><ActivityIndicator color={colors.inkFaint} size="small" /><Text style={styles.thinkingText}>思考中</Text></View> : null}
 
         {failure ? <View style={styles.failureBlock}>
           <Text style={styles.failureText}>{failure.text}</Text>
@@ -282,8 +362,8 @@ export default function AiChatScreen() {
             style={styles.input}
             value={input}
           />
-          <Pressable accessibilityLabel={thinking ? '停止回答' : '发送'} accessibilityRole="button" hitSlop={4} disabled={!thinking && (!input.trim() || !ai.enabled)} onPress={thinking ? stop : () => void send(input)} style={({ pressed }) => [styles.sendButton, thinking && styles.stopButton, !thinking && (!input.trim() || !ai.enabled) && styles.disabled, pressed && styles.pressed]}>
-            <SymbolView name={thinking ? { android: 'stop', ios: 'stop.fill', web: 'stop' } : { android: 'arrow_upward', ios: 'arrow.up', web: 'arrow_upward' }} size={17} tintColor={colors.onLife} type="hierarchical" />
+          <Pressable accessibilityLabel="发送" accessibilityRole="button" hitSlop={4} disabled={thinking || !input.trim() || !ai.enabled} onPress={() => void send(input)} style={({ pressed }) => [styles.sendButton, (thinking || !input.trim() || !ai.enabled) && styles.disabled, pressed && styles.pressed]}>
+            {thinking ? <ActivityIndicator color={colors.onLife} size="small" /> : <SymbolView name={{ android: 'arrow_upward', ios: 'arrow.up', web: 'arrow_upward' }} size={17} tintColor={colors.onLife} type="hierarchical" />}
           </Pressable>
         </View>
       </View>
@@ -316,6 +396,26 @@ export default function AiChatScreen() {
   </SafeAreaView>;
 }
 
+function AiActionCard({ actionState, onDismiss, onRun, prepared }: {
+  actionState?: { status: 'running' | 'error'; error?: string };
+  onDismiss(): void;
+  onRun(): void;
+  prepared: PreparedAiAction;
+}) {
+  const running = actionState?.status === 'running';
+  return <View style={styles.actionCard}>
+    <Text style={styles.actionEyebrow}>可执行操作 · 写入{prepared.target}</Text>
+    <Text style={styles.actionTitle}>{prepared.title}</Text>
+    {prepared.fields.map((field) => <View key={`${field.label}_${field.value}`} style={styles.actionField}><Text style={styles.actionFieldLabel}>{field.label}</Text><Text style={styles.actionFieldValue}>{field.value}</Text></View>)}
+    {prepared.error ? <Text style={styles.actionError}>{prepared.error}</Text> : null}
+    {actionState?.status === 'error' ? <Text style={styles.actionError}>{actionState.error}</Text> : null}
+    <View style={styles.actionButtons}>
+      {prepared.action ? <Pressable accessibilityRole="button" disabled={running} onPress={onRun} style={({ pressed }) => [styles.actionPrimary, running && styles.disabled, pressed && styles.pressed]}>{running ? <ActivityIndicator color={colors.onLife} size="small" /> : <Text style={styles.actionPrimaryText}>执行</Text>}</Pressable> : null}
+      <Pressable accessibilityRole="button" disabled={running} onPress={onDismiss} style={({ pressed }) => [styles.actionGhost, running && styles.disabled, pressed && styles.pressed]}><Text style={styles.actionGhostText}>{prepared.action ? '忽略' : '知道了'}</Text></Pressable>
+    </View>
+  </View>;
+}
+
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper },
   flex: { flex: 1 },
@@ -341,17 +441,30 @@ const styles = createThemedStyles(() => ({
   answerBlock: { marginTop: spacing.lg },
   answerMarkdown: { width: '100%', alignSelf: 'stretch', backgroundColor: 'transparent' },
   sources: { marginTop: spacing.md, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
-  sourceRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
-  sourceId: { minWidth: 22, color: colors.inkFaint, fontSize: typography.size.meta, fontWeight: '600' },
-  sourceTitle: { flex: 1, color: colors.inkSoft, fontSize: typography.size.caption },
-  sourceMeta: { maxWidth: '38%', color: colors.inkFaint, fontSize: typography.size.meta, textAlign: 'right' },
+  sourceRow: { minHeight: 48, paddingVertical: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  sourceBadge: { minWidth: 26, paddingHorizontal: 5, paddingVertical: 2, alignItems: 'center', justifyContent: 'center', borderRadius: 4, backgroundColor: colors.lifeLight },
+  sourceBadgeText: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 0.4 },
+  sourceCopy: { flex: 1, gap: 2 },
+  sourceTitle: { color: colors.inkSoft, fontSize: typography.size.caption },
+  sourceMeta: { color: colors.inkFaint, fontSize: typography.size.meta },
+  actionCard: { marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lifeLine, borderRadius: 12, backgroundColor: colors.sheet },
+  actionEyebrow: { color: colors.life, fontFamily: typography.mono, fontSize: 10, letterSpacing: 1 },
+  actionTitle: { marginTop: 4, color: colors.ink, fontFamily: typography.display, fontSize: 18 },
+  actionField: { marginTop: spacing.sm, flexDirection: 'row', gap: spacing.md },
+  actionFieldLabel: { width: 36, color: colors.inkFaint, fontSize: typography.size.meta },
+  actionFieldValue: { flex: 1, color: colors.ink, fontSize: typography.size.body },
+  actionError: { marginTop: spacing.sm, color: colors.danger, fontSize: typography.size.meta },
+  actionButtons: { marginTop: spacing.md, flexDirection: 'row', gap: spacing.sm },
+  actionPrimary: { minHeight: 40, minWidth: 92, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.life },
+  actionPrimaryText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
+  actionGhost: { minHeight: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  actionGhostText: { color: colors.inkFaint, fontSize: typography.size.caption, fontWeight: '600' },
   answerActions: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   iconAction: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   memoryAction: { minHeight: 32, justifyContent: 'center' },
   memoryActionText: { color: colors.inkFaint, fontSize: typography.size.meta },
   thinkingRow: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   thinkingText: { flex: 1, color: colors.inkFaint, fontSize: typography.size.caption },
-  thinkingStop: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '600' },
   failureBlock: { marginTop: spacing.lg, padding: spacing.md, borderRadius: 12, backgroundColor: colors.sheet },
   failureText: { color: colors.inkSoft, fontSize: typography.size.caption, lineHeight: 19 },
   retryButton: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', minHeight: 32 },
@@ -363,7 +476,6 @@ const styles = createThemedStyles(() => ({
   inputShell: { minHeight: 44, maxHeight: 132, paddingLeft: 16, paddingRight: 6, paddingVertical: 4, flexDirection: 'row', alignItems: 'flex-end', borderRadius: 22, backgroundColor: colors.sheet },
   input: { flex: 1, maxHeight: 120, paddingTop: 10, paddingBottom: 10, paddingRight: spacing.sm, color: colors.ink, fontSize: typography.size.bodyLarge, lineHeight: 21 },
   sendButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.life },
-  stopButton: { backgroundColor: colors.ink },
   disabled: { opacity: 0.35 },
   pressed: { opacity: 0.6 },
   sheet: { maxHeight: '76%', paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },

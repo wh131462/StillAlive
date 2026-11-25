@@ -32,6 +32,15 @@ export function normalizeMemoryContent(content: string): string {
   return content.replace(/\s+/gu, ' ').trim();
 }
 
+/** 去掉空白、标点和 Markdown 符号，用于核对“记忆证据”是否真的出现在原文里。 */
+export function normalizeMemoryEvidence(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/gu, ' ')
+    .replace(/[*_`#>~|]/gu, '')
+    .replace(/[\s.,，。!！?？:：;；、'"“”‘’「」『』()（）\[\]【】<>《》…·—-]/gu, '')
+    .toLowerCase();
+}
+
 export function isConflictingContent(newContent: string, previousContent: string): boolean {
   if (!CONFLICT_MARKERS.some((marker) => newContent.includes(marker))) return false;
   return jaccardSimilarity(newContent, previousContent) >= 0.15;

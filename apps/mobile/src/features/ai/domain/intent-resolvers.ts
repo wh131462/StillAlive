@@ -81,7 +81,7 @@ export function resolveStructuredQueries(queries: StructuredQuery[], data: Knowl
   const numbered = facts.map((fact, index) => ({ ...fact, citationId: `S${index + 1}` }));
   return {
     facts: numbered,
-    renderedText: numbered.map((fact) => `[${fact.citationId}] ${fact.label}：${fact.value}`).join('\n'),
+    renderedText: numbered.map((fact) => `[${fact.citationId}]${fact.source?.kind === 'person' ? '（人物资料）' : '（我的信息）'} ${fact.label}：${fact.value}`).join('\n'),
     entityIds: {
       postIds: [...new Set(entityIds.postIds)],
       personIds: [...new Set(entityIds.personIds)],
