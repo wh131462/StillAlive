@@ -264,6 +264,7 @@ const styles = createThemedStyles(() => ({
   rowAction: { color: colors.life, fontSize: typography.size.body },
   defaultBadge: { color: colors.inkFaint, fontSize: typography.size.caption },
   switchRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  /* RN 的 iOS Switch 自带 alignSelf: 'flex-start'，必须显式覆盖才能垂直居中 */
   switchControl: { alignSelf: 'center' },
   accent: { color: colors.life },
   accentDisabled: { color: colors.inkFaint },

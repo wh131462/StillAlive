@@ -138,6 +138,7 @@ const styles = createThemedStyles(() => ({
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: colors.lineSoft },
   switchRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { color: colors.ink, fontSize: typography.size.bodyLarge },
+  /* RN 的 iOS Switch 自带 alignSelf: 'flex-start'，必须显式覆盖才能垂直居中 */
   switchControl: { alignSelf: 'center' },
   actionRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   actionRowText: { color: colors.ink, fontSize: typography.size.bodyLarge },
