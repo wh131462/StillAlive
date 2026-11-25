@@ -123,6 +123,7 @@ function SwitchRow({ checked, label, onPress }: { checked: boolean; label: strin
     <Switch
       ios_backgroundColor={colors.line}
       onValueChange={onPress}
+      style={styles.switchControl}
       thumbColor={colors.paper}
       trackColor={{ false: colors.line, true: colors.life }}
       value={checked}
@@ -137,6 +138,7 @@ const styles = createThemedStyles(() => ({
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: colors.lineSoft },
   switchRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { color: colors.ink, fontSize: typography.size.bodyLarge },
+  switchControl: { alignSelf: 'center' },
   actionRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   actionRowText: { color: colors.ink, fontSize: typography.size.bodyLarge },
   footer: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: typography.size.label, lineHeight: 18 },

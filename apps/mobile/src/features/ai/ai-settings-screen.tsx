@@ -146,6 +146,7 @@ export default function AiSettingsScreen() {
           <Switch
             ios_backgroundColor={colors.line}
             onValueChange={(next) => void toggleEnabled(next)}
+            style={styles.switchControl}
             thumbColor={colors.paper}
             trackColor={{ false: colors.line, true: colors.life }}
             value={enabled}
@@ -263,6 +264,7 @@ const styles = createThemedStyles(() => ({
   rowAction: { color: colors.life, fontSize: typography.size.body },
   defaultBadge: { color: colors.inkFaint, fontSize: typography.size.caption },
   switchRow: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  switchControl: { alignSelf: 'center' },
   accent: { color: colors.life },
   accentDisabled: { color: colors.inkFaint },
   disabled: { opacity: 0.5 },
