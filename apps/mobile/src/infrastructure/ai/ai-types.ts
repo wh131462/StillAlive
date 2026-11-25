@@ -97,6 +97,7 @@ export const AI_USAGE_TASK_IDS = [
   'editor.continue',
   'editor.title',
   'editor.organize',
+  'editor.generate',
   'person.impression',
   'ledger.parse',
   'excerpt.explain',
