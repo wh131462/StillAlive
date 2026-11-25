@@ -9,6 +9,7 @@ import { feedback } from '../../shared/feedback';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { NameStyleId } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
+import { useAi } from '../../application/ai/ai-provider';
 import { TimePickerField } from '../people/date-time-picker';
 import { StyledName } from '../people/styled-name';
 import { NAME_STYLE_OPTIONS, THEME_OPTIONS, applyColorTheme, createThemedStyles } from '../../shared/theme/app-theme';
@@ -17,6 +18,7 @@ import { ToolPageHeader } from '../../shared/components/tool-page-header';
 export default function SettingsScreen() {
   const router = useRouter();
   const { notificationPermission, openNotificationSettings, persistentNotificationSupported, preferences, retryBirthdayNotifications, retryMemoryNotifications, setBirthdayNotificationsEnabled, setMemoryNotificationsEnabled, setPersistentNotificationsEnabled, updatePreferences } = useAppState();
+  const { enabled: aiEnabled, defaultProvider } = useAi();
   const [retryingNotification, setRetryingNotification] = useState<'birthday' | 'memory' | null>(null);
   const [nameStyleTarget, setNameStyleTarget] = useState<'self' | 'friend' | null>(null);
   const [themePreview, setThemePreview] = useState<string | null>(null);
@@ -89,6 +91,17 @@ export default function SettingsScreen() {
         <SwitchRow checked={preferences.globalMemoryEnabled} hint="控制那年今日和人物回忆在空间中出现" label="空间回忆" onPress={() => savePreference({ globalMemoryEnabled: !preferences.globalMemoryEnabled })} />
         <View style={styles.separator} />
         <Entry icon="tag" androidIcon="label" label="标签管理" onPress={() => router.push('/tag-management')} />
+      </View>
+
+      <Text style={styles.eyebrow}>AI</Text>
+      <View style={styles.group}>
+        <Entry
+          icon="sparkles"
+          androidIcon="smart_toy"
+          hint={aiEnabled ? (defaultProvider ? `已启用 · ${defaultProvider.label}` : '已启用 · 尚未配置服务商') : '未启用 · 可接入自定义 Key'}
+          label="AI 设置"
+          onPress={() => router.push('/ai-settings' as RelativePathString)}
+        />
       </View>
 
       <Text style={styles.eyebrow}>NOTIFICATIONS</Text>

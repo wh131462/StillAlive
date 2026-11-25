@@ -6,6 +6,7 @@ import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 import {
+  ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -27,6 +28,12 @@ import { AppKeyboardAvoidingView } from '../../shared/components/app-keyboard-av
 import RichTextEditor from './rich-text-editor.dom';
 import type { EditorCommand, EditorCommandType, EditorMediaSource } from './rich-text-editor.types';
 import { useAppState } from '../../application/state/app-state';
+import { useAi } from '../../application/ai/ai-provider';
+import { buildEditorMessages } from '../../application/ai/ai-tasks';
+import type { EditorAiAction } from '../../application/ai/ai-tasks';
+import { aiErrorMessage } from '../ai/ai-copy';
+import { isAiRequestError } from '../../infrastructure/ai/ai-types';
+import * as Clipboard from 'expo-clipboard';
 import { createThemedStyles, editorTheme } from '../../shared/theme/app-theme';
 import { persistPickedMedia, persistVoiceRecording } from '../../infrastructure/files/local-media';
 import { resolveDeviceLocation, warmDeviceLocation } from '../../infrastructure/platform/device-location';
@@ -68,6 +75,11 @@ export default function EditorScreen() {
   const [readingSourceRemoved, setReadingSourceRemoved] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [command, setCommand] = useState<EditorCommand | null>(null);
+  const ai = useAi();
+  const [aiActionSheetOpen, setAiActionSheetOpen] = useState(false);
+  const [aiRunningAction, setAiRunningAction] = useState<EditorAiAction | null>(null);
+  const [aiPreview, setAiPreview] = useState<{ action: EditorAiAction; text: string } | null>(null);
+  const aiAbortRef = useRef<AbortController | null>(null);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
   const [showMore, setShowMore] = useState(false);
   const [showTextSize, setShowTextSize] = useState(false);
@@ -669,6 +681,56 @@ export default function EditorScreen() {
     ]);
   };
 
+  const openAiActions = () => {
+    if (!ai.enabled) {
+      feedback.alert('AI 功能未启用', '启用后可以让 AI 帮你润色、续写或起标题。', [
+        { text: '取消', style: 'cancel' },
+        { text: '去设置', onPress: () => router.push('/ai-settings' as never) },
+      ]);
+      return;
+    }
+    setAiActionSheetOpen(true);
+  };
+
+  const runAiAction = async (action: EditorAiAction) => {
+    setAiActionSheetOpen(false);
+    const draft = body.trim();
+    if (!draft) {
+      feedback.alert('先写一点内容', '写几句之后，AI 才能接着帮你。');
+      return;
+    }
+    setAiRunningAction(action);
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    try {
+      const result = await ai.chat(buildEditorMessages({ action, draft, dayKey: targetDay }), {
+        taskId: action === 'polish' ? 'editor.polish' : action === 'continue' ? 'editor.continue' : action === 'title' ? 'editor.title' : 'editor.organize',
+        maxOutputTokens: action === 'title' ? 120 : 800,
+        temperature: 0.4,
+        signal: controller.signal,
+      });
+      setAiPreview({ action, text: result.text.trim() });
+    } catch (cause) {
+      if (!(isAiRequestError(cause) && cause.code === 'cancelled')) feedback.alert('AI 生成失败', aiErrorMessage(cause));
+    } finally {
+      setAiRunningAction(null);
+      aiAbortRef.current = null;
+    }
+  };
+
+  const cancelAiGeneration = () => {
+    aiAbortRef.current?.abort();
+    setAiRunningAction(null);
+  };
+
+  const applyAiPreview = (mode: 'replace' | 'append') => {
+    if (!aiPreview) return;
+    sendCommand(mode === 'replace' ? 'replaceBodyMarkdown' : 'appendMarkdown', aiPreview.text);
+    haptic('success');
+    feedback.notice(mode === 'replace' ? '已替换正文，可撤销' : '已追加到末尾');
+    setAiPreview(null);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
@@ -738,6 +800,7 @@ export default function EditorScreen() {
             <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} style={styles.moreBar} contentContainerStyle={styles.expandedToolbarContent}>
               <ToolButton androidIcon="undo" icon="arrow.uturn.backward" label="撤销" onPress={() => sendCommand('undo')} />
               <ToolButton androidIcon="redo" icon="arrow.uturn.forward" label="重做" onPress={() => sendCommand('redo')} />
+              <ToolButton androidIcon="auto_awesome" icon="sparkles" label={aiRunningAction ? 'AI 生成中' : 'AI 写作'} onPress={openAiActions} />
               <ToolButton active={showTextSize} androidIcon="format_size" icon="textformat.size.larger" label="字号" onPress={() => setShowTextSize((value) => !value)} />
               <ToolButton active={activeFormats.includes('italic')} androidIcon="format_italic" icon="italic" label="斜体" onPress={() => sendCommand('italic')} />
               <ToolButton active={activeFormats.includes('strikethrough')} androidIcon="format_strikethrough" icon="strikethrough" label="删除线" onPress={() => sendCommand('strikethrough')} />
@@ -828,6 +891,34 @@ export default function EditorScreen() {
           {dateCardDraft?.kind === 'datetime' ? <TimePickerField hour={dateCardHour} label="时间" minute={dateCardMinute} onChange={(hour, minute) => { setDateCardHour(hour); setDateCardMinute(minute); }} /> : null}
         </DraggableBottomSheet>
 
+        <DraggableBottomSheet accessibilityLabel="AI 生成中" onClose={cancelAiGeneration} open={Boolean(aiRunningAction) && !aiPreview} sheetStyle={styles.aiSheet}>
+          <View style={styles.aiGenerating}><ActivityIndicator color={colors.life} size="small" /><Text style={styles.aiGeneratingTitle}>AI 正在写</Text><Text style={styles.aiGeneratingHint}>生成完成后会先给你预览，不会自动写入正文。</Text><Pressable accessibilityRole="button" onPress={cancelAiGeneration} style={({ pressed }) => [styles.aiGeneratingCancel, pressed && styles.pressed]}><Text style={styles.aiGeneratingCancelText}>取消</Text></Pressable></View>
+        </DraggableBottomSheet>
+
+        <DraggableBottomSheet accessibilityLabel="AI 写作" onClose={() => setAiActionSheetOpen(false)} open={aiActionSheetOpen} sheetStyle={styles.aiSheet}>
+          <Text style={styles.aiSheetTitle}>AI 写作</Text>
+          <Text style={styles.aiSheetHint}>基于当前草稿生成；结果先预览，不会自动保存。</Text>
+          <AiActionOption label="润色这段" hint="更顺、更具体，保留原意" onPress={() => void runAiAction('polish')} />
+          <AiActionOption label="继续写" hint="接着草稿再写 2–3 句" onPress={() => void runAiAction('continue')} />
+          <AiActionOption label="起一个标题" hint="不超过 14 个汉字" onPress={() => void runAiAction('title')} />
+          <AiActionOption label="整理成一条记录" hint="调整顺序、删掉重复" onPress={() => void runAiAction('organize')} />
+        </DraggableBottomSheet>
+
+        <DraggableBottomSheet accessibilityLabel="AI 生成结果" onClose={() => setAiPreview(null)} open={Boolean(aiPreview)} sheetStyle={styles.aiSheet}>
+          <Text style={styles.aiSheetTitle}>{aiPreview?.action === 'title' ? 'AI 标题' : 'AI 草稿'}</Text>
+          <Text style={styles.aiSheetHint}>请确认后再写入正文；写入后仍可用撤销恢复。</Text>
+          <ScrollView style={styles.aiPreviewScroll}><Text selectable style={styles.aiPreviewText}>{aiPreview?.text ?? ''}</Text></ScrollView>
+          <View style={styles.aiPreviewActions}>
+            <Pressable accessibilityRole="button" onPress={() => applyAiPreview('replace')} style={({ pressed }) => [styles.aiPrimary, pressed && styles.pressed]}><Text style={styles.aiPrimaryText}>替换正文</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => applyAiPreview('append')} style={({ pressed }) => [styles.aiSecondary, pressed && styles.pressed]}><Text style={styles.aiSecondaryText}>追加到末尾</Text></Pressable>
+          </View>
+          <View style={styles.aiPreviewActions}>
+            <Pressable accessibilityRole="button" onPress={() => { if (aiPreview) void runAiAction(aiPreview.action); }} style={({ pressed }) => [styles.aiSecondary, pressed && styles.pressed]}><Text style={styles.aiSecondaryText}>再写一版</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => { void Clipboard.setStringAsync(aiPreview?.text ?? ''); feedback.notice('已复制'); }} style={({ pressed }) => [styles.aiSecondary, pressed && styles.pressed]}><Text style={styles.aiSecondaryText}>复制</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setAiPreview(null)} style={({ pressed }) => [styles.aiSecondary, pressed && styles.pressed]}><Text style={styles.aiSecondaryText}>丢弃</Text></Pressable>
+          </View>
+        </DraggableBottomSheet>
+
         <Modal animationType="fade" onRequestClose={() => setLinkPickerOpen(false)} transparent visible={linkPickerOpen}>
           <AppKeyboardAvoidingView style={styles.flex}>
             <Pressable style={styles.centeredBackdrop} onPress={() => setLinkPickerOpen(false)}>
@@ -868,6 +959,10 @@ function mediaFileExtension(item: Media): string {
   if (item.mimeType === 'image/webp') return '.webp';
   if (item.mimeType === 'image/heic' || item.mimeType === 'image/heif') return '.heic';
   return '.jpg';
+}
+
+function AiActionOption({ hint, label, onPress }: { hint: string; label: string; onPress(): void }) {
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.aiActionOption, pressed && styles.pressed]}><View style={styles.aiActionCopy}><Text style={styles.aiActionLabel}>{label}</Text><Text style={styles.aiActionHint}>{hint}</Text></View><Text style={styles.aiActionChevron}>›</Text></Pressable>;
 }
 
 function TableActionButton({ active = false, androidIcon, destructive = false, icon, label, onPress, text }: { active?: boolean; androidIcon: AndroidSymbol; destructive?: boolean; icon: SFSymbol; label: string; onPress(): void; text: string }) {
@@ -1047,4 +1142,25 @@ const styles = createThemedStyles(() => ({
   linkAction: { minWidth: 62, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   linkCancel: { color: colors.inkSoft, fontSize: 11 },
   linkConfirm: { color: colors.life, fontSize: 11, fontWeight: '700' },
+  aiSheet: { paddingBottom: spacing.lg },
+  aiSheetTitle: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, color: colors.ink, fontFamily: typography.display, fontSize: 22 },
+  aiSheetHint: { paddingHorizontal: spacing.lg, marginTop: 5, marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
+  aiActionOption: { minHeight: 62, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, backgroundColor: colors.paper },
+  aiActionCopy: { minWidth: 0, flex: 1 },
+  aiActionLabel: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  aiActionHint: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
+  aiActionChevron: { marginLeft: spacing.md, color: colors.inkFaint, fontSize: 20 },
+  aiPreviewScroll: { maxHeight: 240, marginHorizontal: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper },
+  aiPreviewText: { color: colors.ink, fontSize: typography.size.body, lineHeight: 22 },
+  aiPreviewActions: { marginTop: spacing.md, marginHorizontal: spacing.lg, flexDirection: 'row', gap: spacing.sm },
+  aiPrimary: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
+  aiPrimaryText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
+  aiSecondary: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.sheet },
+  aiSecondaryText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
+  aiGenerating: { minHeight: 180, padding: spacing.lg, alignItems: 'center', justifyContent: 'center' },
+  aiGeneratingTitle: { marginTop: spacing.md, color: colors.ink, fontFamily: typography.display, fontSize: 20 },
+  aiGeneratingHint: { marginTop: 6, color: colors.inkFaint, fontSize: typography.size.meta, textAlign: 'center' },
+  aiGeneratingCancel: { minHeight: 42, marginTop: spacing.lg, paddingHorizontal: spacing.xl, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.paper },
+  aiGeneratingCancelText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
+  pressed: { opacity: 0.7 },
 }));

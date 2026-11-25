@@ -10,6 +10,10 @@ import * as Clipboard from 'expo-clipboard';
 import type { PersonEvent, Post, ProfileCollectionRequest } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
+import { useAi } from '../../application/ai/ai-provider';
+import { buildPersonImpressionMessages } from '../../application/ai/ai-tasks';
+import { aiErrorMessage } from '../ai/ai-copy';
+import { stripMarkdown } from '../ai/domain/knowledge-types';
 import { genderOption } from './gender-picker';
 import { extractAudioEmbeds } from '../journal/embedded-media';
 import { constellationForBirthday, formatBirthday, nextBirthday, personDisplayName, toLocalDayKey, zodiacForBirthday } from './person-profile';
@@ -38,6 +42,9 @@ export default function PersonScreen() {
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [pendingInvite, setPendingInvite] = useState<ProfileCollectionRequest | null>(null);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const ai = useAi();
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
   const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const moreButtonRef = useRef<View>(null);
   const person = useMemo(() => people.find((item) => item.id === id), [id, people]);
@@ -106,6 +113,46 @@ export default function PersonScreen() {
     }
   };
 
+  const generateAiImpression = async () => {
+    if (!person || aiSuggestionLoading) return;
+    if (!ai.enabled) {
+      feedback.alert('AI 功能未启用', '启用后可以让 AI 从记录里再给一句印象建议。');
+      return;
+    }
+    const samples = posts.slice(0, 20).map((post) => ({ dayKey: post.dayKey, text: stripMarkdown(post.bodyMarkdown) })).filter((item) => item.text.trim());
+    if (!samples.length) {
+      feedback.alert('还没有共同的记录', '先写下与这位人物有关的记录，AI 才有依据。');
+      return;
+    }
+    setAiSuggestionLoading(true);
+    try {
+      const result = await ai.chat(buildPersonImpressionMessages({ personName: person.nickname.trim() || person.name, relation: person.relationToMe, posts: samples }), { taskId: 'person.impression', maxOutputTokens: 200, temperature: 0.5 });
+      setAiSuggestion(result.text.trim().replace(/^["“]|["”]$/gu, ''));
+    } catch (cause) {
+      feedback.alert('AI 生成失败', aiErrorMessage(cause));
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  };
+
+  const adoptAiImpression = async () => {
+    if (!person || !aiSuggestion) return;
+    try {
+      await updatePerson(person.id, {
+        name: person.name, nickname: person.nickname, bio: person.bio, avatarMediaId: person.avatarMediaId,
+        gender: person.gender, relationToMe: person.relationToMe, impression: aiSuggestion,
+        birthday: person.birthday, contacts: person.contacts, customFields: person.customFields,
+        importantDates: person.importantDates, privacyMode: person.privacyMode,
+      });
+      haptic('success');
+      feedback.notice('已写入印象，只改了这一句');
+      setAiSuggestion(null);
+      setSuggestionDismissed(true);
+    } catch (cause: unknown) {
+      feedback.alert('采纳失败', cause instanceof Error ? cause.message : '请稍后重试。');
+    }
+  };
+
   const openMergePicker = () => {
     if (!person) return;
     const candidates = people.filter((item) => item.id !== person.id);
@@ -165,6 +212,7 @@ export default function PersonScreen() {
                 {person.bio ? <><Text style={styles.impressionLabel}>个人简介</Text><Text style={styles.impression}>{person.bio}</Text></> : null}
                 <Text style={styles.impressionLabel}>关于 ta 的印象</Text>
                 <Text style={[styles.impression, !person.impression && styles.impressionEmpty]}>{person.impression ?? '还没有留下印象'}</Text>
+                {ai.enabled && !privateHidden ? <Pressable accessibilityRole="button" disabled={aiSuggestionLoading} onPress={() => void generateAiImpression()} style={({ pressed }) => [styles.impressionAiButton, pressed && styles.featureRowPressed]}><Text style={styles.impressionAiText}>{aiSuggestionLoading ? 'AI 正在从记录里找…' : '✦ 让 AI 从记录里再给一句'}</Text></Pressable> : null}
                 {person.privacyMode === 'private' ? <Text style={styles.privateBadge}>资料已隐藏</Text> : null}
               </View>
             </View>
@@ -177,7 +225,21 @@ export default function PersonScreen() {
                 <View style={styles.growActions}>
                   <Pressable accessibilityRole="button" onPress={() => void adoptImpression()} style={({ pressed }) => [styles.growPrimary, pressed && styles.featureRowPressed]}><Text style={styles.growPrimaryText}>采纳为印象</Text></Pressable>
                   <Pressable accessibilityRole="button" onPress={() => setSuggestionIndex((current) => current + 1)} style={({ pressed }) => [styles.growSecondary, pressed && styles.featureRowPressed]}><Text style={styles.growSecondaryText}>换一句</Text></Pressable>
+                  {ai.enabled ? <Pressable accessibilityRole="button" disabled={aiSuggestionLoading} onPress={() => void generateAiImpression()} style={({ pressed }) => [styles.growSecondary, aiSuggestionLoading && styles.disabled, pressed && styles.featureRowPressed]}><Text style={styles.growSecondaryText}>{aiSuggestionLoading ? 'AI 生成中…' : '让 AI 再给一句'}</Text></Pressable> : null}
                   <Pressable accessibilityRole="button" onPress={() => setSuggestionDismissed(true)} style={({ pressed }) => [styles.growQuiet, pressed && styles.featureRowPressed]}><Text style={styles.growQuietText}>先不用</Text></Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            {!privateHidden && aiSuggestion ? (
+              <View style={styles.growCard}>
+                <Text style={styles.growLabel}>AI 的建议</Text>
+                <Text style={styles.growQuote}>“{aiSuggestion}”</Text>
+                <Text style={styles.growSource}>基于最近记录生成，需要你确认才会写入</Text>
+                <View style={styles.growActions}>
+                  <Pressable accessibilityRole="button" disabled={aiSuggestionLoading} onPress={() => void adoptAiImpression()} style={({ pressed }) => [styles.growPrimary, aiSuggestionLoading && styles.disabled, pressed && styles.featureRowPressed]}><Text style={styles.growPrimaryText}>采纳为印象</Text></Pressable>
+                  <Pressable accessibilityRole="button" disabled={aiSuggestionLoading} onPress={() => void generateAiImpression()} style={({ pressed }) => [styles.growSecondary, aiSuggestionLoading && styles.disabled, pressed && styles.featureRowPressed]}><Text style={styles.growSecondaryText}>{aiSuggestionLoading ? '生成中…' : '换一句'}</Text></Pressable>
+                  <Pressable accessibilityRole="button" onPress={() => setAiSuggestion(null)} style={({ pressed }) => [styles.growQuiet, pressed && styles.featureRowPressed]}><Text style={styles.growQuietText}>丢弃</Text></Pressable>
                 </View>
               </View>
             ) : null}
@@ -422,6 +484,8 @@ const styles = createThemedStyles(() => ({
   relationPill: { maxWidth: '100%', marginTop: spacing.sm, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: colors.lifeLight },
   relation: { color: colors.life, fontSize: 10 },
   privateBadge: { marginTop: spacing.sm, color: colors.danger, fontSize: 10 },
+  impressionAiButton: { alignSelf: 'flex-start', minHeight: 32, marginTop: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  impressionAiText: { color: colors.inkFaint, fontSize: typography.size.meta, fontWeight: '700' },
   impressionBlock: { marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   impressionLabel: { color: colors.inkFaint, fontSize: typography.size.meta },
   impression: { marginTop: spacing.sm, color: colors.inkSoft, fontFamily: typography.display, fontSize: 15, lineHeight: 25 },

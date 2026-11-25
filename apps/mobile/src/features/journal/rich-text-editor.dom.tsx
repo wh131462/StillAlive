@@ -837,6 +837,15 @@ function runCommand(editor: HTMLDivElement, command: EditorCommand) {
     case 'insertDateTime':
       if (typeof command.value === 'string') insertDateCard(command.value, 'datetime');
       break;
+    case 'insertMarkdown':
+      if (typeof command.value === 'string') insertMarkdownContent(command.value);
+      break;
+    case 'replaceBodyMarkdown':
+      if (typeof command.value === 'string') replaceBodyWithMarkdown(editor, command.value);
+      break;
+    case 'appendMarkdown':
+      if (typeof command.value === 'string') appendMarkdownContent(editor, command.value);
+      break;
     case 'updateDateCard':
       if (command.value && !Array.isArray(command.value) && typeof command.value === 'object' && 'from' in command.value) updateDateCard(editor, command.value as EditorDateCardUpdate);
       break;
@@ -952,6 +961,22 @@ function normalizeListBlocks(items: HTMLLIElement[]) {
 
 function insertHtml(html: string) {
   document.execCommand('insertHTML', false, html);
+}
+
+function insertMarkdownContent(markdown: string) {
+  insertHtml(renderRichTextMarkdown(markdown));
+}
+
+function replaceBodyWithMarkdown(editor: HTMLDivElement, markdown: string) {
+  editor.innerHTML = renderRichTextMarkdown(markdown);
+  ensureTrailingParagraph(editor);
+  placeCursorAtEnd(editor);
+}
+
+function appendMarkdownContent(editor: HTMLDivElement, markdown: string) {
+  editor.insertAdjacentHTML('beforeend', renderRichTextMarkdown(markdown));
+  ensureTrailingParagraph(editor);
+  placeCursorAtEnd(editor);
 }
 
 function convertListItemToParagraph(listItem: HTMLLIElement) {

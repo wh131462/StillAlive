@@ -7,6 +7,10 @@ import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { DayKey, LedgerTransaction, LedgerTransactionType } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
+import { useAi } from '../../application/ai/ai-provider';
+import { buildLedgerParseMessages, parseLedgerParseResponse } from '../../application/ai/ai-tasks';
+import type { LedgerParseResult } from '../../application/ai/ai-tasks';
+import { aiErrorMessage } from '../ai/ai-copy';
 import { feedback } from '../../shared/feedback';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { ToolPageHeader, ToolPageHeaderTextAction } from '../../shared/components/tool-page-header';
@@ -32,6 +36,11 @@ export default function LedgerScreen() {
   const [editing, setEditing] = useState<LedgerTransaction | null>(null);
   const [actionTransaction, setActionTransaction] = useState<LedgerTransaction | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const ai = useAi();
+  const [aiEntryOpen, setAiEntryOpen] = useState(false);
+  const [aiEntryText, setAiEntryText] = useState('');
+  const [aiEntryBusy, setAiEntryBusy] = useState(false);
+  const [aiDraft, setAiDraft] = useState<LedgerParseResult | null>(null);
 
   const monthTransactions = useMemo(() => ledgerTransactions.filter((item) => item.dayKey.startsWith(activeMonth)), [activeMonth, ledgerTransactions]);
   const visibleTransactions = useMemo(() => monthTransactions.filter((item) => filter === 'all' || item.type === filter), [filter, monthTransactions]);
@@ -51,9 +60,9 @@ export default function LedgerScreen() {
     return [...grouped.entries()].sort(([left], [right]) => right.localeCompare(left));
   }, [visibleTransactions]);
 
-  const openCreate = () => { setEditing(null); setFormOpen(true); };
-  const openEdit = (transaction: LedgerTransaction) => { setEditing(transaction); setFormOpen(true); };
-  const closeForm = () => { Keyboard.dismiss(); setFormOpen(false); };
+  const openCreate = () => { setAiDraft(null); setEditing(null); setFormOpen(true); };
+  const openEdit = (transaction: LedgerTransaction) => { setAiDraft(null); setEditing(transaction); setFormOpen(true); };
+  const closeForm = () => { Keyboard.dismiss(); setFormOpen(false); setAiDraft(null); };
   const editActionTransaction = () => {
     const transaction = actionTransaction;
     setActionTransaction(null);
@@ -68,6 +77,33 @@ export default function LedgerScreen() {
       { text: '删除', style: 'destructive', onPress: () => void deleteLedgerTransaction(transaction.id).catch((cause) => feedback.alert('删除失败', cause instanceof Error ? cause.message : '请稍后重试。')) },
     ]);
   };
+  const parseAiEntry = async () => {
+    const text = aiEntryText.trim();
+    if (!text || aiEntryBusy) return;
+    if (!ai.enabled) {
+      feedback.alert('AI 功能未启用', '启用后可以一句话记账。');
+      return;
+    }
+    setAiEntryBusy(true);
+    try {
+      const result = await ai.chat(buildLedgerParseMessages({ text, today, categories: CATEGORIES }), { taskId: 'ledger.parse', maxOutputTokens: 300, temperature: 0.2 });
+      const parsed = parseLedgerParseResponse(result.text, { today, categories: CATEGORIES });
+      if (!parsed) {
+        feedback.alert('没看懂这句话', '换个说法试试，例如“昨天午饭 32，打车 18”。');
+        return;
+      }
+      setAiEntryOpen(false);
+      setAiEntryText('');
+      setEditing(null);
+      setAiDraft(parsed);
+      setFormOpen(true);
+    } catch (cause) {
+      feedback.alert('解析失败', aiErrorMessage(cause));
+    } finally {
+      setAiEntryBusy(false);
+    }
+  };
+
   const moveMonth = (offset: number) => setActiveMonth(shiftMonth(activeMonth, offset));
 
   return <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -77,6 +113,12 @@ export default function LedgerScreen() {
         <View style={styles.summaryHeader}><Text style={styles.summaryEyebrow}>LEDGER / {activeMonth}</Text><Text style={styles.summaryTitle}>{formatMoney(summary.expense)}</Text><Text style={styles.summaryLabel}>本月支出</Text></View>
         <View style={styles.summaryStats}><SummaryStat label="收入" value={summary.income} /><View style={styles.summaryDivider} /><SummaryStat label="结余" value={summary.income - summary.expense} /></View>
       </View>
+
+      {ai.enabled ? <Pressable accessibilityRole="button" onPress={() => setAiEntryOpen(true)} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+        <View style={styles.quickIcon}><SymbolView name={{ android: 'auto_awesome', ios: 'sparkles', web: 'auto_awesome' }} size={17} tintColor={colors.life} type="hierarchical" /></View>
+        <View style={styles.quickCopy}><Text style={styles.quickTitle}>一句话记账</Text><Text style={styles.quickHint}>说一句今天的花销，自动填进表单</Text></View>
+        <Text style={styles.quickChevron}>›</Text>
+      </Pressable> : null}
 
       <View style={styles.monthRow}><Pressable accessibilityLabel="上个月" accessibilityRole="button" onPress={() => moveMonth(-1)} style={styles.monthButton}><Text style={styles.monthButtonText}>‹</Text></Pressable><Text style={styles.monthTitle}>{formatMonth(activeMonth)}</Text><Pressable accessibilityLabel="下个月" accessibilityRole="button" onPress={() => moveMonth(1)} style={styles.monthButton}><Text style={styles.monthButtonText}>›</Text></Pressable></View>
       <View style={styles.filters}>{(['all', 'expense', 'income'] as const).map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === item }} key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item === 'all' ? '全部' : item === 'expense' ? '支出' : '收入'}</Text></Pressable>)}</View>
@@ -92,7 +134,21 @@ export default function LedgerScreen() {
       <LedgerActionOption destructive icon={{ android: 'delete_outline', ios: 'trash', web: 'delete_outline' }} label="删除" onPress={deleteActionTransaction} />
       <Pressable accessibilityRole="button" onPress={() => setActionTransaction(null)} style={({ pressed }) => [styles.actionCancel, pressed && styles.pressed]}><Text style={styles.actionCancelText}>取消</Text></Pressable>
     </DraggableBottomSheet>
-    <TransactionSheet editing={editing} open={formOpen} onClose={closeForm} onCreate={createLedgerTransaction} onUpdate={updateLedgerTransaction} today={today} />
+    <DraggableBottomSheet accessibilityLabel="一句话记账" keyboardAvoiding onClose={() => setAiEntryOpen(false)} open={aiEntryOpen} sheetStyle={styles.aiSheet}>
+      <View style={styles.aiSheetHeader}>
+        <Text style={styles.aiSheetTitle}>一句话记账</Text>
+        <Text style={styles.aiSheetHint}>说一句花销，解析结果会先填进表单，确认后才保存。</Text>
+      </View>
+      <View style={styles.aiChips}>
+        {['昨天午饭 32', '打车 18', '咖啡 25'].map((sample) => <Pressable accessibilityRole="button" key={sample} onPress={() => setAiEntryText(sample)} style={({ pressed }) => [styles.aiChip, pressed && styles.pressed]}><Text style={styles.aiChipText}>{sample}</Text></Pressable>)}
+      </View>
+      <TextInput autoFocus editable={!aiEntryBusy} multiline onChangeText={setAiEntryText} placeholder="例如：昨天午饭 32，打车 18" placeholderTextColor={colors.inkFaint} style={styles.aiInput} value={aiEntryText} />
+      <View style={styles.aiActions}>
+        <Pressable accessibilityRole="button" onPress={() => setAiEntryOpen(false)} style={({ pressed }) => [styles.aiCancel, pressed && styles.pressed]}><Text style={styles.aiCancelText}>取消</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={!aiEntryText.trim() || aiEntryBusy} onPress={() => void parseAiEntry()} style={({ pressed }) => [styles.aiConfirm, (!aiEntryText.trim() || aiEntryBusy) && styles.aiDisabled, pressed && styles.pressed]}><Text style={styles.aiConfirmText}>{aiEntryBusy ? '解析中…' : '解析'}</Text></Pressable>
+      </View>
+    </DraggableBottomSheet>
+    <TransactionSheet draft={aiDraft} editing={editing} open={formOpen} onClose={closeForm} onCreate={createLedgerTransaction} onUpdate={updateLedgerTransaction} today={today} />
   </SafeAreaView>;
 }
 
@@ -106,7 +162,7 @@ function LedgerActionOption({ destructive = false, icon, label, onPress }: { des
   return <Pressable accessibilityRole="menuitem" onPress={onPress} style={({ pressed }) => [styles.actionOption, pressed && styles.pressed]}><SymbolView name={icon} size={20} tintColor={destructive ? colors.danger : colors.ink} type="hierarchical" /><Text style={[styles.actionOptionText, destructive && styles.actionOptionDanger]}>{label}</Text></Pressable>;
 }
 
-function TransactionSheet({ editing, open, onClose, onCreate, onUpdate, today }: { editing: LedgerTransaction | null; open: boolean; onClose(): void; onCreate(transaction: LedgerTransaction): Promise<void>; onUpdate(transaction: LedgerTransaction): Promise<void>; today: DayKey }) {
+function TransactionSheet({ draft, editing, open, onClose, onCreate, onUpdate, today }: { draft: LedgerParseResult | null; editing: LedgerTransaction | null; open: boolean; onClose(): void; onCreate(transaction: LedgerTransaction): Promise<void>; onUpdate(transaction: LedgerTransaction): Promise<void>; today: DayKey }) {
   const [type, setType] = useState<LedgerTransactionType>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(CATEGORIES.expense[0]);
@@ -116,13 +172,13 @@ function TransactionSheet({ editing, open, onClose, onCreate, onUpdate, today }:
   const deleteLongPressedRef = useRef(false);
   useEffect(() => {
     if (!open) return;
-    const initialType = editing?.type ?? 'expense';
-    setType(initialType); setAmount(editing ? (editing.amountCents / 100).toFixed(2) : ''); setCategory(editing?.category ?? CATEGORIES[initialType][0]); setDayParts(parseDayKey(editing?.dayKey ?? today)); setNote(editing?.note ?? '');
+    const initialType = editing?.type ?? draft?.type ?? 'expense';
+    setType(initialType); setAmount(editing ? (editing.amountCents / 100).toFixed(2) : draft ? draft.amount.toFixed(2) : ''); setCategory(editing?.category ?? draft?.category ?? CATEGORIES[initialType][0]); setDayParts(parseDayKey(editing?.dayKey ?? (draft?.dayKey as DayKey | undefined) ?? today)); setNote(editing?.note ?? draft?.note ?? '');
     return () => {
       if (deleteRepeatRef.current) clearInterval(deleteRepeatRef.current);
       deleteRepeatRef.current = null;
     };
-  }, [editing, open, today]);
+  }, [draft, editing, open, today]);
 
   const save = async () => {
     const numericAmount = Number(amount.replace(',', '.'));
@@ -209,4 +265,24 @@ const sheetLayoutStyles = StyleSheet.create({
 
 const styles = createThemedStyles(() => ({
   safeArea: { flex: 1, backgroundColor: colors.paper }, content: { padding: spacing.lg, paddingBottom: 120 }, headerAdd: { minHeight: 38, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.lifeLight }, headerAddText: { color: colors.life, fontSize: 11, fontWeight: '800' }, summaryCard: { overflow: 'hidden', borderTopRightRadius: radius.xl, borderBottomLeftRadius: radius.xl, backgroundColor: colors.life }, summaryHeader: { padding: spacing.lg }, summaryEyebrow: { color: colors.onLife, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.2, opacity: 0.8 }, summaryTitle: { marginTop: spacing.md, color: colors.onLife, fontFamily: typography.display, fontSize: 40 }, summaryLabel: { marginTop: 2, color: colors.onLife, fontSize: 11, opacity: 0.8 }, summaryStats: { minHeight: 68, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.lifeDeep }, summaryStat: { flex: 1 }, summaryStatValue: { color: colors.onLife, fontFamily: typography.mono, fontSize: 16 }, summaryStatLabel: { marginTop: 3, color: colors.onLife, fontSize: 10, opacity: 0.8 }, summaryDivider: { width: StyleSheet.hairlineWidth, height: 32, marginHorizontal: spacing.md, backgroundColor: colors.onLife, opacity: 0.3 }, monthRow: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, monthTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 22 }, monthButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: colors.sheet }, monthButtonText: { color: colors.life, fontSize: 28, lineHeight: 30 }, filters: { marginTop: spacing.md, padding: 3, flexDirection: 'row', borderRadius: 8, backgroundColor: colors.sheet }, filter: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 6 }, filterActive: { backgroundColor: colors.lifeLight }, filterText: { color: colors.inkFaint, fontSize: 11 }, filterTextActive: { color: colors.life, fontWeight: '800' }, categorySummary: { marginTop: spacing.lg, padding: spacing.md, borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet }, categorySummaryTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 17 }, categorySummaryRow: { marginTop: spacing.md }, categorySummaryMeta: { flexDirection: 'row', justifyContent: 'space-between' }, categorySummaryName: { color: colors.inkSoft, fontSize: 10 }, categorySummaryValue: { color: colors.ink, fontFamily: typography.mono, fontSize: 10 }, categoryBar: { height: 6, marginTop: 5, overflow: 'hidden', borderRadius: 3, backgroundColor: colors.lifeLight }, categoryBarFill: { height: '100%', borderRadius: 3, backgroundColor: colors.life }, dayGroup: { marginTop: spacing.xl }, dayTitle: { marginBottom: spacing.sm, color: colors.inkFaint, fontFamily: typography.mono, fontSize: 10, letterSpacing: 0.8 }, transactionRow: { minHeight: 68, marginBottom: spacing.sm, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sheet }, transactionMain: { flex: 1, minWidth: 0, minHeight: 68, flexDirection: 'row', alignItems: 'center' }, categoryDot: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: colors.lifeLight }, categoryDotIncome: { backgroundColor: colors.sunLight }, categoryDotText: { color: colors.life, fontFamily: typography.display, fontSize: 16 }, transactionCopy: { minWidth: 0, flex: 1, marginLeft: spacing.md }, transactionCategory: { color: colors.ink, fontFamily: typography.display, fontSize: 16 }, transactionNote: { marginTop: 3, color: colors.inkFaint, fontSize: 10 }, transactionAmount: { color: colors.ink, fontFamily: typography.mono, fontSize: 13 }, transactionAmountIncome: { color: colors.life }, moreButton: { width: 42, height: 54, alignItems: 'center', justifyContent: 'center' }, actionSheet: { padding: spacing.lg, paddingBottom: spacing.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.sheet }, actionHeader: { minHeight: 72, paddingBottom: spacing.md, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line }, actionLabel: { color: colors.life, fontFamily: typography.mono, fontSize: 9, letterSpacing: 1 }, actionTitle: { marginTop: 3, color: colors.ink, fontFamily: typography.display, fontSize: 18 }, actionMeta: { marginTop: 3, color: colors.inkFaint, fontSize: 10 }, actionOption: { minHeight: 54, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft }, actionOptionText: { color: colors.ink, fontSize: 12 }, actionOptionDanger: { color: colors.danger }, actionCancel: { minHeight: 48, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: colors.paper }, actionCancelText: { color: colors.inkSoft, fontSize: 11, fontWeight: '600' }, empty: { marginTop: spacing.xxl, padding: spacing.xl, alignItems: 'center', borderTopRightRadius: radius.lg, borderBottomLeftRadius: radius.lg, backgroundColor: colors.sheet }, emptyTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 20 }, emptyText: { marginTop: spacing.sm, color: colors.inkFaint, fontSize: 11, lineHeight: 18, textAlign: 'center' }, emptyAction: { minHeight: 44, marginTop: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.life }, emptyActionText: { color: colors.onLife, fontSize: 11, fontWeight: '800' }, floatingAdd: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, minHeight: 48, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: colors.life, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 }, floatingAddText: { color: colors.onLife, fontSize: 12, fontWeight: '800' }, sheet: { width: '100%', height: '92%', maxHeight: 590, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.paper }, pressed: { opacity: 0.68, transform: [{ scale: 0.985 }] },
+  aiDisabled: { opacity: 0.5 },
+  quickCard: { minHeight: 64, marginTop: spacing.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', borderTopRightRadius: radius.md, borderBottomLeftRadius: radius.md, backgroundColor: colors.sheet },
+  quickIcon: { width: 34, height: 34, marginRight: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: colors.lifeLight },
+  quickCopy: { minWidth: 0, flex: 1 },
+  quickTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 15 },
+  quickHint: { marginTop: 3, color: colors.inkFaint, fontSize: typography.size.meta },
+  quickChevron: { marginLeft: spacing.md, color: colors.inkFaint, fontSize: 20 },
+  aiSheet: { paddingBottom: spacing.xl },
+  aiSheetHeader: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  aiSheetTitle: { color: colors.ink, fontFamily: typography.display, fontSize: 24 },
+  aiSheetHint: { marginTop: 6, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
+  aiChips: { marginTop: spacing.md, paddingHorizontal: spacing.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  aiChip: { minHeight: 32, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.paper },
+  aiChipText: { color: colors.inkSoft, fontSize: typography.size.meta },
+  aiInput: { minHeight: 96, marginHorizontal: spacing.lg, marginTop: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, borderRadius: radius.md, color: colors.ink, fontSize: typography.size.body, textAlignVertical: 'top', backgroundColor: colors.paper },
+  aiActions: { marginTop: spacing.md, paddingHorizontal: spacing.lg, flexDirection: 'row', gap: spacing.sm },
+  aiCancel: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.paper },
+  aiCancelText: { color: colors.inkSoft, fontSize: typography.size.caption, fontWeight: '700' },
+  aiConfirm: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
+  aiConfirmText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
 }));

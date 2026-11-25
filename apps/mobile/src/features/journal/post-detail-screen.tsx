@@ -157,6 +157,7 @@ export default function PostDetailScreen() {
 
       {moreOpen ? <><Pressable accessibilityLabel="关闭记录菜单" onPress={() => setMoreOpen(false)} style={styles.menuBackdrop} /><View accessibilityLabel="记录更多操作" accessibilityRole="menu" style={[styles.moreMenu, moreMenuPosition]}>
         <MoreMenuItem icon={{ android: 'chat_bubble_outline', ios: 'bubble.right', web: 'chat_bubble_outline' }} label="评论" onPress={() => { setMoreOpen(false); openComment(); }} />
+        <MoreMenuItem icon={{ android: 'auto_awesome', ios: 'sparkles', web: 'auto_awesome' }} label="问问这条记录" onPress={() => { setMoreOpen(false); router.push({ pathname: '/ai', params: { postId: post?.id ?? '', ask: '帮我回顾这条记录', auto: '1' } } as never); }} />
         <MoreMenuItem icon={{ android: 'edit', ios: 'pencil', web: 'edit' }} label="编辑记录" onPress={editPost} />
         <MoreMenuItem icon={{ android: 'push_pin', ios: postPinned ? 'pin.slash' : 'pin', web: 'push_pin' }} label={postPinned ? '取消置顶' : '置顶记录'} onPress={togglePin} />
         <MoreMenuItem icon={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} label="复制正文" onPress={() => void copyPost(false)} />

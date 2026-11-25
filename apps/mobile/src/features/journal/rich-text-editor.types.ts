@@ -32,6 +32,9 @@ export type EditorCommandType =
   | 'audio'
   | 'insertDate'
   | 'insertDateTime'
+  | 'insertMarkdown'
+  | 'replaceBodyMarkdown'
+  | 'appendMarkdown'
   | 'updateDateCard'
   | 'recordingStart'
   | 'recordingCancel';

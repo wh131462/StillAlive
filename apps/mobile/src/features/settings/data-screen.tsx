@@ -8,6 +8,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import type { CheckIn, DayKey, Post } from '@still-alive/types';
 import { useAppState } from '../../application/state/app-state';
+
 import { toDayKey } from '../../shared/core/day-key';
 import { StyledName } from '../people/styled-name';
 import { TabPageHeader } from '../../shared/components/tab-page-header';

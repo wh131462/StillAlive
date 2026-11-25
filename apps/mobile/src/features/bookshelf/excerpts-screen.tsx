@@ -6,6 +6,10 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import type { Book, BookExcerpt } from '@still-alive/types';
 import { colors, radius, spacing, typography } from '@still-alive/tokens';
 import { useAppState } from '../../application/state/app-state';
+import { useAi } from '../../application/ai/ai-provider';
+import { buildExcerptExplainMessages } from '../../application/ai/ai-tasks';
+import { aiErrorMessage } from '../ai/ai-copy';
+import { AiResultSheet } from '../ai/ai-result-sheet';
 import { feedback } from '../../shared/feedback';
 import { ToolPageHeader } from '../../shared/components/tool-page-header';
 import { createThemedStyles } from '../../shared/theme/app-theme';
@@ -21,6 +25,8 @@ export default function ExcerptsScreen() {
   const router = useRouter();
   const { bookExcerpts, books, deleteBookExcerpt, ready, updateBookExcerpt } = useAppState();
   const [query, setQuery] = useState('');
+  const ai = useAi();
+  const [aiSheet, setAiSheet] = useState<{ open: boolean; loading: boolean; text: string; error: string | null; excerpt: BookExcerpt | null }>({ open: false, loading: false, text: '', error: null, excerpt: null });
   const bookById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books]);
   const groups = useMemo<ExcerptGroup[]>(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -59,8 +65,32 @@ export default function ExcerptsScreen() {
     ]);
   };
 
+  const explainWithAi = async (excerpt: BookExcerpt) => {
+    if (!ai.enabled) {
+      feedback.alert('AI 功能未启用', '启用后可以让 AI 解释这段摘抄。');
+      return;
+    }
+    const bookTitle = excerpt.bookId ? bookById.get(excerpt.bookId)?.title ?? excerpt.bookTitle ?? '未知书籍' : excerpt.bookTitle ?? '未知书籍';
+    setAiSheet({ open: true, loading: true, text: '', error: null, excerpt });
+    try {
+      const result = await ai.chat(buildExcerptExplainMessages({ text: excerpt.text, bookTitle, chapterTitle: excerpt.chapterTitle ?? null }), { taskId: 'excerpt.explain', maxOutputTokens: 300, temperature: 0.4 });
+      setAiSheet({ open: true, loading: false, text: result.text.trim(), error: null, excerpt });
+    } catch (cause) {
+      setAiSheet({ open: true, loading: false, text: '', error: aiErrorMessage(cause), excerpt });
+    }
+  };
+
+  const saveAiExplanation = () => {
+    const excerpt = aiSheet.excerpt;
+    if (!excerpt || !aiSheet.text) return;
+    void updateBookExcerpt({ ...excerpt, note: aiSheet.text })
+      .then(() => { feedback.notice('已写入备注'); setAiSheet((current) => ({ ...current, open: false })); })
+      .catch((cause: unknown) => feedback.alert('保存失败', cause instanceof Error ? cause.message : '请稍后重试。'));
+  };
+
   const openActions = (excerpt: BookExcerpt) => feedback.alert('书摘操作', undefined, [
     { text: '编辑备注', onPress: () => editNote(excerpt) },
+    ...(ai.enabled ? [{ text: 'AI 解读', onPress: () => void explainWithAi(excerpt) }] : []),
     ...(excerpt.bookId ? [{ text: '写观后感', onPress: () => writeReflection(excerpt) }] : []),
     { text: '删除', style: 'destructive' as const, onPress: () => remove(excerpt) },
     { text: '取消', style: 'cancel' as const },
@@ -104,6 +134,7 @@ export default function ExcerptsScreen() {
         </Pressable>)}
       </View>)}
     </ScrollView>
+    <AiResultSheet actionLabel="写入备注" error={aiSheet.error} hint="基于这条摘抄生成，可先预览再决定是否写入备注。" loading={aiSheet.loading} onAction={saveAiExplanation} onClose={() => setAiSheet((current) => ({ ...current, open: false }))} open={aiSheet.open} text={aiSheet.text} title="AI 解读" />
   </SafeAreaView>;
 }
 
