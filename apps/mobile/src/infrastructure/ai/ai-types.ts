@@ -126,6 +126,35 @@ export interface AiUsageRecord {
   createdAt: string;
 }
 
+export interface AiConversationSource {
+  citationId: string;
+  title: string;
+  route: string;
+  dayKey: string | null;
+  personNames: string[];
+}
+
+export interface AiChatMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant';
+  text: string;
+  /** 回答对应的问句；用户消息里与 text 相同，失败重试时复用它 */
+  question: string;
+  failed: boolean;
+  memoryCount: number;
+  sources: AiConversationSource[];
+  createdAt: string;
+}
+
+export interface AiConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
 export class AiRequestError extends Error {
   readonly code: AiErrorCode;
   readonly status: number | null;

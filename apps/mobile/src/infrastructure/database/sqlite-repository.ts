@@ -2,12 +2,12 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { StillAliveRepository } from './repository-contract';
 import type { AlbumMedia, AppThemeId, BirthdayCalendar, BirthdayNotificationSchedule, BirthdayReminderMode, Book, BookExcerpt, BookFormat, BookList, BookListEntry, BookLocationType, BookParseStatus, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicCollectionTargetType, MusicPlaybackMode, MusicPlaylist, MusicPlaylistEntry, MusicTrack, NameStyleId, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionField, ProfileCollectionRequest, ProfileCollectionRequestStatus, ReaderTocItem, ReadingNoteSource, TagDefinition, TagGroup, TagSystemSetting } from '@still-alive/types';
 import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../../features/home/memory-notifications';
-import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, LedgerTransactionRow, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow, AiProviderProfileRow, AiUsageRecordRow, KnowledgeAggregateRow, KnowledgeChunkRow, KnowledgeSourceRow, MemoryItemRow, MemoryRevisionRowModel, MemorySourceRowModel } from './database-models';
+import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, LedgerTransactionRow, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow, AiProviderProfileRow, AiUsageRecordRow, AiConversationRow, AiChatMessageRow, KnowledgeAggregateRow, KnowledgeChunkRow, KnowledgeSourceRow, MemoryItemRow, MemoryRevisionRowModel, MemorySourceRowModel } from './database-models';
 import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapLedgerTransaction, mapMedia, mapMusicTrack, mapPerson, mapPersonEvent, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
 import { writePersistentError } from '../platform/persistent-log';
 import { AI_USAGE_TASK_IDS } from '../ai/ai-types';
 import type { AggregateGenerator, KnowledgeAggregate, KnowledgeChunk, KnowledgeSourceKind, KnowledgeSourceSignature, MemoryItem, MemoryKind, MemoryOrigin, MemoryRevision, MemorySourceRef, MemorySourceRow, MemoryStatus, MemorySubjectType } from '../../features/ai/domain/knowledge-types';
-import type { AiProviderProfile, AiUsageRecord, AiUsageTaskId } from '../ai/ai-types';
+import type { AiChatMessage, AiConversation, AiConversationSource, AiProviderProfile, AiUsageRecord, AiUsageTaskId } from '../ai/ai-types';
 
 function mediaKindForMimeType(mimeType: string): 'image' | 'video' | 'audio' {
   if (mimeType.startsWith('audio/')) return 'audio';
@@ -1189,7 +1189,7 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
 
   async deleteAllData(): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; DELETE FROM ai_provider_profiles; DELETE FROM ai_usage_records; DELETE FROM ai_settings; DELETE FROM knowledge_chunks; DELETE FROM knowledge_sources; DELETE FROM knowledge_aggregates; DELETE FROM knowledge_state; DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
+      await transaction.execAsync("DELETE FROM profile_collection_requests; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; INSERT INTO tag_system_settings (system, enabled, sort_order) VALUES ('mbti', 1, 0), ('constellation', 1, 1), ('zodiac', 1, 2), ('custom', 1, 3); DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; DELETE FROM ai_provider_profiles; DELETE FROM ai_usage_records; DELETE FROM ai_chat_messages; DELETE FROM ai_conversations; DELETE FROM ai_settings; DELETE FROM knowledge_chunks; DELETE FROM knowledge_sources; DELETE FROM knowledge_aggregates; DELETE FROM knowledge_state; DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items; INSERT INTO person_relationship_nodes (id, node_type, person_id, label, created_at, updated_at) VALUES ('self', 'self', NULL, NULL, datetime('now'), datetime('now'));");
     });
   }
 
@@ -1273,6 +1273,56 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
   async listAiUsageRecords(): Promise<AiUsageRecord[]> {
     const rows = await this.db.getAllAsync<AiUsageRecordRow>('SELECT * FROM ai_usage_records ORDER BY created_at DESC LIMIT 2000');
     return rows.map(mapAiUsageRecord);
+  }
+
+  async listAiConversations(): Promise<AiConversation[]> {
+    const rows = await this.db.getAllAsync<AiConversationRow>('SELECT * FROM ai_conversations ORDER BY updated_at DESC');
+    return rows.map(mapAiConversation);
+  }
+
+  async createAiConversation(conversation: AiConversation): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO ai_conversations (id, title, created_at, updated_at, message_count)
+       VALUES (?, ?, ?, ?, ?)`,
+      conversation.id, conversation.title, conversation.createdAt, conversation.updatedAt, conversation.messageCount,
+    ));
+  }
+
+  async updateAiConversation(conversation: AiConversation): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      'UPDATE ai_conversations SET title = ?, updated_at = ?, message_count = ? WHERE id = ?',
+      conversation.title, conversation.updatedAt, conversation.messageCount, conversation.id,
+    ));
+  }
+
+  async deleteAiConversation(conversationId: string): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM ai_chat_messages WHERE conversation_id = ?', conversationId);
+      await transaction.runAsync('DELETE FROM ai_conversations WHERE id = ?', conversationId);
+    });
+  }
+
+  async listAiChatMessages(conversationId: string): Promise<AiChatMessage[]> {
+    const rows = await this.db.getAllAsync<AiChatMessageRow>('SELECT * FROM ai_chat_messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC', conversationId);
+    return rows.map(mapAiChatMessage);
+  }
+
+  async saveAiChatMessage(message: AiChatMessage): Promise<void> {
+    await this.enqueueWrite(() => this.db.runAsync(
+      `INSERT INTO ai_chat_messages (id, conversation_id, role, text, question, failed, memory_count, sources_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET role = excluded.role, text = excluded.text, question = excluded.question,
+         failed = excluded.failed, memory_count = excluded.memory_count, sources_json = excluded.sources_json`,
+      message.id, message.conversationId, message.role, message.text, message.question,
+      message.failed ? 1 : 0, message.memoryCount, JSON.stringify(message.sources), message.createdAt,
+    ));
+  }
+
+  async clearAiConversations(): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM ai_chat_messages');
+      await transaction.runAsync('DELETE FROM ai_conversations');
+    });
   }
 
   async listKnowledgeSources(): Promise<KnowledgeSourceSignature[]> {
@@ -1673,6 +1723,52 @@ function parseAiErrorCode(value: string | null): AiUsageRecord['errorCode'] {
     || value === 'invalid_config' || value === 'unsupported' || value === 'unknown'
     ? value
     : null;
+}
+
+function mapAiConversation(row: AiConversationRow): AiConversation {
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    messageCount: row.message_count,
+  };
+}
+
+function mapAiChatMessage(row: AiChatMessageRow): AiChatMessage {
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    role: row.role,
+    text: row.text,
+    question: row.question,
+    failed: row.failed === 1,
+    memoryCount: row.memory_count,
+    sources: parseAiConversationSources(row.sources_json),
+    createdAt: row.created_at,
+  };
+}
+
+function parseAiConversationSources(value: string | null): AiConversationSource[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const candidate = item as Record<string, unknown>;
+      if (typeof candidate.citationId !== 'string' || typeof candidate.title !== 'string') return [];
+      return [{
+        citationId: candidate.citationId,
+        title: candidate.title,
+        route: typeof candidate.route === 'string' ? candidate.route : '',
+        dayKey: typeof candidate.dayKey === 'string' ? candidate.dayKey : null,
+        personNames: Array.isArray(candidate.personNames) ? candidate.personNames.filter((name): name is string => typeof name === 'string') : [],
+      }];
+    });
+  } catch {
+    return [];
+  }
 }
 
 function mapKnowledgeChunk(row: KnowledgeChunkRow): KnowledgeChunk {

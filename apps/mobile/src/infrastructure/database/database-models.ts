@@ -36,6 +36,8 @@ export interface AiUsageRecordRow {
   status: 'success' | 'failed' | 'cancelled'; error_code: string | null; input_tokens: number | null; cached_input_tokens: number | null;
   output_tokens: number | null; duration_ms: number; estimated_cost_micros: number | null; currency: string | null; created_at: string;
 }
+export interface AiConversationRow { id: string; title: string; created_at: string; updated_at: string; message_count: number; }
+export interface AiChatMessageRow { id: string; conversation_id: string; role: 'user' | 'assistant'; text: string; question: string; failed: number; memory_count: number; sources_json: string | null; created_at: string; }
 
 export interface KnowledgeSourceRow {
   source_kind: string; source_id: string; content_hash: string; chunk_count: number; indexed_at: string;

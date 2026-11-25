@@ -1,5 +1,5 @@
 import type { AlbumMedia, Book, BookExcerpt, BookList, BookListEntry, BirthdayNotificationSchedule, CheckIn, DayKey, Draft, LedgerTransaction, Media, MusicCollectionEntry, MusicPlaylist, MusicPlaylistEntry, MusicTrack, Person, PersonAlbum, PersonBook, PersonEvent, PersonRelationship, PersonRelationshipNode, PersonTagAssignment, Post, ProfileCollectionRequest, ReadingNoteSource, TagDefinition, TagSystemSetting } from '@still-alive/types';
-import type { AiProviderProfile, AiUsageRecord } from '../ai/ai-types';
+import type { AiChatMessage, AiConversation, AiProviderProfile, AiUsageRecord } from '../ai/ai-types';
 import type { KnowledgeAggregate, KnowledgeChunk, KnowledgeSourceSignature, MemoryItem, MemoryRevision, MemorySourceRef, MemorySourceRow } from '../../features/ai/domain/knowledge-types';
 
 export interface StillAliveRepository {
@@ -117,6 +117,13 @@ export interface StillAliveRepository {
   setAiSetting(key: string, value: string): Promise<void>;
   createAiUsageRecord(record: AiUsageRecord): Promise<void>;
   listAiUsageRecords(): Promise<AiUsageRecord[]>;
+  listAiConversations(): Promise<AiConversation[]>;
+  createAiConversation(conversation: AiConversation): Promise<void>;
+  updateAiConversation(conversation: AiConversation): Promise<void>;
+  deleteAiConversation(conversationId: string): Promise<void>;
+  listAiChatMessages(conversationId: string): Promise<AiChatMessage[]>;
+  saveAiChatMessage(message: AiChatMessage): Promise<void>;
+  clearAiConversations(): Promise<void>;
   listKnowledgeSources(): Promise<KnowledgeSourceSignature[]>;
   replaceKnowledgeSource(input: { sourceKind: KnowledgeChunk['sourceKind']; sourceId: string; contentHash: string; indexedAt: string; chunks: KnowledgeChunk[] }): Promise<void>;
   replaceKnowledgeSources(inputs: Array<{ sourceKind: KnowledgeChunk['sourceKind']; sourceId: string; contentHash: string; indexedAt: string; chunks: KnowledgeChunk[] }>): Promise<void>;

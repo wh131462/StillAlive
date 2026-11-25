@@ -825,6 +825,31 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
 
     PRAGMA user_version = 42;
   `);
+  if (currentVersion < 43) await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS ai_conversations (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      message_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS ai_conversations_updated_idx ON ai_conversations(updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS ai_chat_messages (
+      id TEXT PRIMARY KEY NOT NULL,
+      conversation_id TEXT NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+      text TEXT NOT NULL,
+      question TEXT NOT NULL DEFAULT '',
+      failed INTEGER NOT NULL DEFAULT 0,
+      memory_count INTEGER NOT NULL DEFAULT 0,
+      sources_json TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ai_chat_messages_conversation_idx ON ai_chat_messages(conversation_id, created_at ASC);
+
+    PRAGMA user_version = 43;
+  `);
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }
