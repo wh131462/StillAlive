@@ -73,7 +73,7 @@ export default function ExcerptsScreen() {
     const bookTitle = excerpt.bookId ? bookById.get(excerpt.bookId)?.title ?? excerpt.bookTitle ?? '未知书籍' : excerpt.bookTitle ?? '未知书籍';
     setAiSheet({ open: true, loading: true, text: '', error: null, excerpt });
     try {
-      const result = await ai.chat(buildExcerptExplainMessages({ text: excerpt.text, bookTitle, chapterTitle: excerpt.chapterTitle ?? null }), { taskId: 'excerpt.explain', maxOutputTokens: 300, temperature: 0.4 });
+      const result = await ai.chat(buildExcerptExplainMessages({ text: excerpt.text, bookTitle, chapterTitle: excerpt.chapterTitle ?? null }), { taskId: 'excerpt.explain', maxOutputTokens: 300, temperature: 0.5 });
       setAiSheet({ open: true, loading: false, text: result.text.trim(), error: null, excerpt });
     } catch (cause) {
       setAiSheet({ open: true, loading: false, text: '', error: aiErrorMessage(cause), excerpt });

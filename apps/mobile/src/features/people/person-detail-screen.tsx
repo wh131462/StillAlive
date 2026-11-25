@@ -126,7 +126,7 @@ export default function PersonScreen() {
     }
     setAiSuggestionLoading(true);
     try {
-      const result = await ai.chat(buildPersonImpressionMessages({ personName: person.nickname.trim() || person.name, relation: person.relationToMe, posts: samples }), { taskId: 'person.impression', maxOutputTokens: 200, temperature: 0.5 });
+      const result = await ai.chat(buildPersonImpressionMessages({ personName: person.nickname.trim() || person.name, relation: person.relationToMe, posts: samples }), { taskId: 'person.impression', maxOutputTokens: 200, temperature: 0.65 });
       setAiSuggestion(result.text.trim().replace(/^["“]|["”]$/gu, ''));
     } catch (cause) {
       feedback.alert('AI 生成失败', aiErrorMessage(cause));

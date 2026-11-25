@@ -127,7 +127,7 @@ export default function AiChatScreen() {
       if (options?.saveQuestion !== false) await chat.append(createMessage({ conversationId: conversation.id, role: 'user', text: trimmed, question: trimmed }));
       scrollToEnd();
       const { messages: promptMessages, result, coreMemories, recalledMemories } = await knowledge.buildChatMessages({ question: trimmed, history, ...(pinnedContext ? { pinnedContext } : {}) });
-      const answer = await ai.chat(promptMessages, { taskId: 'chat.answer', maxOutputTokens: 1200, temperature: 0.4, signal: controller.signal });
+      const answer = await ai.chat(promptMessages, { taskId: 'chat.answer', maxOutputTokens: 1200, temperature: 0.65, signal: controller.signal });
       const memoryCount = coreMemories.length + recalledMemories.length;
       await chat.append(createMessage({ conversationId: conversation.id, role: 'assistant', text: answer.text.trim(), question: trimmed, memoryCount, sources: result.hits.slice(0, 5).map(toSource) }));
       scrollToEnd();
