@@ -67,6 +67,8 @@ export NODE_ENV=development
 export STILL_ALIVE_APP_VARIANT=development
 
 cd "$MOBILE_DIR"
+# 依赖树残缺时先补齐，避免 Metro 带着缺失依赖启动并报 "Unable to resolve"。
+node ./scripts/preflight-deps.mjs
 # 每次启动前重新生成自动链接清单，确保新增的 Expo 原生模块（包括 DOM WebView）进入开发 APK。
 pnpm exec expo prebuild --platform android --no-install --no-clean
 rm -f android/build/generated/autolinking/autolinking.json
