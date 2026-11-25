@@ -77,6 +77,7 @@ export default function EditorScreen() {
   const [command, setCommand] = useState<EditorCommand | null>(null);
   const ai = useAi();
   const [aiActionSheetOpen, setAiActionSheetOpen] = useState(false);
+  const [aiGenerateSheetOpen, setAiGenerateSheetOpen] = useState(false);
   const [aiRunningAction, setAiRunningAction] = useState<EditorAiAction | null>(null);
   const [aiPreview, setAiPreview] = useState<{ action: EditorAiAction; text: string } | null>(null);
   const [aiGeneratePrompt, setAiGeneratePrompt] = useState('');
@@ -695,6 +696,7 @@ export default function EditorScreen() {
 
   const runAiAction = async (action: EditorAiAction, options?: { prompt?: string }) => {
     setAiActionSheetOpen(false);
+    setAiGenerateSheetOpen(false);
     const draft = body.trim();
     if (action !== 'generate' && !draft) {
       feedback.alert('先写一点内容', '写几句之后，AI 才能接着帮你；也可以直接用「生成一条」。');
@@ -908,26 +910,33 @@ export default function EditorScreen() {
         <DraggableBottomSheet accessibilityLabel="AI 写作" keyboardAvoiding onClose={() => setAiActionSheetOpen(false)} open={aiActionSheetOpen} sheetStyle={styles.aiSheet}>
           <Text style={styles.aiSheetTitle}>AI 写作</Text>
           <Text style={styles.aiSheetHint}>可以直接生成一条新记录；结果先预览，不会自动保存。</Text>
-          <View style={styles.aiGenerateBlock}>
-            <TextInput
-              maxLength={300}
-              multiline
-              onChangeText={setAiGeneratePrompt}
-              placeholder="想写点什么？不填也可以，会按今天来写"
-              placeholderTextColor={colors.inkFaint}
-              style={styles.aiGenerateInput}
-              value={aiGeneratePrompt}
-            />
-            <View style={styles.aiQuickRow}>
-              {['今天下午的散步', '最近有点累', '今天发生的一件小事'].map((sample) => <Pressable accessibilityRole="button" key={sample} onPress={() => setAiGeneratePrompt(sample)} style={({ pressed }) => [styles.aiQuickChip, pressed && styles.pressed]}><Text style={styles.aiQuickText}>{sample}</Text></Pressable>)}
-            </View>
-            <Pressable accessibilityRole="button" onPress={() => void runAiAction('generate')} style={({ pressed }) => [styles.aiGenerateButton, pressed && styles.pressed]}><Text style={styles.aiGenerateButtonText}>直接生成一条</Text></Pressable>
-          </View>
-          <View style={styles.aiDividerRow}><View style={styles.aiDivider} /><Text style={styles.aiDividerText}>或基于当前草稿</Text><View style={styles.aiDivider} /></View>
+          <AiActionOption label="直接生成一条" hint="自己写一句提示，AI 据此写一条新记录" onPress={() => { setAiActionSheetOpen(false); setAiGenerateSheetOpen(true); }} />
+          <View style={styles.aiDividerRow}><View style={styles.aiDivider} /><Text style={styles.aiDividerText}>基于当前草稿</Text><View style={styles.aiDivider} /></View>
           <AiActionOption disabled={!body.trim()} label="润色这段" hint="更顺、更具体，保留原意" onPress={() => void runAiAction('polish')} />
           <AiActionOption disabled={!body.trim()} label="继续写" hint="接着草稿再写 2–3 句" onPress={() => void runAiAction('continue')} />
           <AiActionOption disabled={!body.trim()} label="起一个标题" hint="不超过 14 个汉字" onPress={() => void runAiAction('title')} />
           <AiActionOption disabled={!body.trim()} label="整理成一条记录" hint="调整顺序、删掉重复" onPress={() => void runAiAction('organize')} />
+        </DraggableBottomSheet>
+
+        <DraggableBottomSheet accessibilityLabel="直接生成" keyboardAvoiding onClose={() => setAiGenerateSheetOpen(false)} open={aiGenerateSheetOpen} sheetStyle={styles.aiSheet}>
+          <Text style={styles.aiSheetTitle}>直接生成一条</Text>
+          <Text style={styles.aiSheetHint}>写下想写的事，生成结果会先预览。</Text>
+          <View style={styles.aiGenerateBlock}>
+            <TextInput
+              autoFocus
+              maxLength={300}
+              multiline
+              onChangeText={setAiGeneratePrompt}
+              placeholder="想写点什么"
+              placeholderTextColor={colors.inkFaint}
+              style={styles.aiGenerateInput}
+              value={aiGeneratePrompt}
+            />
+          </View>
+          <View style={styles.aiPreviewActions}>
+            <Pressable accessibilityRole="button" onPress={() => setAiGenerateSheetOpen(false)} style={({ pressed }) => [styles.aiSecondary, pressed && styles.pressed]}><Text style={styles.aiSecondaryText}>取消</Text></Pressable>
+            <Pressable accessibilityRole="button" disabled={!aiGeneratePrompt.trim()} onPress={() => { setAiGenerateSheetOpen(false); void runAiAction('generate'); }} style={({ pressed }) => [styles.aiPrimary, !aiGeneratePrompt.trim() && styles.aiActionDisabled, pressed && styles.pressed]}><Text style={styles.aiPrimaryText}>生成</Text></Pressable>
+          </View>
         </DraggableBottomSheet>
 
         <DraggableBottomSheet accessibilityLabel="AI 生成结果" onClose={() => setAiPreview(null)} open={Boolean(aiPreview)} sheetStyle={styles.aiSheet}>
@@ -1173,11 +1182,6 @@ const styles = createThemedStyles(() => ({
   aiSheetHint: { paddingHorizontal: spacing.lg, marginTop: 5, marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.meta, lineHeight: 17 },
   aiGenerateBlock: { marginHorizontal: spacing.lg, marginBottom: spacing.sm },
   aiGenerateInput: { minHeight: 84, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.paper, color: colors.ink, fontSize: typography.size.body, textAlignVertical: 'top' },
-  aiQuickRow: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  aiQuickChip: { minHeight: 32, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.sheet },
-  aiQuickText: { color: colors.life, fontSize: typography.size.meta },
-  aiGenerateButton: { marginTop: spacing.md, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: colors.life },
-  aiGenerateButtonText: { color: colors.onLife, fontSize: typography.size.caption, fontWeight: '800' },
   aiDividerRow: { marginHorizontal: spacing.lg, marginVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   aiDivider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.lineSoft },
   aiDividerText: { color: colors.inkFaint, fontSize: typography.size.meta },
