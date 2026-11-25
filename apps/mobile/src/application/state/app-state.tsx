@@ -26,6 +26,7 @@ import { DEFAULT_PREFERENCES } from './default-preferences';
 import { normalizeTagName, validatePost } from './app-state-validation';
 import { useNotificationSync } from './use-notification-sync';
 import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
+import { deleteAiKeys } from '../../infrastructure/ai/ai-key-store';
 
 const AppStateContext = createContext<AppStateValue | null>(null);
 
@@ -1385,6 +1386,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const deleteAllLocalData = useCallback(async () => {
     const storedMedia = media;
     const profileCollectionRequestIds = await repository.listProfileCollectionRequestIds();
+    const aiProviderIds = await repository.listAiProviders().then((items) => items.map((item) => item.id)).catch(() => []);
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
     await setPersistentNotificationEnabled(false).catch((cause) => writePersistentError('notifications.persistent.disable.failed', cause));
@@ -1406,6 +1408,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       failures.push(cause);
     }
     if (!dataDeleted) throw new Error(vaultDeleted ? '密码本已删除，但记录数据删除失败，请重试' : '密码本和记录数据删除失败，请重试');
+    await deleteAiKeys(aiProviderIds).catch((cause) => writePersistentError('ai.keys.delete-all.failed', cause));
     setTodayCheckIn(null);
     setCheckIns([]);
     setLedgerTransactions([]);

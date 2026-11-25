@@ -9,6 +9,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ReaderProvider } from '@epubjs-react-native/core';
 import { colors } from '@still-alive/tokens';
 import { AppStateProvider, useAppState } from '../src/application/state/app-state';
+import { AiProvider } from '../src/application/ai/ai-provider';
+import { KnowledgeProvider } from '../src/application/knowledge/knowledge-provider';
 import { migrateDatabase } from '../src/infrastructure/database/sqlite-schema';
 import { addBirthdayNotificationResponseListener, getLastBirthdayNotificationResponse } from '../src/infrastructure/notifications/expo-notifications';
 import { applyColorTheme } from '../src/shared/theme/app-theme';
@@ -61,11 +63,15 @@ export default function RootLayout() {
         <MediaLibraryPickerProvider>
           <SQLiteProvider databaseName="still-alive.db" onInit={initializeDatabase}>
             <AppStateProvider>
-              <ReaderProvider>
-                <MusicPlayerProvider>
-                  <ThemedNavigator />
-                </MusicPlayerProvider>
-              </ReaderProvider>
+              <AiProvider>
+                <KnowledgeProvider>
+                  <ReaderProvider>
+                    <MusicPlayerProvider>
+                      <ThemedNavigator />
+                    </MusicPlayerProvider>
+                  </ReaderProvider>
+                </KnowledgeProvider>
+              </AiProvider>
             </AppStateProvider>
           </SQLiteProvider>
         </MediaLibraryPickerProvider>
