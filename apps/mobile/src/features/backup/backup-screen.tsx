@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import * as DocumentPicker from 'expo-document-picker';
@@ -40,10 +40,10 @@ export default function BackupScreen() {
     mountedRef.current = false;
     if (selectedBackupRef.current) releaseParsedBackup(selectedBackupRef.current);
   }, []);
-  const estimatedBytes = media.reduce((total, item) => {
+  const estimatedBytes = useMemo(() => media.reduce((total, item) => {
     const file = new File(item.localPath);
     return total + (file.exists ? file.size : 0);
-  }, posts.reduce((total, post) => total + (post.bodyMarkdown.length + JSON.stringify(post.comments).length) * 2, 4096));
+  }, posts.reduce((total, post) => total + (post.bodyMarkdown.length + JSON.stringify(post.comments).length) * 2, 4096)), [media, posts]);
 
   const exportBackup = async () => {
     try {
@@ -52,15 +52,17 @@ export default function BackupScreen() {
       const snapshot = await createBackupSnapshot();
       setExportStage('archive');
       const archive = await createBackupArchive(snapshot);
-      await recordBackupExport();
       setExportStage('share');
-      feedback.notice(`备份已生成：${archiveFileName(archive.uri)} · ${formatBytes(archive.size)} · ${snapshot.posts.length} 条记录`);
-      if (!await Sharing.isAvailableAsync()) { feedback.alert('备份已经生成', `文件大小 ${formatBytes(archive.size)}，但当前设备不支持系统分享。文件仍保存在应用私有目录。`); return; }
+      const vaultNote = archive.includesVault ? '' : '，密码本无法读取，本次未包含密码本';
+      feedback.notice(`备份已生成：${archiveFileName(archive.uri)} · ${formatBytes(archive.size)} · ${snapshot.posts.length} 条记录${vaultNote}`);
+      if (!await Sharing.isAvailableAsync()) { feedback.alert('备份已经生成', `文件大小 ${formatBytes(archive.size)}，但当前设备不支持系统分享。文件仍保存在应用私有目录${vaultNote}。`); return; }
       try {
         await Sharing.shareAsync(archive.uri, { dialogTitle: '导出“仍在”备份', mimeType: 'application/zip', UTI: 'public.zip-archive' });
       } catch (cause: unknown) {
         feedback.alert('备份已生成，但分享失败', errorMessage(cause));
+        return;
       }
+      await recordBackupExport().catch(() => undefined);
     } catch (cause: unknown) { feedback.alert('导出失败', errorMessage(cause)); }
     finally { setBusy(null); setExportStage(null); }
   };
@@ -106,6 +108,10 @@ export default function BackupScreen() {
       }
       await restoreBackupSnapshot(materialized.snapshot);
       setImportSheetVisible(false);
+      replaceSelectedBackup(null);
+      setBackupMasterPassword('');
+      setCurrentMasterPassword('');
+      setVaultRestoreExpanded(false);
       feedback.alert(mode === 'merge' ? '合并完成' : '恢复完成', mode === 'merge' ? '当前数据已保留，备份中的新内容和较新记录已经导入。' : '备份中的记录、人物和媒体已经恢复到本机。');
     } catch (cause: unknown) {
       if (materialized) removeMaterializedMedia(materialized);

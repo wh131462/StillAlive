@@ -1300,6 +1300,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const oldPeople = people;
     const oldPosts = posts;
     const oldPreferences = preferences;
+    const profileCollectionRequestIds = await repository.listProfileCollectionRequestIds().catch(() => []);
     await cancelBirthdayNotifications(repository, expoBirthdayNotificationAdapter);
     await cancelMemoryNotifications(repository, expoMemoryNotificationAdapter);
     try {
@@ -1310,6 +1311,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       void syncMemoryNotifications(oldPosts, oldPreferences).catch((syncCause) => writePersistentError('notifications.memory.restore-rollback.failed', syncCause));
       throw cause;
     }
+    await deleteProfileCollectionPrivateKeys(profileCollectionRequestIds);
     const [checkIn, storedCheckIns, storedLedgerTransactions, storedPosts, storedPeople, storedPersonRelationshipNodes, storedPersonRelationships, storedPersonEvents, storedMedia, memory, storedPreferences, storedTags, storedTagGroups, storedTagSystems, storedPersonTags, storedAlbums, storedAlbumMedia, storedPersonBooks, storedMusicTracks, storedMusicCollectionEntries, storedMusicPlaylists, storedMusicPlaylistEntries, storedBookLists, storedBookListEntries, storedBooks, storedBookExcerpts, storedReadingNoteSources] = await Promise.all([
       repository.getCheckIn(today),
       repository.listCheckIns(),

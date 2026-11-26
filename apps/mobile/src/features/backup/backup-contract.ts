@@ -6,8 +6,3 @@ export interface BackupManifest {
   appVersion: string;
   files: Array<{ path: string; checksum: string }>;
 }
-
-export interface BackupService {
-  export(): Promise<string>;
-  restore(archivePath: string): Promise<void>;
-}

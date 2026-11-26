@@ -15,16 +15,15 @@ import { logPasswordVaultDiagnostic, passwordVaultErrorKind } from '../vault/pas
 import { writePersistentError, writePersistentLog } from '../../infrastructure/platform/persistent-log';
 
 const APP_VERSION = '0.1.0';
-const MAX_BACKUP_ARCHIVE_BYTES = 4 * 1024 * 1024 * 1024;
-const MAX_BACKUP_EXPANDED_BYTES = 4 * 1024 * 1024 * 1024;
-const MAX_BACKUP_ENTRY_COUNT = 20_000;
-const MAX_BACKUP_METADATA_BYTES = 16 * 1024 * 1024;
 const MEDIA_PATH_SCHEMA_VERSION = 8;
 const BACKUP_STREAM_CHUNK_BYTES = 256 * 1024;
+const REQUIRED_SNAPSHOT_COLLECTIONS = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'personRelationshipNodes', 'personRelationships', 'albums', 'albumMedia', 'personBooks'] as const;
+const OPTIONAL_SNAPSHOT_COLLECTIONS = ['ledgerTransactions', 'personEvents', 'musicTracks', 'musicCollectionEntries', 'musicPlaylists', 'musicPlaylistEntries', 'bookLists', 'bookListEntries', 'books', 'bookExcerpts', 'readingNoteSources', 'memoryItems', 'memorySources', 'memoryRevisions'] as const;
 
 export interface BackupArchive {
   uri: string;
   size: number;
+  includesVault: boolean;
 }
 
 export interface ParsedBackup {
@@ -64,7 +63,13 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
 
   const portableSnapshot: BackupSnapshot = { ...snapshot, media: portableMedia };
   const entries: Record<string, Uint8Array> = { 'data.json': strToU8(JSON.stringify(portableSnapshot, null, 2)) };
-  const vaultEnvelope = await readPasswordVaultBytes();
+  let vaultEnvelope: Uint8Array | null = null;
+  try {
+    vaultEnvelope = await readPasswordVaultBytes();
+  } catch (cause) {
+    // 密码本损坏不应该阻断记录与媒体的导出。
+    writePersistentError('backup.export.vault-skipped', cause, {});
+  }
   if (vaultEnvelope) {
     logPasswordVaultDiagnostic('backup.export.include-vault', { bytes: vaultEnvelope.byteLength });
     entries['vault.enc'] = vaultEnvelope;
@@ -102,8 +107,9 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
     const manifest: BackupManifest = { schemaVersion: BACKUP_SCHEMA_VERSION, exportedAt, appVersion: APP_VERSION, files };
     addBufferedZipEntry(archive, 'manifest.json', strToU8(JSON.stringify(manifest, null, 2)), true);
     archive.end();
+    removeStaleBackupArchives(output.name);
     writePersistentLog('INFO', 'backup.export.finished', { uri: output.uri, size: archiveSize, files: files.length });
-    return { uri: output.uri, size: archiveSize };
+    return { uri: output.uri, size: archiveSize, includesVault: vaultEnvelope !== null };
   } catch (cause) {
     writePersistentError('backup.export.failed', cause, { posts: snapshot.posts.length, people: snapshot.people.length, media: snapshot.media.length });
     try { outputHandle?.close(); } catch { /* preserve the export failure */ }
@@ -112,6 +118,16 @@ export async function createBackupArchive(snapshot: BackupSnapshot): Promise<Bac
     throw cause;
   } finally {
     outputHandle?.close();
+  }
+}
+
+function removeStaleBackupArchives(keepName: string): void {
+  try {
+    for (const item of Paths.cache.list()) {
+      if (item instanceof File && item.name !== keepName && item.name.startsWith('still-alive-') && item.name.endsWith('.zip')) item.delete();
+    }
+  } catch {
+    // 清理旧导出包失败不影响本次导出。
   }
 }
 
@@ -149,7 +165,7 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
   writePersistentLog('INFO', 'backup.parse.started', { uri });
   logPasswordVaultDiagnostic('backup.parse.start');
   const archive = new File(uri);
-  if (!archive.exists || !Number.isSafeInteger(archive.size) || archive.size <= 0 || archive.size > MAX_BACKUP_ARCHIVE_BYTES) throw new Error('备份文件过大或无效，无法安全读取');
+  if (!archive.exists || !Number.isSafeInteger(archive.size) || archive.size <= 0) throw new Error('备份文件无效，无法读取');
 
   const temporaryDirectory = new Directory(Paths.cache, `still-alive-import-${Date.now()}`);
   temporaryDirectory.create({ intermediates: true });
@@ -158,7 +174,6 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
   const seenPaths = new Set<string>();
   const openHandles = new Set<ReturnType<File['open']>>();
   let entryCount = 0;
-  let expandedBytes = 0;
   let storedFileIndex = 0;
 
   try {
@@ -166,7 +181,6 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
     try {
       const unzip = new Unzip((entry) => {
         entryCount += 1;
-        if (entryCount > MAX_BACKUP_ENTRY_COUNT) throw new Error('备份包含过多文件，无法安全读取');
         if (!isSafeRelativePath(entry.name) || seenPaths.has(entry.name)) throw new Error(`备份文件路径无效：${entry.name}`);
         seenPaths.add(entry.name);
 
@@ -187,8 +201,6 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
           try {
             if (error) throw error;
             if (bytes?.byteLength) {
-              expandedBytes += bytes.byteLength;
-              if (!Number.isSafeInteger(expandedBytes) || expandedBytes > MAX_BACKUP_EXPANDED_BYTES) throw new Error('备份解压后过大，无法安全读取');
               storedHandle.writeBytes(bytes);
               digest.update(bytes);
             }
@@ -244,6 +256,7 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
     }
 
     const snapshot = JSON.parse(strFromU8(dataBytes)) as BackupSnapshot;
+    assertSnapshotCollections(snapshot);
     migrateSnapshot(snapshot);
     validateSnapshot(snapshot, manifest.schemaVersion < MEDIA_PATH_SCHEMA_VERSION);
     const entries: Record<string, Uint8Array> = { 'manifest.json': manifestBytes, 'data.json': dataBytes };
@@ -262,7 +275,7 @@ export async function parseBackupArchive(uri: string): Promise<ParsedBackup> {
     writePersistentLog('INFO', 'backup.parse.finished', { uri, archiveBytes: archive.size, entries: entryCount, media: snapshot.media.length, posts: snapshot.posts.length, people: snapshot.people.length, hasVault: Boolean(vaultEnvelope) });
     return { exportedAt: manifest.exportedAt, snapshot, entries, mediaFiles, vaultEnvelope, temporaryDirectory: temporaryDirectory.uri };
   } catch (cause) {
-    writePersistentError('backup.parse.failed', cause, { uri, archiveBytes: archive.size, entries: entryCount, expandedBytes });
+    writePersistentError('backup.parse.failed', cause, { uri, archiveBytes: archive.size, entries: entryCount });
     for (const handle of openHandles) {
       try { handle.close(); } catch { /* preserve the parse failure */ }
     }
@@ -275,7 +288,7 @@ async function readStoredBackupEntry(storedFiles: Record<string, string>, path: 
   const uri = storedFiles[path];
   if (!uri) throw new Error(`备份缺少 ${path}`);
   const file = new File(uri);
-  if (!Number.isSafeInteger(file.size) || file.size > MAX_BACKUP_METADATA_BYTES) throw new Error(`备份中的 ${path} 过大，无法安全读取`);
+  if (!file.exists) throw new Error(`备份缺少 ${path}`);
   return file.bytes();
 }
 
@@ -452,10 +465,9 @@ export function materializeBackupMedia(parsed: ParsedBackup, options: Materializ
   const snapshot = options.snapshot ?? parsed.snapshot;
   const retainedMedia = options.retainedMedia ?? [];
   const retainedById = new Map(retainedMedia.map((item) => [item.id, item]));
-  const directory = new Directory(Paths.document, `media-restored-${Date.now()}`);
-  directory.create({ intermediates: true });
+  const fallbackDirectory = new Directory(Paths.document, `media-restored-${Date.now()}`);
   const createdFiles: string[] = [];
-  const createdDirectories = [directory.uri];
+  const createdDirectories: string[] = [];
   try {
     const restoredMedia = snapshot.media.map((item) => {
       const path = item.localPath;
@@ -471,27 +483,10 @@ export function materializeBackupMedia(parsed: ParsedBackup, options: Materializ
       if (!bytes && (!streamedFile || !streamedFile.exists)) throw new Error(`备份媒体缺失：${path}`);
       const fileName = path.split('/').pop();
       if (!fileName) throw new Error(`备份媒体路径无效：${path}`);
-      const parts = path.split('/');
-      let targetDirectory = directory;
-      if (parts[0] === 'people' && parts.length === 5 && parts[2] === 'albums') {
-        targetDirectory = new Directory(Paths.document, 'people', parts[1], 'albums', parts[3]);
-      } else if (parts[0] === 'self' && parts.length === 4 && parts[1] === 'albums') {
-        targetDirectory = new Directory(Paths.document, 'self', 'albums', parts[2]);
-      } else if (parts[0] === 'books') {
-        targetDirectory = new Directory(Paths.document, 'books');
-      } else if (parts[0] === 'music') {
-        targetDirectory = new Directory(Paths.document, 'media');
-      }
-      if (targetDirectory !== directory) {
-        const existed = targetDirectory.exists;
-        targetDirectory.create({ idempotent: true, intermediates: true });
-        if (!existed) createdDirectories.push(targetDirectory.uri);
-      }
-      if (targetDirectory === directory && (parts[0] === 'books' || parts[0] === 'music')) {
-        targetDirectory = new Directory(Paths.document, parts[0] === 'books' ? 'books' : 'media');
-        const existed = targetDirectory.exists;
-        targetDirectory.create({ idempotent: true, intermediates: true });
-        if (!existed) createdDirectories.push(targetDirectory.uri);
+      const targetDirectory = resolveRestoreDirectory(path, fallbackDirectory);
+      if (!targetDirectory.exists) {
+        targetDirectory.create({ intermediates: true });
+        createdDirectories.push(targetDirectory.uri);
       }
       const destination = new File(targetDirectory, fileName);
       if (destination.exists) {
@@ -515,6 +510,15 @@ export function materializeBackupMedia(parsed: ParsedBackup, options: Materializ
 
 export function removeMaterializedMedia(materialized: MaterializedBackup): void {
   cleanupMaterializedFiles(materialized.createdFiles, materialized.createdDirectories);
+}
+
+function resolveRestoreDirectory(path: string, fallback: Directory): Directory {
+  const parts = path.split('/');
+  if (parts[0] === 'people' && parts.length === 5 && parts[2] === 'albums') return new Directory(Paths.document, 'people', parts[1], 'albums', parts[3]);
+  if (parts[0] === 'self' && parts.length === 4 && parts[1] === 'albums') return new Directory(Paths.document, 'self', 'albums', parts[2]);
+  if (parts[0] === 'books') return new Directory(Paths.document, 'books');
+  if (parts[0] === 'music' || parts[0] === 'media') return new Directory(Paths.document, 'media');
+  return fallback;
 }
 
 export function releaseParsedBackup(parsed: ParsedBackup): void {
@@ -565,10 +569,19 @@ function filesEqual(left: File, right: File): boolean {
   }
 }
 
+function assertSnapshotCollections(value: BackupSnapshot): void {
+  if (!value || typeof value !== 'object') throw new Error('备份数据格式无效');
+  const record = value as unknown as Record<string, unknown>;
+  for (const key of REQUIRED_SNAPSHOT_COLLECTIONS) if (!Array.isArray(record[key])) throw new Error(`备份数据缺少 ${key}`);
+  for (const key of OPTIONAL_SNAPSHOT_COLLECTIONS) {
+    const collection = record[key];
+    if (collection !== undefined && collection !== null && !Array.isArray(collection)) throw new Error('备份数据格式无效');
+  }
+}
+
 function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = false): void {
   if (!value || typeof value !== 'object') throw new Error('备份数据格式无效');
-  const collections = ['checkIns', 'posts', 'drafts', 'people', 'media', 'postPersons', 'tagDefinitions', 'tagGroups', 'tagSystemSettings', 'personTags', 'personRelationshipNodes', 'personRelationships', 'albums', 'albumMedia', 'personBooks'] as const;
-  for (const key of collections) if (!Array.isArray(value[key])) throw new Error(`备份数据缺少 ${key}`);
+  for (const key of REQUIRED_SNAPSHOT_COLLECTIONS) if (!Array.isArray(value[key])) throw new Error(`备份数据缺少 ${key}`);
 
   assertUniqueIds(value.posts, '记录');
   assertUniqueIds(value.people, '人物');
@@ -627,6 +640,9 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
     personBookKeys.add(key);
   }
   const excerptIds = new Set(bookExcerpts.map((excerpt) => excerpt.id));
+  const memoryItems = value.memoryItems ?? [];
+  const memorySources = value.memorySources ?? [];
+  const memoryRevisions = value.memoryRevisions ?? [];
   const musicTrackIds = new Set(musicTracks.map((track) => track.id));
   const musicPlaylistIds = new Set(musicPlaylists.map((playlist) => playlist.id));
   for (const track of musicTracks) {
@@ -677,6 +693,38 @@ function validateSnapshot(value: BackupSnapshot, allowLegacyGenericMediaPath = f
   for (const source of readingNoteSources) {
     if (!postIds.has(source.postId) || (source.bookId && !bookIds.has(source.bookId)) || source.excerptIds.some((id) => !excerptIds.has(id)) || !Array.isArray(source.quoteSnapshots)) throw new Error('备份中的阅读笔记引用无效');
   }
+  assertUniqueIds(memoryItems, '记忆');
+  const memoryIds = new Set(memoryItems.map((item) => item.id));
+  for (const memory of memoryItems) {
+    if (!['semantic', 'episodic', 'procedural'].includes(memory.kind)) throw new Error('备份中的记忆无效');
+    if (!['self', 'person', 'topic'].includes(memory.subjectType) || (memory.subjectId !== null && (typeof memory.subjectId !== 'string' || !memory.subjectId))) throw new Error('备份中的记忆归属无效');
+    if (typeof memory.content !== 'string' || !memory.content.trim() || typeof memory.contentHash !== 'string' || !memory.contentHash) throw new Error('备份中的记忆内容无效');
+    if (!Number.isFinite(memory.confidence) || memory.confidence < 0 || memory.confidence > 1) throw new Error('备份中的记忆置信度无效');
+    if (!Number.isInteger(memory.importance) || memory.importance < 1 || memory.importance > 3) throw new Error('备份中的记忆重要度无效');
+    if (!['pending', 'active', 'archived', 'suppressed', 'deleted'].includes(memory.status) || !['user', 'derived', 'ai_auto'].includes(memory.origin)) throw new Error('备份中的记忆状态无效');
+    if ((memory.validFrom !== null && !isValidDate(memory.validFrom)) || (memory.validTo !== null && !isValidDate(memory.validTo)) || !isValidDate(memory.recordedAt)) throw new Error('备份中的记忆时间无效');
+    if ((memory.lastConfirmedAt !== null && !isValidDate(memory.lastConfirmedAt)) || (memory.lastUsedAt !== null && !isValidDate(memory.lastUsedAt))) throw new Error('备份中的记忆时间无效');
+    if (!Number.isSafeInteger(memory.useCount) || memory.useCount < 0 || !isValidDate(memory.createdAt) || !isValidDate(memory.updatedAt)) throw new Error('备份中的记忆统计无效');
+  }
+  const memorySourceKeys = new Set<string>();
+  for (const source of memorySources) {
+    if (!memoryIds.has(source.memoryId)) continue;
+    const key = `${source.memoryId}:${source.sourceKind}:${source.sourceId}`;
+    if (typeof source.sourceKind !== 'string' || !source.sourceKind || typeof source.sourceId !== 'string' || !source.sourceId || memorySourceKeys.has(key)) throw new Error('备份中的记忆来源无效');
+    memorySourceKeys.add(key);
+  }
+  const validMemoryRevisions: typeof memoryRevisions = [];
+  const memoryRevisionIds = new Set<string>();
+  for (const revision of memoryRevisions) {
+    if (!memoryIds.has(revision.memoryId)) continue;
+    if (typeof revision.id !== 'string' || !revision.id || typeof revision.action !== 'string' || !revision.action || !isValidDate(revision.createdAt)) throw new Error('备份中的记忆修订无效');
+    if (memoryRevisionIds.has(revision.id)) continue;
+    memoryRevisionIds.add(revision.id);
+    validMemoryRevisions.push(revision);
+  }
+  // 早期导出的备份可能包含已不在快照内的记忆来源与修订，这些记录没有可归属的记忆，直接丢弃。
+  value.memorySources = memorySources.filter((source) => memoryIds.has(source.memoryId));
+  value.memoryRevisions = validMemoryRevisions;
   for (const checkIn of value.checkIns) if (checkIn.city !== null && (typeof checkIn.city !== 'string' || checkIn.city.length > 40)) throw new Error('备份中的打卡城市无效');
   for (const post of value.posts) {
     if (post.locationName !== null && (typeof post.locationName !== 'string' || post.locationName.length > 80)) throw new Error('备份中的记录地点无效');
