@@ -16,21 +16,25 @@ const BAR_HEIGHT = 64;
 const TAB_ROW_TOP = 6;
 const AI_SIZE = 56;
 const AI_RADIUS = AI_SIZE / 2;
-/** 凹槽比球大的那圈缝隙，保证球与弧线始终不相接。 */
-const AI_GAP = 10;
 /** 球心低于栏顶的距离，也就是球“坐进”去多深。 */
-const AI_SEAT = 16;
+const AI_SEAT = 12;
+/** 凹槽比球大的那圈缝隙，保证球与弧线始终不相接。 */
+const AI_GAP = 6;
 const AI_SOCKET_RADIUS = AI_RADIUS + AI_GAP;
-const AI_SOCKET_HALF = Math.sqrt(AI_SOCKET_RADIUS ** 2 - AI_SEAT ** 2);
+/** 两端反向圆角在栏顶方向多出来的宽度。 */
+const AI_FILLET_WIDTH = 12;
+const AI_TOP_HALF = AI_SOCKET_RADIUS + AI_FILLET_WIDTH;
 const AI_DOCK_HEIGHT = 66;
 
-/** 标签栏顶部为 AI 球留出的圆弧凹槽：半径比球大 AI_GAP，四周留出等宽缝隙。 */
+/** 标签栏顶部为 AI 球留出的凹槽：中段是与球同心的半圆，两端用反向圆角接回栏顶。 */
 function dockedBarPath(width: number, bottom: number): string {
   const cx = width / 2;
   return [
     `M0 0`,
-    `H${cx - AI_SOCKET_HALF}`,
-    `A${AI_SOCKET_RADIUS} ${AI_SOCKET_RADIUS} 0 0 0 ${cx + AI_SOCKET_HALF} 0`,
+    `H${cx - AI_TOP_HALF}`,
+    `Q${cx - AI_SOCKET_RADIUS} 0 ${cx - AI_SOCKET_RADIUS} ${AI_SEAT}`,
+    `A${AI_SOCKET_RADIUS} ${AI_SOCKET_RADIUS} 0 0 0 ${cx + AI_SOCKET_RADIUS} ${AI_SEAT}`,
+    `Q${cx + AI_SOCKET_RADIUS} 0 ${cx + AI_TOP_HALF} 0`,
     `H${width}`,
     `V${bottom}`,
     'H0',
@@ -42,8 +46,10 @@ function dockedTopPath(width: number): string {
   const cx = width / 2;
   return [
     `M0 0`,
-    `H${cx - AI_SOCKET_HALF}`,
-    `A${AI_SOCKET_RADIUS} ${AI_SOCKET_RADIUS} 0 0 0 ${cx + AI_SOCKET_HALF} 0`,
+    `H${cx - AI_TOP_HALF}`,
+    `Q${cx - AI_SOCKET_RADIUS} 0 ${cx - AI_SOCKET_RADIUS} ${AI_SEAT}`,
+    `A${AI_SOCKET_RADIUS} ${AI_SOCKET_RADIUS} 0 0 0 ${cx + AI_SOCKET_RADIUS} ${AI_SEAT}`,
+    `Q${cx + AI_SOCKET_RADIUS} 0 ${cx + AI_TOP_HALF} 0`,
     `H${width}`,
   ].join(' ');
 }
@@ -153,10 +159,10 @@ const styles = createThemedStyles(() => ({
   tabGlyphPlaceholder: { width: 22, height: 22 },
   tabLabel: { color: colors.inkFaint, fontFamily: typography.body, fontSize: 10 },
   tabLabelActive: { color: colors.life, fontWeight: '700' },
-  centerGap: { width: 80 },
-  aiDock: { position: 'absolute', top: -17, left: 0, right: 0, height: AI_DOCK_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  centerGap: { width: 100 },
+  aiDock: { position: 'absolute', top: -21, left: 0, right: 0, height: AI_DOCK_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   aiScale: { width: AI_SIZE, height: AI_SIZE },
-  aiButton: { width: AI_SIZE, height: AI_SIZE, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: AI_RADIUS, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.16, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  aiButton: { width: AI_SIZE, height: AI_SIZE, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: AI_RADIUS, backgroundColor: colors.life, shadowColor: colors.ink, shadowOpacity: 0.13, shadowRadius: 5, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
   aiButtonActive: { backgroundColor: colors.lifeDeep },
   aiSheen: { position: 'absolute', top: -18, width: 26, height: AI_SIZE + 36, backgroundColor: 'rgba(255, 255, 255, 0.4)' },
   aiText: { color: colors.onLife, fontFamily: typography.display, fontSize: 15, fontWeight: '700', letterSpacing: 1.8 },
