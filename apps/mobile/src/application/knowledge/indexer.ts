@@ -3,7 +3,7 @@ import { buildAggregateChunks, buildKnowledgeSources } from '../../features/ai/d
 import { buildDeterministicAggregates } from '../../features/ai/domain/aggregates';
 import type { KnowledgeDataInput } from '../../features/ai/domain/knowledge-types';
 
-export const KNOWLEDGE_INDEX_VERSION = 'knowledge-v1';
+export const KNOWLEDGE_INDEX_VERSION = 'knowledge-v2';
 const BATCH_SIZE = 25;
 
 export interface KnowledgeIndexResult {
