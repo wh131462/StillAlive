@@ -22,7 +22,7 @@ interface MarkdownViewProps {
 }
 
 export default function MarkdownView({ citations, markdown, maxHeight, media, onOverflowChange, onReady, preview = false, theme, variant = 'prose' }: MarkdownViewProps) {
-  const html = renderCitationMarkers(renderRichTextMarkdown(markdown), citations);
+  const html = renderCitationMarkers(renderRichTextMarkdown(citations?.length ? normalizeCitationPunctuation(markdown) : markdown), citations);
   const contentRef = useRef<HTMLElement | null>(null);
   const overflowRef = useRef<boolean | null>(null);
 
@@ -68,9 +68,17 @@ export default function MarkdownView({ citations, markdown, maxHeight, media, on
   );
 }
 
+/** 旧回答常把编号写在句号前；统一挪到标点后，避免标点单独换行。 */
+function normalizeCitationPunctuation(markdown: string): string {
+  return markdown.replace(/([\[（(][SKC]\d+(?:[、,，]\s*[SKC]\d+)*[\]）)])([。；，、！？：])/gu, '$2$1');
+}
+
+const CITATION_GROUP_PATTERN = /[\[（(]([SKC]\d+(?:[、,，\s]+[SKC]\d+)*)[\]）)]/gu;
+const CITATION_GROUP_TEST = /[\[（(][SKC]\d+/u;
+
 /**
- * 把正文里的 [S1]/[K2] 替换成可辨识的角标；只处理传入的已知编号，
- * 代码块与链接内不动，未知编号保持原样。
+ * 把正文里的 [S1]/[K2]（兼容（S1）、(S1) 与括号内并列）替换成可辨识的角标；
+ * 只处理传入的已知编号，代码块与链接内不动，未知编号保持原样。
  */
 function renderCitationMarkers(html: string, citations?: string[]): string {
   if (!citations?.length || typeof DOMParser === 'undefined') return html;
@@ -80,24 +88,32 @@ function renderCitationMarkers(html: string, citations?: string[]): string {
   const targets: Text[] = [];
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node as Text;
-    if (!/\[[SK]\d+\]/u.test(text.data)) continue;
+    if (!CITATION_GROUP_TEST.test(text.data)) continue;
     if (text.parentElement?.closest('pre, code, a')) continue;
     targets.push(text);
   }
   for (const text of targets) {
-    const pattern = /\[([SK]\d+)\]/gu;
     const fragment = doc.createDocumentFragment();
     let lastIndex = 0;
     let matched = false;
-    for (let match = pattern.exec(text.data); match; match = pattern.exec(text.data)) {
-      if (!known.has(match[1])) continue;
+    CITATION_GROUP_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = CITATION_GROUP_PATTERN.exec(text.data)) !== null) {
+      const ids = match[1].match(/[SKC]\d+/gu) ?? [];
+      if (!ids.length || !ids.every((id) => known.has(id) || /^C\d+$/u.test(id))) continue;
       matched = true;
       fragment.append(text.data.slice(lastIndex, match.index));
-      const marker = doc.createElement('sup');
-      marker.className = 'citation';
-      marker.dataset.citation = match[1];
-      marker.textContent = match[1];
-      fragment.append(marker);
+      const wrapper = doc.createElement('span');
+      wrapper.className = 'citation-wrap';
+      ids.forEach((id, index) => {
+        if (index > 0) wrapper.append('、');
+        const marker = doc.createElement('sup');
+        marker.className = /^C\d+$/u.test(id) ? 'citation citation-memory' : 'citation';
+        marker.dataset.citation = id;
+        marker.textContent = id;
+        wrapper.append(marker);
+      });
+      fragment.append(wrapper);
       lastIndex = match.index + match[0].length;
     }
     if (!matched) continue;
@@ -117,12 +133,13 @@ const viewCss = (theme: EditorTheme, maxHeight?: number, preview = false, varian
   ${variant === 'chat' ? `.rich-text-surface { --rich-text-line-height: 1.55em; font-size: 16px; line-height: 1.55; }
   .rich-text-surface h1 { font-size: 1.4em; } .rich-text-surface h2 { font-size: 1.22em; } .rich-text-surface h3 { font-size: 1.08em; }
   .rich-text-surface p:last-child, .rich-text-surface ul:last-child, .rich-text-surface ol:last-child, .rich-text-surface pre:last-child { margin-bottom: 0; }
-  .rich-text-surface table { display: table; table-layout: fixed; }
-  .rich-text-surface th, .rich-text-surface td { min-width: 0; }` : ''}
+` : ''}
   .markdown { ${maxHeight === undefined ? '' : `max-height: ${Math.max(0, maxHeight)}px; overflow: hidden;`} }
   .markdown .task-list-item > input[type="checkbox"] { opacity: 1; pointer-events: none; }
   .markdown .date-card { display: inline-flex; align-items: center; vertical-align: baseline; margin: 0 0.32em; padding: 0.08em 0.65em; border: 1px solid ${theme.line}; border-radius: 8px; background: ${theme.paper}; color: ${theme.ink}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.88em; line-height: 1.35; font-weight: 700; box-shadow: 0 2px 6px rgba(16, 24, 20, 0.08); }
   .markdown .date-card-datetime { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; }
   .markdown img { margin: 1.2em 0; border-radius: 4px; }
-  .markdown .citation { display: inline-block; margin: 0 0.16em; padding: 0.12em 0.38em; border-radius: 4px; border: 1px solid ${theme.lifeLine}; background: ${theme.lifeLight}; color: ${theme.life}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; font-size: 0.62em; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; vertical-align: 0.28em; }
+  .markdown .citation-wrap { white-space: nowrap; overflow-wrap: normal; word-break: keep-all; }
+  .markdown .citation { display: inline; margin: 0 0.16em; padding: 0.12em 0.38em; border-radius: 4px; border: 1px solid ${theme.lifeLine}; background: ${theme.lifeLight}; color: ${theme.life}; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; font-size: 0.66em; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; vertical-align: 0.28em; }
+  .markdown .citation-memory { border-color: ${theme.line}; background: ${theme.paper}; color: ${theme.inkSoft}; }
 `;

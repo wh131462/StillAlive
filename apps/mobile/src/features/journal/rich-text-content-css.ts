@@ -2,7 +2,7 @@ import type { EditorTheme } from './rich-text-editor.types';
 
 export function richTextSurfaceCss(theme: EditorTheme): string {
   return `
-    .rich-text-surface { --rich-text-line-height: 1.68em; width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 17px; line-height: 1.68; }
+    .rich-text-surface { --rich-text-line-height: 1.68em; width: 100%; min-width: 0; overflow-wrap: anywhere; line-break: strict; font-size: 17px; line-height: 1.68; }
     ${richTextContentCss(theme)}
     img, video { display: block; width: 100%; max-height: 520px; background: ${theme.lifeLight}; object-fit: cover; }
   `;
