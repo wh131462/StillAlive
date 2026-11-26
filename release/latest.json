@@ -1,6 +1,6 @@
 {
-  "versionCode": 31,
-  "versionName": "1.1.22",
-  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.22.apk",
-  "releaseNotes": "新增 AI 对话与本地记忆：可配置多家服务商，基于记录问答，支持历史、来源与误删恢复；入口收进底部 AI 按钮，关闭 AI 时隐藏。\nAI 经确认可帮你记账、写记录或打卡，写入记忆前校验依据；编辑器可直接生成整条日记。\n账本、人物、书摘等页面接入 AI 解读，记忆随备份导出；修复 Markdown 渲染问题。"
+  "versionCode": 32,
+  "versionName": "1.1.23",
+  "apkUrl": "https://github.com/wh131462/StillAlive/releases/latest/download/still-alive-pro-v1.1.23.apk",
+  "releaseNotes": "新增 AI 助手：基于本机记录、人物、账本与记忆问答，支持来源引用、历史对话和用量，并接入书摘、日记、记账等页面。\n记忆支持自动整理、恢复与彻底删除；确认后 AI 可帮你记账、写记录、加人物或打卡，并可调深度思考强度。\n优化 AI 入口、标签栏凹槽、引用格式和农历生日计算，修复备份恢复的隐私残留。"
 }
