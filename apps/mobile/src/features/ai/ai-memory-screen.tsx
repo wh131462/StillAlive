@@ -33,7 +33,7 @@ export default function AiMemoryScreen() {
 
   const active = knowledge.memories.filter((item) => item.status === 'active' && item.validTo === null);
   const autoActive = active.filter((item) => item.origin === 'ai_auto');
-  const hidden = knowledge.memories.filter((item) => item.status === 'archived' || item.status === 'suppressed');
+  const hidden = knowledge.memories.filter((item) => item.status === 'archived' || item.status === 'suppressed' || item.status === 'deleted');
   const visible = filter === 'hidden'
     ? hidden
     : active.filter((item) => filter === 'all' || (filter === 'user' ? item.origin === 'user' : item.origin === 'ai_auto'));
@@ -42,6 +42,13 @@ export default function AiMemoryScreen() {
     feedback.alert('遗忘这条记忆？', `“${content.slice(0, 40)}${content.length > 40 ? '…' : ''}”\n\n遗忘后不会再被检索；原始记录不受影响。`, [
       { text: '取消', style: 'cancel' },
       { text: '遗忘', style: 'destructive', onPress: () => void knowledge.forgetMemory(memoryId).then(() => feedback.notice('已遗忘这条记忆')).catch((cause: unknown) => feedback.alert('遗忘失败', cause instanceof Error ? cause.message : '请稍后重试')) },
+    ]);
+  }, [knowledge]);
+
+  const purge = useCallback((memoryId: string, content: string) => {
+    feedback.alert('彻底删除这条记忆？', `“${content.slice(0, 40)}${content.length > 40 ? '…' : ''}”\n\n会从本机永久删除，无法恢复；原始记录不受影响。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '彻底删除', style: 'destructive', onPress: () => void knowledge.purgeMemory(memoryId).then(() => feedback.notice('已彻底删除')).catch((cause: unknown) => feedback.alert('删除失败', cause instanceof Error ? cause.message : '请稍后重试')) },
     ]);
   }, [knowledge]);
 
@@ -124,19 +131,24 @@ export default function AiMemoryScreen() {
           <Text style={styles.memoryMeta}>
             {item.origin === 'user' ? '手写' : item.origin === 'derived' ? '整理' : '自动'}
             {item.kind === 'episodic' ? ' · 经历' : item.kind === 'procedural' ? ' · 偏好' : ' · 事实'}
-            {item.status === 'suppressed' ? ' · 永不提及' : item.status === 'archived' ? ' · 已归档' : ''}
+            {item.status === 'suppressed' ? ' · 永不提及' : item.status === 'archived' ? ' · 已归档' : item.status === 'deleted' ? ' · 已遗忘' : ''}
             {' · '}{formatRelativeTime(item.lastConfirmedAt ?? item.createdAt)}
           </Text>
           <Text selectable style={styles.memoryContent}>{item.content}</Text>
           <View style={styles.memoryActions}>
-            {item.status === 'archived' || item.status === 'suppressed'
-              ? <Pressable accessibilityRole="button" hitSlop={8} onPress={() => restore(item.id)}><Text style={[styles.memoryAction, styles.memoryActionRestore]}>恢复</Text></Pressable>
-              : <Pressable accessibilityRole="button" hitSlop={8} onPress={() => suppress(item.id)}><Text style={styles.memoryAction}>永不提及</Text></Pressable>}
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => forget(item.id, item.content)}><Text style={[styles.memoryAction, styles.memoryActionDanger]}>遗忘</Text></Pressable>
+            {item.status === 'archived' || item.status === 'suppressed' || item.status === 'deleted'
+              ? <>
+                  <Pressable accessibilityRole="button" hitSlop={8} onPress={() => restore(item.id)}><Text style={[styles.memoryAction, styles.memoryActionRestore]}>恢复</Text></Pressable>
+                  <Pressable accessibilityRole="button" hitSlop={8} onPress={() => purge(item.id, item.content)}><Text style={[styles.memoryAction, styles.memoryActionDanger]}>彻底删除</Text></Pressable>
+                </>
+              : <>
+                  <Pressable accessibilityRole="button" hitSlop={8} onPress={() => suppress(item.id)}><Text style={styles.memoryAction}>永不提及</Text></Pressable>
+                  <Pressable accessibilityRole="button" hitSlop={8} onPress={() => forget(item.id, item.content)}><Text style={[styles.memoryAction, styles.memoryActionDanger]}>遗忘</Text></Pressable>
+                </>}
           </View>
         </View>) : <View style={styles.emptyRow}>
           <Text style={styles.emptyTitle}>{filter === 'hidden' ? '没有隐藏的记忆' : '还没有记忆'}</Text>
-          <Text style={styles.emptyText}>{filter === 'hidden' ? '遗忘或永不提及的记忆会出现在这里，可以随时恢复。' : '在 AI 问答里多聊几次，或是在记录上点“记住这件事”，这里会慢慢积累。'}</Text>
+          <Text style={styles.emptyText}>{filter === 'hidden' ? '遗忘或永不提及的记忆会出现在这里，可以恢复或彻底删除。' : '在 AI 问答里多聊几次，或是在记录上点“记住这件事”，这里会慢慢积累。'}</Text>
         </View>}
       </View>
       <Text style={styles.footer}>关闭 AI 或删除全部数据会清理记忆。记忆会随备份导出；知识索引与汇总可重建，不会进入备份。</Text>
