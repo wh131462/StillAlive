@@ -52,19 +52,32 @@ export function birthdayInSolarYear(birthday: Birthday, solarYear: number): Date
     return localDate(solarYear, birthday.month, day);
   }
   for (let lunarYear = solarYear - 1; lunarYear <= solarYear + 1; lunarYear += 1) {
-    const leapMonth = LunarYear.fromYear(lunarYear).getLeapMonth();
-    const signedMonth = birthday.isLeapMonth && leapMonth === birthday.month ? -birthday.month : birthday.month;
-    const month = LunarMonth.fromYm(lunarYear, signedMonth);
-    const day = LunarDay.fromYmd(lunarYear, signedMonth, Math.min(birthday.day, month.getDayCount())).getSolarDay();
-    if (day.getYear() === solarYear) return localDate(day.getYear(), day.getMonth(), day.getDay());
+    const day = lunarBirthdaySolarDate(birthday, lunarYear);
+    if (day.getFullYear() === solarYear) return day;
   }
   throw new Error('无法计算该年的农历生日');
 }
 
 export function nextBirthday(birthday: Birthday, now = new Date()): Date {
   const today = startOfDay(now);
-  const current = birthdayInSolarYear(birthday, today.getFullYear());
-  return current.getTime() >= today.getTime() ? current : birthdayInSolarYear(birthday, today.getFullYear() + 1);
+  if (birthday.calendar === 'solar') {
+    const current = birthdayInSolarYear(birthday, today.getFullYear());
+    return current.getTime() >= today.getTime() ? current : birthdayInSolarYear(birthday, today.getFullYear() + 1);
+  }
+  // 农历生日在公历里可能落在年初或年末，按农历年逐个算再取最近的下一次，不能按公历年直接取。
+  for (let lunarYear = today.getFullYear() - 1; lunarYear <= today.getFullYear() + 2; lunarYear += 1) {
+    const candidate = lunarBirthdaySolarDate(birthday, lunarYear);
+    if (candidate.getTime() >= today.getTime()) return candidate;
+  }
+  throw new Error('无法计算下一次农历生日');
+}
+
+function lunarBirthdaySolarDate(birthday: Birthday, lunarYear: number): Date {
+  const leapMonth = LunarYear.fromYear(lunarYear).getLeapMonth();
+  const signedMonth = birthday.isLeapMonth && leapMonth === birthday.month ? -birthday.month : birthday.month;
+  const month = LunarMonth.fromYm(lunarYear, signedMonth);
+  const day = LunarDay.fromYmd(lunarYear, signedMonth, Math.min(birthday.day, month.getDayCount())).getSolarDay();
+  return localDate(day.getYear(), day.getMonth(), day.getDay());
 }
 
 export function birthdayForCalendar(birthday: Birthday, calendar: BirthdayCalendar): Birthday {

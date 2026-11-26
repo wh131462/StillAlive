@@ -144,5 +144,6 @@ export interface StillAliveRepository {
   listMemorySources(): Promise<MemorySourceRow[]>;
   saveMemoryRevision(revision: MemoryRevision): Promise<void>;
   listMemoryRevisions(memoryId: string): Promise<MemoryRevision[]>;
+  deleteMemoryItem(memoryId: string): Promise<void>;
   clearAllMemory(): Promise<void>;
 }

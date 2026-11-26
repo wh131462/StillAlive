@@ -29,6 +29,7 @@ export interface AiProviderProfileRow {
   id: string; label: string; kind: 'openai-compatible' | 'anthropic' | 'deepseek'; base_url: string; model_id: string; key_hint: string;
   supports_stream: number; supports_balance: number; enabled: number; is_default: number;
   last_probe_at: string | null; last_probe_status: string | null; last_probe_latency_ms: number | null; last_probe_message: string | null; models_json: string | null;
+  reasoning_effort: string | null;
   created_at: string; updated_at: string;
 }
 export interface AiUsageRecordRow {

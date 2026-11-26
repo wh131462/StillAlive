@@ -850,6 +850,10 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
 
     PRAGMA user_version = 43;
   `);
+  if (currentVersion < 44) await db.execAsync(`
+    ALTER TABLE ai_provider_profiles ADD COLUMN reasoning_effort TEXT;
+    PRAGMA user_version = 44;
+  `);
   const finalResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   writePersistentLog('INFO', 'database.migration.version.completed', { fromVersion: currentVersion, toVersion: finalResult?.user_version ?? currentVersion });
 }
