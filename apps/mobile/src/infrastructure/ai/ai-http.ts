@@ -67,8 +67,9 @@ export async function requestAiJson<T>(request: AiHttpRequest): Promise<T> {
       throw new AiRequestError('provider_error', '服务商返回的内容不是有效 JSON', response.status);
     }
   } catch (cause) {
-    if (cause instanceof AiRequestError) throw cause;
+    // 用户主动停止时，fetch 可能先返回空响应；取消优先于任何服务商错误。
     if (externalSignal?.aborted) throw new AiRequestError('cancelled', '请求已取消');
+    if (cause instanceof AiRequestError) throw cause;
     if (timedOut) throw new AiRequestError('timeout', '请求超时，请检查网络后重试');
     if (cause instanceof Error && cause.name === 'AbortError') throw new AiRequestError('cancelled', '请求已取消');
     throw new AiRequestError('network_failed', '网络不可用，AI 功能暂时无法使用');

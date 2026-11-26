@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing, typography } from '@still-alive/tokens';
 import { AI_PROVIDER_KIND_META, AI_PROVIDER_KINDS } from '../../infrastructure/ai/ai-adapters';
-import type { AiProviderKind, AiProviderProfile } from '../../infrastructure/ai/ai-types';
+import type { AiProviderKind, AiProviderProfile, AiReasoningEffort } from '../../infrastructure/ai/ai-types';
 import type { AiProviderInput } from '../../application/ai/ai-provider';
 import { createThemedStyles } from '../../shared/theme/app-theme';
 import { DraggableBottomSheet } from '../../shared/components/draggable-bottom-sheet';
 import { AiSegmentedControl } from './ai-segmented-control';
-import { aiErrorMessage } from './ai-copy';
+import { AI_REASONING_EFFORT_OPTIONS, aiErrorMessage } from './ai-copy';
 
 interface AiProviderFormSheetProps {
   open: boolean;
@@ -22,6 +22,7 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
   const [label, setLabel] = useState(editing?.label ?? '');
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? AI_PROVIDER_KIND_META[initialKind].defaultBaseUrl);
   const [modelId, setModelId] = useState(editing?.modelId ?? '');
+  const [reasoningEffort, setReasoningEffort] = useState<AiReasoningEffort>(editing?.reasoningEffort ?? 'off');
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
     setLabel(editing?.label ?? '');
     setBaseUrl(editing?.baseUrl ?? AI_PROVIDER_KIND_META[nextKind].defaultBaseUrl);
     setModelId(editing?.modelId ?? '');
+    setReasoningEffort(editing?.reasoningEffort ?? 'off');
     setApiKey('');
     setSaving(false);
     setError(null);
@@ -39,6 +41,7 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
 
   const selectKind = (next: AiProviderKind) => {
     setKind(next);
+    if (next === 'anthropic') setReasoningEffort('off');
     if (!editing || baseUrl === AI_PROVIDER_KIND_META[kind].defaultBaseUrl) setBaseUrl(AI_PROVIDER_KIND_META[next].defaultBaseUrl);
   };
 
@@ -47,7 +50,7 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ kind, label, baseUrl, modelId, apiKey });
+      await onSubmit({ kind, label, baseUrl, modelId, reasoningEffort: kind === 'anthropic' ? 'off' : reasoningEffort, apiKey });
       onClose();
     } catch (cause) {
       setError(aiErrorMessage(cause));
@@ -74,6 +77,12 @@ export function AiProviderFormSheet({ open, editing, onClose, onSubmit }: AiProv
 
         <Text style={styles.fieldLabel}>模型</Text>
         <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setModelId} placeholder="可以先留空，保存后再选择" placeholderTextColor={colors.inkFaint} style={styles.input} value={modelId} />
+
+        {kind !== 'anthropic' ? <>
+          <Text style={styles.fieldLabel}>深度思考</Text>
+          <AiSegmentedControl onChange={(next: AiReasoningEffort) => setReasoningEffort(next)} options={AI_REASONING_EFFORT_OPTIONS} value={reasoningEffort} />
+          <Text style={styles.kindHint}>关闭时不发送 reasoning_effort；只对支持该参数的模型生效。</Text>
+        </> : null}
 
         <Text style={styles.fieldLabel}>API Key</Text>
         <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setApiKey} placeholder={editing ? '留空表示不修改' : '粘贴 API Key'} placeholderTextColor={colors.inkFaint} secureTextEntry style={styles.input} value={apiKey} />

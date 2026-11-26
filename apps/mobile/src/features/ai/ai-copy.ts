@@ -1,4 +1,5 @@
-import type { AiBalance, AiProviderProfile, AiUsageRecord } from '../../infrastructure/ai/ai-types';
+import type { AiBalance, AiProviderProfile, AiReasoningEffort, AiUsageRecord } from '../../infrastructure/ai/ai-types';
+import { AI_REASONING_EFFORTS } from '../../infrastructure/ai/ai-types';
 import { isAiRequestError } from '../../infrastructure/ai/ai-types';
 import { providerKindLabel } from '../../infrastructure/ai/ai-adapters';
 
@@ -19,8 +20,22 @@ export function providerStatusText(profile: AiProviderProfile): { text: string; 
   return { text: profile.lastProbeMessage || '检测失败', tone: 'warn' };
 }
 
+export const AI_REASONING_EFFORT_LABELS: Record<AiReasoningEffort, string> = { off: '关闭', minimal: '极低', low: '低', medium: '中', high: '高', max: '最高' };
+
+export const AI_REASONING_EFFORT_HINTS: Record<AiReasoningEffort, string> = {
+  off: '不发送推理强度，保持默认行为',
+  minimal: '最少推理，响应最快',
+  low: '偏快，适合简单问题',
+  medium: '速度和深度平衡',
+  high: '更深入，耗时更长',
+  max: '尽量深入，耗时和用量最高',
+};
+
+export const AI_REASONING_EFFORT_OPTIONS = AI_REASONING_EFFORTS.map((value) => ({ value, label: AI_REASONING_EFFORT_LABELS[value] }));
+
 export function providerSubtitle(profile: AiProviderProfile): string {
-  return `${providerKindLabel(profile.kind)} · ${profile.modelId.trim() || '未选择模型'}${profile.keyHint ? ` · ${profile.keyHint}` : ''}`;
+  const effort = profile.kind !== 'anthropic' && profile.reasoningEffort !== 'off' ? ` · 推理${AI_REASONING_EFFORT_LABELS[profile.reasoningEffort]}` : '';
+  return `${providerKindLabel(profile.kind)} · ${profile.modelId.trim() || '未选择模型'}${effort}${profile.keyHint ? ` · ${profile.keyHint}` : ''}`;
 }
 
 export function formatRelativeTime(iso: string | null, now = Date.now()): string {

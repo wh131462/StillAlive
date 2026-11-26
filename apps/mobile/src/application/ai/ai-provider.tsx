@@ -11,6 +11,7 @@ import type {
   AiProbeResult,
   AiProviderKind,
   AiProviderProfile,
+  AiReasoningEffort,
   AiUsageRecord,
   AiUsageTaskId,
 } from '../../infrastructure/ai/ai-types';
@@ -25,6 +26,8 @@ export interface AiProviderInput {
   label?: string;
   baseUrl: string;
   modelId: string;
+  /** 供应商默认推理强度；缺省保持现状。 */
+  reasoningEffort?: AiReasoningEffort;
   /** 新建必填；编辑时留空表示不修改 Key */
   apiKey?: string;
 }
@@ -34,6 +37,8 @@ export interface AiChatOptions {
   taskId?: AiUsageTaskId;
   maxOutputTokens?: number;
   temperature?: number;
+  /** 只覆盖本次请求；缺省用服务商配置。 */
+  reasoningEffort?: AiReasoningEffort;
   signal?: AbortSignal;
 }
 
@@ -117,6 +122,7 @@ export function AiProvider({ children }: PropsWithChildren) {
       kind: input.kind,
       baseUrl,
       modelId: input.modelId.trim(),
+      reasoningEffort: input.reasoningEffort ?? 'off',
       keyHint,
       supportsStream: true,
       supportsBalance: meta.supportsBalance,
@@ -153,6 +159,7 @@ export function AiProvider({ children }: PropsWithChildren) {
       kind: input.kind,
       baseUrl,
       modelId: input.modelId.trim(),
+      reasoningEffort: input.reasoningEffort ?? existing.reasoningEffort,
       keyHint,
       supportsBalance: meta.supportsBalance,
       updatedAt: new Date().toISOString(),
@@ -258,6 +265,7 @@ export function AiProvider({ children }: PropsWithChildren) {
         messages,
         maxOutputTokens: options?.maxOutputTokens,
         temperature: options?.temperature,
+        reasoningEffort: options?.reasoningEffort ?? profile.reasoningEffort,
         signal: options?.signal,
       });
       const estimate = estimateAiCost(AI_PRICE_TABLE, { modelId: profile.modelId, inputTokens: result.usage.inputTokens, cachedInputTokens: result.usage.cachedInputTokens, outputTokens: result.usage.outputTokens });

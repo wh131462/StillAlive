@@ -1,5 +1,13 @@
 export type AiProviderKind = 'openai-compatible' | 'anthropic' | 'deepseek';
 
+export const AI_REASONING_EFFORTS = ['off', 'minimal', 'low', 'medium', 'high', 'max'] as const;
+
+export type AiReasoningEffort = (typeof AI_REASONING_EFFORTS)[number];
+
+export function parseAiReasoningEffort(value: unknown): AiReasoningEffort {
+  return typeof value === 'string' && (AI_REASONING_EFFORTS as readonly string[]).includes(value) ? value as AiReasoningEffort : 'off';
+}
+
 export type AiProviderProbeStatus = 'ok' | 'auth_failed' | 'network_failed' | 'model_missing' | 'unsupported' | 'unknown';
 
 export type AiErrorCode =
@@ -21,6 +29,8 @@ export interface AiProviderProfile {
   kind: AiProviderKind;
   baseUrl: string;
   modelId: string;
+  /** 供应商默认推理强度；off 表示不发送 reasoning_effort。 */
+  reasoningEffort: AiReasoningEffort;
   keyHint: string;
   supportsStream: boolean;
   supportsBalance: boolean;
@@ -79,6 +89,7 @@ export interface AiChatRequest {
   messages: AiMessage[];
   maxOutputTokens?: number | undefined;
   temperature?: number | undefined;
+  reasoningEffort: AiReasoningEffort;
   signal?: AbortSignal | undefined;
 }
 

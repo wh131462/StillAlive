@@ -11,9 +11,9 @@ import { createChatId, useChatHistory } from '../../application/ai/chat-history-
 import { useKnowledge } from '../../application/knowledge/knowledge-provider';
 import { useAppState } from '../../application/state/app-state';
 import type { KnowledgeHit } from '../../features/ai/domain/knowledge-types';
-import type { AiChatMessage, AiConversationSource, AiMessage } from '../../infrastructure/ai/ai-types';
-import { isAiRequestError } from '../../infrastructure/ai/ai-types';
-import { aiErrorMessage, formatRelativeTime } from '../ai/ai-copy';
+import type { AiChatMessage, AiConversationSource, AiMessage, AiReasoningEffort } from '../../infrastructure/ai/ai-types';
+import { AI_REASONING_EFFORTS, isAiRequestError } from '../../infrastructure/ai/ai-types';
+import { AI_REASONING_EFFORT_HINTS, AI_REASONING_EFFORT_LABELS, aiErrorMessage, formatRelativeTime } from '../ai/ai-copy';
 import { parseActionProposals, prepareAction } from '../../features/ai/domain/app-actions';
 import type { PreparedAiAction } from '../../features/ai/domain/app-actions';
 import { personDisplayName } from '../people/person-profile';
@@ -44,12 +44,15 @@ function toSource(hit: KnowledgeHit): AiConversationSource {
   };
 }
 
-function structuredFactRoute(source: { kind: string; id: string } | null): string {
-  if (!source) return '';
-  if (source.kind === 'person') return `/person/${source.id}`;
-  if (source.kind === 'post') return `/post/${source.id}`;
-  if (source.kind === 'excerpt') return '/excerpts';
-  if (source.kind === 'music') return '/music-box';
+function structuredFactRoute(fact: { label: string; source: { kind: string; id: string } | null }): string {
+  if (fact.source) {
+    if (fact.source.kind === 'person') return `/person/${fact.source.id}`;
+    if (fact.source.kind === 'post') return `/post/${fact.source.id}`;
+    if (fact.source.kind === 'excerpt') return '/excerpts';
+    if (fact.source.kind === 'music') return '/music-box';
+  }
+  if (fact.label.includes('生日')) return '/profile';
+  if (fact.label.startsWith('账本') || fact.label === '结余' || fact.label.startsWith('支出分类')) return '/ledger';
   return '';
 }
 
@@ -65,6 +68,14 @@ function createMessage(input: Pick<AiChatMessage, 'conversationId' | 'role' | 't
     sources: input.sources ?? [],
     createdAt: new Date().toISOString(),
   };
+}
+
+/** 只展示回答里真正引用到的来源；模型没写编号时退回展示全部检索来源。 */
+function citedSourceIds(text: string): Set<string> {
+  const ids = new Set<string>();
+  const groups = text.match(/[\[（(][SKC]\d+(?:[、,，\s]+[SKC]\d+)*[\]）)]/gu) ?? [];
+  for (const group of groups) for (const id of group.match(/[SK]\d+/gu) ?? []) ids.add(id);
+  return ids;
 }
 
 function dayBucket(iso: string, now = Date.now()): string {
@@ -94,9 +105,16 @@ export default function AiChatScreen() {
   const [thinking, setThinking] = useState(false);
   const [failure, setFailure] = useState<FailureState | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
+  const [effortOverride, setEffortOverride] = useState<AiReasoningEffort | null>(null);
   const [pendingMemoryBatch, setPendingMemoryBatch] = useState<number | null>(null);
   const [actionState, setActionState] = useState<Record<string, { status: 'running' | 'error'; error?: string }>>({});
   const ensureIndexed = knowledge.ensureIndexed;
+  const effortProvider = ai.defaultProvider;
+  const supportsReasoningEffort = Boolean(ai.enabled && effortProvider && effortProvider.kind !== 'anthropic');
+  const defaultEffort: AiReasoningEffort = effortProvider?.reasoningEffort ?? 'off';
+  const activeEffort: AiReasoningEffort = effortOverride ?? defaultEffort;
+  const effortActive = activeEffort !== 'off';
 
   const pinnedContext = useMemo(() => {
     if (!params.postId) return undefined;
@@ -141,13 +159,13 @@ export default function AiChatScreen() {
       const conversation = options?.fresh || !chat.activeConversation ? await chat.start(trimmed) : chat.activeConversation;
       if (options?.saveQuestion !== false) await chat.append(createMessage({ conversationId: conversation.id, role: 'user', text: trimmed, question: trimmed }));
       scrollToEnd();
-      const { messages: promptMessages, result, coreMemories, recalledMemories } = await knowledge.buildChatMessages({ question: trimmed, history, ...(pinnedContext ? { pinnedContext } : {}) });
-      const answer = await ai.chat(promptMessages, { taskId: 'chat.answer', maxOutputTokens: 1200, temperature: 0.65, signal: controller.signal });
+      const { messages: promptMessages, result, coreMemories, recalledMemories } = await knowledge.buildChatMessages({ question: trimmed, history, now: new Date(), ...(pinnedContext ? { pinnedContext } : {}) });
+      const answer = await ai.chat(promptMessages, { taskId: 'chat.answer', maxOutputTokens: 1200, temperature: 0.65, ...(supportsReasoningEffort ? { reasoningEffort: activeEffort } : {}), signal: controller.signal });
       const memoryCount = coreMemories.length + recalledMemories.length;
       const structuredSources: AiConversationSource[] = result.structured.facts.map((fact) => ({
         citationId: fact.citationId,
         title: `${fact.label}：${fact.value}`,
-        route: structuredFactRoute(fact.source),
+        route: structuredFactRoute(fact),
         dayKey: null,
         personNames: [],
         origin: fact.source?.kind === 'person' ? 'people' : 'me',
@@ -170,7 +188,47 @@ export default function AiChatScreen() {
       setThinking(false);
       abortRef.current = null;
     }
-  }, [ai, chat, knowledge, pinnedContext, scrollToEnd, thinking]);
+  }, [activeEffort, ai, chat, knowledge, pinnedContext, scrollToEnd, supportsReasoningEffort, thinking]);
+
+  const regenerate = useCallback(async (message: AiChatMessage) => {
+    const question = message.question.trim();
+    if (thinking || !ai.enabled || !question) return;
+    const index = chat.messages.findIndex((item) => item.id === message.id);
+    const history: AiMessage[] = chat.messages
+      .slice(0, index < 0 ? 0 : index)
+      .filter((item) => !item.failed)
+      .slice(-MAX_HISTORY_TURNS)
+      .map((item) => ({ role: item.role, content: parseActionProposals(item.text).visibleText }));
+    setFailure(null);
+    setThinking(true);
+    setPendingMemoryBatch(null);
+    setActionState((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${message.id}:`))));
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const { messages: promptMessages, result, coreMemories, recalledMemories } = await knowledge.buildChatMessages({ question, history, now: new Date(), ...(pinnedContext ? { pinnedContext } : {}) });
+      const answer = await ai.chat(promptMessages, { taskId: 'chat.answer', maxOutputTokens: 1200, temperature: 0.65, ...(supportsReasoningEffort ? { reasoningEffort: activeEffort } : {}), signal: controller.signal });
+      const memoryCount = coreMemories.length + recalledMemories.length;
+      const structuredSources: AiConversationSource[] = result.structured.facts.map((fact) => ({
+        citationId: fact.citationId,
+        title: `${fact.label}：${fact.value}`,
+        route: structuredFactRoute(fact),
+        dayKey: null,
+        personNames: [],
+        origin: fact.source?.kind === 'person' ? 'people' : 'me',
+      }));
+      const sources = [...structuredSources, ...result.hits.slice(0, 5).map(toSource)];
+      await chat.update({ ...message, text: answer.text.trim(), question, failed: false, memoryCount, sources });
+      scrollToEnd();
+      void knowledge.markMemoriesUsed([...coreMemories.map((item) => item.id), ...recalledMemories.map((hit) => hit.item.id)]).catch(() => undefined);
+    } catch (cause) {
+      if (!(isAiRequestError(cause) && cause.code === 'cancelled')) setFailure({ question, text: aiErrorMessage(cause) });
+      scrollToEnd();
+    } finally {
+      setThinking(false);
+      abortRef.current = null;
+    }
+  }, [activeEffort, ai, chat, knowledge, pinnedContext, scrollToEnd, supportsReasoningEffort, thinking]);
 
   useEffect(() => {
     if (params.auto !== '1' || autoStartedRef.current || !ai.enabled || !chat.loaded) return;
@@ -188,13 +246,14 @@ export default function AiChatScreen() {
   const startNewConversation = () => {
     if (thinking) stop();
     void chat.open(null).catch(() => undefined);
+    setEffortOverride(null);
     setFailure(null);
     setPendingMemoryBatch(null);
     setInput('');
   };
 
   const openSource = (source: AiConversationSource) => {
-    if (source.route.startsWith('/post/') || source.route.startsWith('/person/')) router.push(source.route as RelativePathString);
+    if (source.route.startsWith('/')) router.push(source.route as RelativePathString);
     else feedback.alert('这条来源暂不支持跳转', '可以在对应页面里查看。');
   };
 
@@ -288,6 +347,7 @@ export default function AiChatScreen() {
     return [...map.entries()];
   }, [chat.conversations]);
 
+  const lastMessage = chat.messages[chat.messages.length - 1];
   const showEmpty = !chat.messages.length && !thinking && !failure;
 
   return <SafeAreaView style={styles.safeArea}>
@@ -315,6 +375,9 @@ export default function AiChatScreen() {
           ? <View key={message.id} style={styles.userRow}><View style={styles.bubble}><Text selectable style={styles.userText}>{message.text}</Text></View></View>
           : (() => {
             const parsed = parseActionProposals(message.text);
+            const cited = citedSourceIds(parsed.visibleText);
+            const visibleSources = cited.size ? message.sources.filter((source) => cited.has(source.citationId)) : message.sources;
+            const canRegenerate = lastMessage?.id === message.id && lastMessage.role === 'assistant' && !thinking;
             return <View key={message.id} style={styles.answerBlock}>
             {parsed.visibleText.trim()
               ? <View pointerEvents="none" style={styles.answerMarkdown}><MarkdownView citations={message.sources.map((source) => source.citationId)} dom={{ containerStyle: styles.answerMarkdown, matchContents: true, scrollEnabled: false, style: styles.answerMarkdown }} markdown={parsed.visibleText} media={[]} theme={editorTheme()} variant="chat" /></View>
@@ -324,16 +387,23 @@ export default function AiChatScreen() {
               const key = `${message.id}:${index}`;
               return <AiActionCard actionState={actionState[key]} key={key} onDismiss={() => void dismissAppAction(message)} onRun={() => void executeAppAction(message, prepared, key)} prepared={prepared} />;
             })}
-            {message.sources.length ? <View style={styles.sources}>
-              {message.sources.map((source, index) => <Pressable accessibilityRole="button" key={`${message.id}_${source.route}_${index}`} onPress={() => openSource(source)} style={({ pressed }) => [styles.sourceRow, pressed && styles.pressed]}>
-                <View style={styles.sourceBadge}><Text style={styles.sourceBadgeText}>{source.citationId}</Text></View>
-                <View style={styles.sourceCopy}>
-                  <Text numberOfLines={1} style={styles.sourceTitle}>{source.title}</Text>
-                  <Text numberOfLines={1} style={styles.sourceMeta}>{source.origin === 'people' || (!source.origin && source.route.startsWith('/person/')) ? '人物资料' : '我的信息'}{[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).length ? ` · ${[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).join(' · ')}` : ''}</Text>
-                </View>
-              </Pressable>)}
+            {visibleSources.length ? <View style={styles.sources}>
+              {visibleSources.map((source, index) => {
+                const content = <>
+                  <View style={styles.sourceBadge}><Text style={styles.sourceBadgeText}>{source.citationId}</Text></View>
+                  <View style={styles.sourceCopy}>
+                    <Text numberOfLines={1} style={styles.sourceTitle}>{source.title}</Text>
+                    <Text numberOfLines={1} style={styles.sourceMeta}>{source.origin === 'people' || (!source.origin && source.route.startsWith('/person/')) ? '人物资料' : '我的信息'}{[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).length ? ` · ${[source.dayKey?.replaceAll('-', '.'), source.personNames.join('、')].filter(Boolean).join(' · ')}` : ''}</Text>
+                  </View>
+                </>;
+                const key = `${message.id}_${source.route}_${index}`;
+                return source.route
+                  ? <Pressable accessibilityRole="button" key={key} onPress={() => openSource(source)} style={({ pressed }) => [styles.sourceRow, pressed && styles.pressed]}>{content}</Pressable>
+                  : <View key={key} style={styles.sourceRow}>{content}</View>;
+              })}
             </View> : null}
             <View style={styles.answerActions}>
+              {canRegenerate ? <Pressable accessibilityLabel="重新生成回答" accessibilityRole="button" hitSlop={10} onPress={() => void regenerate(message)} style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}><SymbolView name={{ android: 'refresh', ios: 'arrow.clockwise', web: 'refresh' }} size={16} tintColor={colors.inkFaint} type="hierarchical" /></Pressable> : null}
               <Pressable accessibilityLabel="复制回答" accessibilityRole="button" hitSlop={10} onPress={() => { void Clipboard.setStringAsync(parsed.visibleText); feedback.notice('已复制'); }} style={({ pressed }) => [styles.iconAction, pressed && styles.pressed]}><SymbolView name={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }} size={16} tintColor={colors.inkFaint} type="hierarchical" /></Pressable>
               {message.memoryCount > 0 ? <Pressable accessibilityRole="button" onPress={() => router.push('/ai-memory' as RelativePathString)} style={({ pressed }) => [styles.memoryAction, pressed && styles.pressed]}><Text style={styles.memoryActionText}>{message.memoryCount} 条记忆</Text></Pressable> : null}
             </View>
@@ -351,7 +421,7 @@ export default function AiChatScreen() {
       </ScrollView>
 
       <View style={styles.composer}>
-        <View style={styles.inputShell}>
+        <View style={styles.composerCard}>
           <TextInput
             autoCorrect={false}
             editable={!thinking}
@@ -359,15 +429,46 @@ export default function AiChatScreen() {
             onChangeText={setInput}
             placeholder="问点什么…"
             placeholderTextColor={colors.inkFaint}
-            style={styles.input}
+            style={styles.composerInput}
             value={input}
           />
-          <Pressable accessibilityLabel="发送" accessibilityRole="button" hitSlop={4} disabled={thinking || !input.trim() || !ai.enabled} onPress={() => void send(input)} style={({ pressed }) => [styles.sendButton, (thinking || !input.trim() || !ai.enabled) && styles.disabled, pressed && styles.pressed]}>
-            {thinking ? <ActivityIndicator color={colors.onLife} size="small" /> : <SymbolView name={{ android: 'arrow_upward', ios: 'arrow.up', web: 'arrow_upward' }} size={17} tintColor={colors.onLife} type="hierarchical" />}
-          </Pressable>
+          <View style={styles.composerFooter}>
+            {supportsReasoningEffort ? <Pressable accessibilityLabel={`调整深度思考，当前${AI_REASONING_EFFORT_LABELS[activeEffort]}`} accessibilityRole="button" hitSlop={8} onPress={() => setEffortOpen(true)} style={({ pressed }) => [styles.effortChip, effortActive && styles.effortChipActive, pressed && styles.pressed]}>
+              <SymbolView name={{ android: 'flare', ios: 'sparkle', web: 'flare' }} size={16} tintColor={effortActive ? colors.life : colors.inkFaint} type="hierarchical" />
+              <Text style={[styles.effortChipLabel, effortActive && styles.effortChipLabelActive]}>深度思考</Text>
+              <Text style={styles.effortChipSeparator}>·</Text>
+              <Text style={[styles.effortChipValue, effortActive && styles.effortChipValueActive]}>{AI_REASONING_EFFORT_LABELS[activeEffort]}</Text>
+            </Pressable> : null}
+            <View style={styles.composerSpacer} />
+            <Pressable accessibilityLabel={thinking ? '停止生成' : '发送'} accessibilityRole="button" hitSlop={4} disabled={thinking ? false : (!input.trim() || !ai.enabled)} onPress={thinking ? stop : () => void send(input)} style={({ pressed }) => [styles.sendButton, !thinking && (!input.trim() || !ai.enabled) && styles.disabled, pressed && styles.pressed]}>
+              {thinking ? <SymbolView name={{ android: 'stop', ios: 'stop.fill', web: 'stop' }} size={16} tintColor={colors.onLife} type="hierarchical" /> : <SymbolView name={{ android: 'arrow_upward', ios: 'arrow.up', web: 'arrow_upward' }} size={17} tintColor={colors.onLife} type="hierarchical" />}
+            </Pressable>
+          </View>
         </View>
       </View>
     </AppKeyboardAvoidingView>
+
+    <DraggableBottomSheet accessibilityLabel="推理强度" onClose={() => setEffortOpen(false)} open={effortOpen} sheetStyle={styles.sheet}>
+      <Text style={styles.sheetTitle}>深度思考</Text>
+      <Text style={styles.effortLead}>越高越深入，耗时和用量也越高。只影响当前对话；新对话回到服务商默认（{AI_REASONING_EFFORT_LABELS[defaultEffort]}）。</Text>
+      {AI_REASONING_EFFORTS.map((level) => {
+        const selected = activeEffort === level;
+        return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} key={level} onPress={() => { setEffortOverride(level === defaultEffort ? null : level); setEffortOpen(false); }} style={({ pressed }) => [styles.effortRow, pressed && styles.pressed]}>
+          <View style={styles.effortRowCopy}>
+            <View style={styles.effortRowTitle}>
+              <Text style={styles.effortRowLabel}>{AI_REASONING_EFFORT_LABELS[level]}</Text>
+              {level === defaultEffort ? <Text style={styles.effortDefaultBadge}>默认</Text> : null}
+            </View>
+            <Text style={styles.effortRowHint}>{AI_REASONING_EFFORT_HINTS[level]}</Text>
+          </View>
+          {selected ? <SymbolView name={{ android: 'check', ios: 'checkmark', web: 'check' }} size={16} tintColor={colors.life} type="hierarchical" /> : null}
+        </Pressable>;
+      })}
+      <Pressable accessibilityRole="button" accessibilityState={{ disabled: effortOverride === null }} disabled={effortOverride === null} onPress={() => { setEffortOverride(null); setEffortOpen(false); }} style={({ pressed }) => [styles.effortReset, effortOverride === null && styles.effortResetDisabled, pressed && styles.pressed]}>
+        <Text style={styles.effortResetText}>恢复服务商默认（{AI_REASONING_EFFORT_LABELS[defaultEffort]}）</Text>
+      </Pressable>
+      <Text style={styles.effortNote}>部分模型不支持「最高」；请求报错时切回「高」或「关闭」。</Text>
+    </DraggableBottomSheet>
 
     <DraggableBottomSheet accessibilityLabel="历史对话" onClose={() => setHistoryOpen(false)} open={historyOpen} sheetStyle={styles.sheet}>
       <Text style={styles.sheetTitle}>历史对话</Text>
@@ -473,8 +574,28 @@ const styles = createThemedStyles(() => ({
   memoryToastText: { flex: 1, color: colors.inkFaint, fontSize: typography.size.caption },
   memoryToastAction: { color: colors.ink, fontSize: typography.size.caption, fontWeight: '600' },
   composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.lineSoft },
-  inputShell: { minHeight: 44, maxHeight: 132, paddingLeft: 16, paddingRight: 6, paddingVertical: 4, flexDirection: 'row', alignItems: 'flex-end', borderRadius: 22, backgroundColor: colors.sheet },
-  input: { flex: 1, maxHeight: 120, paddingTop: 10, paddingBottom: 10, paddingRight: spacing.sm, color: colors.ink, fontSize: typography.size.bodyLarge, lineHeight: 21 },
+  composerCard: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineSoft, backgroundColor: colors.sheet },
+  composerInput: { minHeight: 40, maxHeight: 120, paddingTop: 6, paddingBottom: 4, color: colors.ink, fontSize: typography.size.bodyLarge, lineHeight: 21, textAlignVertical: 'top' },
+  composerFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
+  composerSpacer: { flex: 1 },
+  effortChip: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.lineSoft, backgroundColor: colors.sheet },
+  effortChipActive: { borderColor: colors.lifeLine, backgroundColor: colors.lifeLight },
+  effortChipLabel: { color: colors.inkSoft, fontSize: typography.size.body, fontWeight: '500' },
+  effortChipLabelActive: { color: colors.lifeDeep, fontWeight: '600' },
+  effortChipSeparator: { color: colors.inkFaint, fontSize: typography.size.label },
+  effortChipValue: { color: colors.inkFaint, fontSize: typography.size.body, fontWeight: '600' },
+  effortChipValueActive: { color: colors.lifeDeep },
+  effortLead: { marginBottom: spacing.sm, color: colors.inkFaint, fontSize: typography.size.label, lineHeight: 17 },
+  effortRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.lineSoft },
+  effortRowCopy: { flex: 1 },
+  effortRowTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  effortRowLabel: { color: colors.ink, fontSize: typography.size.bodyLarge },
+  effortRowHint: { marginTop: 2, color: colors.inkFaint, fontSize: typography.size.meta },
+  effortDefaultBadge: { overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, backgroundColor: colors.lifeLight, color: colors.life, fontSize: typography.size.caption, fontWeight: '600' },
+  effortReset: { minHeight: 40, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
+  effortResetDisabled: { opacity: 0.4 },
+  effortResetText: { color: colors.inkSoft, fontSize: typography.size.body, fontWeight: '600' },
+  effortNote: { marginTop: spacing.xs, color: colors.inkFaint, fontSize: typography.size.label, lineHeight: 17 },
   sendButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: colors.life },
   disabled: { opacity: 0.35 },
   pressed: { opacity: 0.6 },

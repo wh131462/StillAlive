@@ -60,6 +60,7 @@ export async function chatWithOpenAiCompatible(
       stream: false,
       max_tokens: request.maxOutputTokens ?? 1024,
       ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+      ...(request.reasoningEffort === 'off' ? {} : { reasoning_effort: request.reasoningEffort }),
     },
     signal,
     providerLabel: profile.label,
