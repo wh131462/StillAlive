@@ -2,9 +2,10 @@ import type { DayKey, MusicTrack, Person, Post } from '@still-alive/types';
 import { nextBirthday } from '../../people/person-profile';
 import type { KnowledgeDataInput } from './knowledge-types';
 import { stripMarkdown } from './knowledge-types';
+import { formatLocalDayKey, lunarDayLabel } from './time-context';
 
 export type StructuredQuery =
-  | { kind: 'birthdays'; withinDays: number }
+  | { kind: 'birthdays'; withinDays: number; focusPersonId?: string; includeSelf?: boolean }
   | { kind: 'people'; nameLike?: string; tag?: string; relation?: string }
   | { kind: 'music'; artist?: string; title?: string; personId?: string }
   | { kind: 'ledger'; month?: string; from?: DayKey; to?: DayKey; type?: 'expense' | 'income'; category?: string }
@@ -46,19 +47,35 @@ export function routeStructuredQueries(question: string, data: KnowledgeDataInpu
   if (!text) return queries;
   const person = findMentionedPerson(text, data.people);
   const ranges = parseDateExpression(text, now);
+  const asksBirthday = BIRTHDAY_KEYWORDS.some((keyword) => text.includes(keyword));
+  const asksMusic = MUSIC_KEYWORDS.some((keyword) => text.includes(keyword));
+  const asksLedger = LEDGER_KEYWORDS.some((keyword) => text.includes(keyword));
+  const asksBooks = BOOK_KEYWORDS.some((keyword) => text.includes(keyword));
+  const asksCounts = COUNT_KEYWORDS.some((keyword) => text.includes(keyword));
 
-  if (BIRTHDAY_KEYWORDS.some((keyword) => text.includes(keyword))) queries.push({ kind: 'birthdays', withinDays: 60 });
-  if (MUSIC_KEYWORDS.some((keyword) => text.includes(keyword))) {
+  if (asksBirthday) {
+    queries.push({
+      kind: 'birthdays',
+      withinDays: 60,
+      ...(person ? { focusPersonId: person.id } : {}),
+      ...(/我|自己/u.test(text) ? { includeSelf: true } : {}),
+    });
+  }
+  if (asksMusic) {
     const artist = findMentionedArtist(text, data.musicTracks);
     queries.push(artist ? { kind: 'music', artist } : person ? { kind: 'music', personId: person.id } : { kind: 'music' });
   }
-  if (LEDGER_KEYWORDS.some((keyword) => text.includes(keyword))) {
-    const month = ranges.month ?? (ranges.from ? ranges.from.slice(0, 7) : currentMonth(now));
-    queries.push({ kind: 'ledger', month });
+  if (asksLedger) {
+    if (ranges.month) queries.push({ kind: 'ledger', month: ranges.month });
+    else if (ranges.from || ranges.to) queries.push({ kind: 'ledger', ...(ranges.from ? { from: ranges.from } : {}), ...(ranges.to ? { to: ranges.to } : {}) });
+    else queries.push({ kind: 'ledger', month: currentMonth(now) });
   }
-  if (BOOK_KEYWORDS.some((keyword) => text.includes(keyword))) queries.push({ kind: 'excerpts' });
-  if (COUNT_KEYWORDS.some((keyword) => text.includes(keyword))) queries.push({ kind: 'counts' });
-  if (POSTS_KEYWORDS.some((keyword) => text.includes(keyword)) || (person && ranges.from)) {
+  if (asksBooks) queries.push({ kind: 'excerpts' });
+  if (asksCounts) queries.push({ kind: 'counts' });
+  // 「最近」太宽泛：只有当问题没有落到别的领域时，才把它当成“翻最近的记录”。
+  const asksRecentRecords = text.includes('最近') && !asksBirthday && !asksMusic && !asksLedger && !asksBooks && !asksCounts;
+  const asksExplicitPosts = POSTS_KEYWORDS.some((keyword) => keyword !== '最近' && text.includes(keyword));
+  if (asksExplicitPosts || asksRecentRecords || (person && ranges.from)) {
     queries.push({ kind: 'posts', ...(person ? { personId: person.id } : {}), ...(ranges.from ? { from: ranges.from } : {}), ...(ranges.to ? { to: ranges.to } : {}), latest: text.includes('最近') || text.includes('第一次') });
   }
   if (PEOPLE_KEYWORDS.some((keyword) => text.includes(keyword))) {
@@ -92,7 +109,7 @@ export function resolveStructuredQueries(queries: StructuredQuery[], data: Knowl
 }
 
 function resolveStructuredQuery(query: StructuredQuery, data: KnowledgeDataInput, now: Date): StructuredResult {
-  if (query.kind === 'birthdays') return resolveBirthdays(query.withinDays, data, now);
+  if (query.kind === 'birthdays') return resolveBirthdays(query.withinDays, data, now, query.focusPersonId, query.includeSelf === true);
   if (query.kind === 'music') return resolveMusic(query, data);
   if (query.kind === 'ledger') return resolveLedger(query, data);
   if (query.kind === 'posts') return resolvePosts(query, data);
@@ -101,38 +118,67 @@ function resolveStructuredQuery(query: StructuredQuery, data: KnowledgeDataInput
   return resolvePeople(query, data);
 }
 
-function resolveBirthdays(withinDays: number, data: KnowledgeDataInput, now: Date): StructuredResult {
+function resolveBirthdays(withinDays: number, data: KnowledgeDataInput, now: Date, focusPersonId: string | undefined, includeSelf: boolean): StructuredResult {
   const today = startOfDay(now);
-  const entries: Array<{ name: string; date: Date; days: number; calendar: string }> = [];
-  const selfBirthday = parseSolarDate(data.self.birthDate);
-  if (selfBirthday) {
-    const next = nextAnniversary(selfBirthday, today);
-    entries.push({ name: data.self.name || '我', date: next, days: diffDays(today, next), calendar: '公历' });
+  const entries: Array<{ name: string; personId: string | null; date: Date; days: number; calendar: '农历' | '公历' }> = [];
+  if (data.self.birthday) {
+    try {
+      const next = nextBirthday(data.self.birthday, now);
+      entries.push({
+        name: data.self.name || '我',
+        personId: null,
+        date: next,
+        days: diffDays(today, next),
+        calendar: data.self.birthday.calendar === 'lunar' ? '农历' : '公历',
+      });
+    } catch {
+      // 无法换算的生日跳过，不影响其它结果。
+    }
   }
   for (const person of data.people) {
     if (!person.birthday) continue;
     try {
       const next = nextBirthday(person.birthday, now);
-      entries.push({ name: person.nickname.trim() || person.name, date: next, days: diffDays(today, next), calendar: person.birthday.calendar === 'lunar' ? '农历' : '公历' });
+      entries.push({
+        name: person.nickname.trim() || person.name,
+        personId: person.id,
+        date: next,
+        days: diffDays(today, next),
+        calendar: person.birthday.calendar === 'lunar' ? '农历' : '公历',
+      });
     } catch {
       // 无法换算的生日跳过，不影响其它结果。
     }
   }
-  const facts = entries
-    .filter((entry) => entry.days <= withinDays)
-    .sort((left, right) => left.days - right.days)
-    .slice(0, 8)
-    .map((entry) => ({
-      label: `${entry.name} · ${entry.calendar}生日`,
-      value: `${entry.date.getMonth() + 1} 月 ${entry.date.getDate()} 日${entry.days === 0 ? '（就是今天）' : `（还有 ${entry.days} 天）`}`,
+  const selected = entries
+    .filter((entry) => entry.days <= withinDays || Boolean(focusPersonId && entry.personId === focusPersonId) || (includeSelf && entry.personId === null))
+    .sort((left, right) => {
+      // 问的是某个人时，先把 ta 的生日放进来，避免被 60 天窗口和条数上限筛掉。
+      const leftFocused = Boolean((focusPersonId && left.personId === focusPersonId) || (includeSelf && left.personId === null));
+      const rightFocused = Boolean((focusPersonId && right.personId === focusPersonId) || (includeSelf && right.personId === null));
+      if (leftFocused !== rightFocused) return leftFocused ? -1 : 1;
+      return left.days - right.days;
+    })
+    .slice(0, 8);
+  const facts = selected.map((entry) => {
+    const when = entry.days === 0 ? '就是今天' : `还有 ${entry.days} 天`;
+    const solar = formatLocalDayKey(entry.date);
+    // 农历生日必须把农历月日和对应的公历日期都写清楚，避免把公历日期当成农历读。
+    const value = entry.calendar === '农历'
+      ? `农历${lunarDayLabel(entry.date) ?? '日期未知'}（对应公历 ${solar}，${when}）`
+      : `公历 ${solar}（${when}）`;
+    return {
+      label: `${entry.name} · 下一次生日`,
+      value,
       citationId: '',
-      source: null as StructuredFact['source'],
-    }));
+      source: entry.personId ? { kind: 'person', id: entry.personId } as StructuredFact['source'] : null,
+    };
+  });
   return {
     kind: 'birthdays',
     facts,
     renderedText: facts.map((fact) => `${fact.label}：${fact.value}`).join('\n'),
-    entityIds: { postIds: [], personIds: entries.map((entry) => data.people.find((person) => (person.nickname.trim() || person.name) === entry.name)?.id).filter((id): id is string => Boolean(id)), trackIds: [], bookIds: [] },
+    entityIds: { postIds: [], personIds: selected.map((entry) => entry.personId).filter((id): id is string => Boolean(id)), trackIds: [], bookIds: [] },
   };
 }
 
@@ -165,8 +211,11 @@ function resolveMusic(query: Extract<StructuredQuery, { kind: 'music' }>, data: 
   if (!query.artist && !query.title && !query.personId) {
     const artists = new Map<string, number>();
     for (const track of tracks) artists.set(track.artist?.trim() || '未知歌手', (artists.get(track.artist?.trim() || '未知歌手') ?? 0) + track.playCount);
-    [...artists.entries()].sort((left, right) => right[1] - left[1]).slice(0, 5).forEach(([artist, plays]) => {
+    [...artists.entries()].filter(([, plays]) => plays > 0).sort((left, right) => right[1] - left[1]).slice(0, 5).forEach(([artist, plays]) => {
       facts.push({ label: `常听歌手 · ${artist}`, value: `本机累计播放 ${plays} 次`, citationId: '', source: null });
+    });
+    tracks.filter((track) => track.playCount > 0).sort((left, right) => right.playCount - left.playCount).slice(0, 5).forEach((track) => {
+      facts.push({ label: `常听歌曲 · ${track.title}`, value: `${track.artist?.trim() || '未知歌手'} · 播放 ${track.playCount} 次`, citationId: '', source: { kind: 'music', id: track.id } });
     });
   } else {
     tracks.slice(0, 8).forEach((track) => {
@@ -189,9 +238,10 @@ function resolveLedger(query: Extract<StructuredQuery, { kind: 'ledger' }>, data
   const income = transactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amountCents, 0);
   const categories = new Map<string, number>();
   for (const item of transactions.filter((entry) => entry.type === 'expense')) categories.set(item.category, (categories.get(item.category) ?? 0) + item.amountCents);
+  const period = query.month ?? (query.from || query.to ? `${query.from ?? '—'} 至 ${query.to ?? '—'}` : '');
   const facts: StructuredFact[] = [
-    { label: `账本${query.month ? ` · ${query.month}` : ''} · 支出`, value: formatMoney(expense), citationId: '', source: null },
-    { label: `账本${query.month ? ` · ${query.month}` : ''} · 收入`, value: formatMoney(income), citationId: '', source: null },
+    { label: `账本${period ? ` · ${period}` : ''} · 支出`, value: formatMoney(expense), citationId: '', source: null },
+    { label: `账本${period ? ` · ${period}` : ''} · 收入`, value: formatMoney(income), citationId: '', source: null },
     { label: '结余', value: formatMoney(income - expense), citationId: '', source: null },
   ];
   [...categories.entries()].sort((left, right) => right[1] - left[1]).slice(0, 5).forEach(([category, cents]) => {
@@ -274,7 +324,19 @@ function parseDateExpression(text: string, now: Date): { from?: DayKey; to?: Day
     const value = `${monthMatch[1]}-${String(Number(monthMatch[2])).padStart(2, '0')}`;
     return { month: value, from: `${value}-01` as DayKey, to: `${value}-31` as DayKey };
   }
+  const bareMonth = Number(/(?:^|[^\d])(\d{1,2})\s*月/u.exec(text)?.[1] ?? chineseMonthNumber(text));
+  if (Number.isInteger(bareMonth) && bareMonth >= 1 && bareMonth <= 12) {
+    const value = `${year}-${String(bareMonth).padStart(2, '0')}`;
+    return { month: value, from: `${value}-01` as DayKey, to: `${value}-31` as DayKey };
+  }
   return {};
+}
+
+function chineseMonthNumber(text: string): number | null {
+  const match = /(十[一二]?|[一二三四五六七八九])\s*月/u.exec(text);
+  if (!match?.[1]) return null;
+  const numbers: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 十一: 11, 十二: 12 };
+  return numbers[match[1]] ?? null;
 }
 
 function dedupeQueries(queries: StructuredQuery[]): StructuredQuery[] {
@@ -285,18 +347,6 @@ function dedupeQueries(queries: StructuredQuery[]): StructuredQuery[] {
     seen.add(key);
     return true;
   });
-}
-
-function parseSolarDate(value: string | null): Date | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return null;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function nextAnniversary(original: Date, today: Date): Date {
-  const candidate = new Date(today.getFullYear(), original.getMonth(), original.getDate());
-  if (candidate.getTime() < today.getTime()) candidate.setFullYear(today.getFullYear() + 1);
-  return candidate;
 }
 
 function diffDays(from: Date, to: Date): number {

@@ -6,6 +6,7 @@ import { useAi } from '../ai/ai-provider';
 import { SQLiteStillAliveRepository } from '../../infrastructure/database/sqlite-repository';
 import { buildKnowledgeData, ensureKnowledgeIndex } from './indexer';
 import type { KnowledgeIndexResult } from './indexer';
+import { birthdayFromDateString } from '../../features/people/person-profile';
 import { buildQueryTerms, packKnowledgeHits, routeForKnowledgeSource, scoreChunks } from '../../features/ai/domain/retrieval';
 import { routeStructuredQueries, resolveStructuredQueries } from '../../features/ai/domain/intent-resolvers';
 import type { CombinedStructuredResult } from '../../features/ai/domain/intent-resolvers';
@@ -47,12 +48,13 @@ export interface KnowledgeContextValue {
   setAutoExtract(value: boolean): Promise<void>;
   ensureIndexed(force?: boolean): Promise<KnowledgeIndexResult>;
   search(input: KnowledgeQuery): Promise<KnowledgeSearchResult>;
-  buildChatMessages(input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string; today?: string }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }>;
+  buildChatMessages(input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string; now?: Date }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }>;
   recallMemories(question: string, subject?: MemorySubject): Promise<{ core: MemoryItem[]; recalled: MemoryHit[] }>;
   rememberMemory(input: { content: string; kind?: MemoryKind; subject?: MemorySubject }): Promise<void>;
   forgetMemory(memoryId: string): Promise<void>;
   restoreMemory(memoryId: string): Promise<void>;
   suppressMemory(memoryId: string): Promise<void>;
+  purgeMemory(memoryId: string): Promise<void>;
   undoAutoMemories(): Promise<number>;
   clearMemories(): Promise<void>;
   markMemoriesUsed(memoryIds: string[]): Promise<void>;
@@ -122,10 +124,15 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
       musicTracks: appState.musicTracks,
       musicCollectionEntries: appState.musicCollectionEntries,
       personBooks: appState.personBooks,
-      self: { name: appState.preferences.nickname.trim() || appState.preferences.profileName.trim(), birthDate: appState.preferences.birthDate || null },
+      self: {
+        name: appState.preferences.nickname.trim() || appState.preferences.profileName.trim(),
+        birthday: appState.preferences.birthDate
+          ? birthdayFromDateString(appState.preferences.birthDate, appState.preferences.birthDateCalendar, appState.preferences.birthDateIsLeapMonth)
+          : null,
+      },
       today: appState.today,
     });
-  }, [appState.bookExcerpts, appState.books, appState.checkIns, appState.ledgerTransactions, appState.musicCollectionEntries, appState.musicTracks, appState.people, appState.personBooks, appState.personEvents, appState.personTags, appState.posts, appState.preferences.birthDate, appState.preferences.nickname, appState.preferences.profileName, appState.today, repository]);
+  }, [appState.bookExcerpts, appState.books, appState.checkIns, appState.ledgerTransactions, appState.musicCollectionEntries, appState.musicTracks, appState.people, appState.personBooks, appState.personEvents, appState.personTags, appState.posts, appState.preferences.birthDate, appState.preferences.birthDateCalendar, appState.preferences.birthDateIsLeapMonth, appState.preferences.nickname, appState.preferences.profileName, appState.today, repository]);
 
   const ensureIndexed = useCallback(async (force = false): Promise<KnowledgeIndexResult> => {
     if (indexPromise.current) return indexPromise.current;
@@ -155,10 +162,19 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     const data = await buildData();
     const query = input.text.trim();
     const scopeLabel = describeScope(input);
-    const structured = resolveStructuredQueries(routeStructuredQueries(query, data), data);
+    const now = input.now ? new Date(input.now) : new Date();
+    const structured = resolveStructuredQueries(routeStructuredQueries(query, data, now), data, now);
     if (!query) return { ...empty, structured, scopeLabel };
     await ensureIndexed();
     const terms = buildQueryTerms(query);
+    // trigram 至少要三个字；两字人名（唐慧、慧慧）用 LIKE 补一条精确词。
+    for (const person of appState.people) {
+      for (const name of [person.name.trim(), person.nickname.trim()]) {
+        if (name.length < 2 || !query.includes(name) || terms.terms.includes(name)) continue;
+        terms.terms.push(name);
+        terms.likePatterns.push(`%${name}%`);
+      }
+    }
     const [ftsChunks, likeChunks] = await Promise.all([
       terms.ftsMatch ? repository.searchKnowledgeFts(terms.ftsMatch, 120) : Promise.resolve([]),
       terms.likePatterns.length ? repository.searchKnowledgeLike(terms.likePatterns, 60) : Promise.resolve([]),
@@ -255,6 +271,11 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
   const forgetMemory = useCallback(async (memoryId: string) => markMemoryStatus(memoryId, 'deleted', new Date().toISOString()), [markMemoryStatus]);
   const restoreMemory = useCallback(async (memoryId: string) => markMemoryStatus(memoryId, 'active', null), [markMemoryStatus]);
   const suppressMemory = useCallback(async (memoryId: string) => markMemoryStatus(memoryId, 'suppressed', new Date().toISOString()), [markMemoryStatus]);
+
+  const purgeMemory = useCallback(async (memoryId: string) => {
+    await repository.deleteMemoryItem(memoryId);
+    await refreshMemories();
+  }, [refreshMemories, repository]);
 
   const undoAutoMemories = useCallback(async (): Promise<number> => {
     const items = await repository.listMemoryItems();
@@ -365,8 +386,9 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     setLastIndexedAt(null);
   }, [repository]);
 
-  const buildChatMessages = useCallback(async (input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string; today?: string }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }> => {
-    const result = await search({ text: input.question, tokenBudget: 5200 });
+  const buildChatMessages = useCallback(async (input: { question: string; history: ChatPromptInput['history']; scopeLabel?: string; pinnedContext?: string; now?: Date }): Promise<{ messages: ReturnType<typeof buildChatAnswerMessages>; result: KnowledgeSearchResult; coreMemories: MemoryItem[]; recalledMemories: MemoryHit[] }> => {
+    const now = input.now ?? new Date();
+    const result = await search({ text: input.question, tokenBudget: 5200, now: now.toISOString() });
     const { core, recalled } = await recallMemories(input.question);
     const messages = buildChatAnswerMessages({
       question: input.question,
@@ -378,10 +400,10 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
       coreMemories: core,
       recalledMemories: recalled,
       history: input.history,
-      today: input.today ?? appState.today,
+      now,
     });
     return { messages, result, coreMemories: core, recalledMemories: recalled };
-  }, [appState.today, recallMemories, search]);
+  }, [recallMemories, search]);
 
   const value = useMemo<KnowledgeContextValue>(() => ({
     knowledgeEnabled,
@@ -402,6 +424,7 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     forgetMemory,
     restoreMemory,
     suppressMemory,
+    purgeMemory,
     undoAutoMemories,
     clearMemories,
     markMemoriesUsed,
@@ -409,7 +432,7 @@ export function KnowledgeProvider({ children }: PropsWithChildren) {
     refreshMemories,
     stats,
     clearIndex,
-  }), [autoExtract, buildChatMessages, clearIndex, clearMemories, ensureIndexed, extractMemories, forgetMemory, indexError, indexing, knowledgeEnabled, lastIndexedAt, markMemoriesUsed, memories, memoryEnabled, recallMemories, refreshMemories, rememberMemory, restoreMemory, search, setSetting, stats, suppressMemory, undoAutoMemories]);
+  }), [autoExtract, buildChatMessages, clearIndex, clearMemories, ensureIndexed, extractMemories, forgetMemory, indexError, indexing, knowledgeEnabled, lastIndexedAt, markMemoriesUsed, memories, memoryEnabled, recallMemories, refreshMemories, rememberMemory, restoreMemory, search, setSetting, stats, suppressMemory, purgeMemory, undoAutoMemories]);
 
   return <KnowledgeContext.Provider value={value}>{children}</KnowledgeContext.Provider>;
 }

@@ -1,4 +1,4 @@
-import type { Book, BookExcerpt, CheckIn, DayKey, LedgerTransaction, MusicCollectionEntry, MusicTrack, Person, PersonBook, PersonEvent, PersonTagAssignment, Post } from '@still-alive/types';
+import type { Birthday, Book, BookExcerpt, CheckIn, DayKey, LedgerTransaction, MusicCollectionEntry, MusicTrack, Person, PersonBook, PersonEvent, PersonTagAssignment, Post } from '@still-alive/types';
 
 export type KnowledgeSourceKind = 'post' | 'comments' | 'person' | 'person_event' | 'excerpt' | 'aggregate';
 export type AggregateKind = 'day' | 'week' | 'month' | 'year' | 'person' | 'tag' | 'ledger' | 'reading' | 'music';
@@ -68,7 +68,7 @@ export interface KnowledgeDataInput {
   musicTracks: MusicTrack[];
   musicCollectionEntries: MusicCollectionEntry[];
   personBooks: PersonBook[];
-  self: { name: string; birthDate: string | null };
+  self: { name: string; birthday: Birthday | null };
   today: DayKey;
 }
 

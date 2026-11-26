@@ -83,9 +83,10 @@ export function planMemoryWrite(draft: MemoryDraft, existing: MemoryItem[], now 
       ...exact,
       confidence: Math.max(exact.confidence, confidence),
       importance: Math.max(exact.importance, importance) as 1 | 2 | 3,
+      origin: origin === 'user' ? 'user' : exact.origin,
       lastConfirmedAt: now,
       updatedAt: now,
-      extractionBatchId: batchId ?? exact.extractionBatchId,
+      extractionBatchId: origin === 'user' ? null : batchId ?? exact.extractionBatchId,
     };
     return { item: merged, mergedMemoryId: merged.id, invalidatedMemoryIds: [], revisionAction: origin === 'user' ? 'update' : 'auto_extract', reason: 'duplicate' };
   }
@@ -98,9 +99,10 @@ export function planMemoryWrite(draft: MemoryDraft, existing: MemoryItem[], now 
       content: similar.content.length >= content.length ? similar.content : content,
       confidence: Math.max(similar.confidence, confidence),
       importance: Math.max(similar.importance, importance) as 1 | 2 | 3,
+      origin: origin === 'user' ? 'user' : similar.origin,
       lastConfirmedAt: now,
       updatedAt: now,
-      extractionBatchId: batchId ?? similar.extractionBatchId,
+      extractionBatchId: origin === 'user' ? null : batchId ?? similar.extractionBatchId,
     };
     return { item: merged, mergedMemoryId: merged.id, invalidatedMemoryIds: [], revisionAction: origin === 'user' ? 'update' : 'auto_extract', reason: 'similar' };
   }

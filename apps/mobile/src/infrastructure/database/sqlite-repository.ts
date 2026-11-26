@@ -5,7 +5,7 @@ import type { MemoryNotificationExposure, MemoryNotificationSchedule } from '../
 import type { AppPreferences, BackupSnapshot, BookExcerptRow, BookListEntryRow, BookListRow, BookRow, CheckInRow, DraftRow, HomeMemory, LedgerTransactionRow, MediaRow, MusicCollectionEntryRow, MusicPlaylistEntryRow, MusicPlaylistRow, MusicTrackRow, PersonBookRow, PersonEventRow, PersonRelationshipNodeRow, PersonRelationshipRow, PersonRow, PostRow, ProfileCollectionRequestRow, AiProviderProfileRow, AiUsageRecordRow, AiConversationRow, AiChatMessageRow, KnowledgeAggregateRow, KnowledgeChunkRow, KnowledgeSourceRow, MemoryItemRow, MemoryRevisionRowModel, MemorySourceRowModel } from './database-models';
 import { createLocalId, defaultTagSystemSettings, mapBook, mapBookExcerpt, mapCheckIn, mapDraft, mapLedgerTransaction, mapMedia, mapMusicTrack, mapPerson, mapPersonEvent, mapPost, mapProfileCollectionRequest, parseAppTheme, parseGender, parseNameStyle, parseQuoteSnapshots, parseStringList } from './sqlite-mappers';
 import { writePersistentError } from '../platform/persistent-log';
-import { AI_USAGE_TASK_IDS } from '../ai/ai-types';
+import { AI_USAGE_TASK_IDS, parseAiReasoningEffort } from '../ai/ai-types';
 import type { AggregateGenerator, KnowledgeAggregate, KnowledgeChunk, KnowledgeSourceKind, KnowledgeSourceSignature, MemoryItem, MemoryKind, MemoryOrigin, MemoryRevision, MemorySourceRef, MemorySourceRow, MemoryStatus, MemorySubjectType } from '../../features/ai/domain/knowledge-types';
 import type { AiChatMessage, AiConversation, AiConversationSource, AiProviderProfile, AiUsageRecord, AiUsageTaskId } from '../ai/ai-types';
 
@@ -1202,13 +1202,13 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     await this.withTransaction(async (transaction) => {
       if (provider.isDefault) await transaction.runAsync('UPDATE ai_provider_profiles SET is_default = 0 WHERE id <> ?', provider.id);
       await transaction.runAsync(
-        `INSERT INTO ai_provider_profiles (id, label, kind, base_url, model_id, key_hint, supports_stream, supports_balance, enabled, is_default, last_probe_at, last_probe_status, last_probe_latency_ms, last_probe_message, models_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET label = excluded.label, kind = excluded.kind, base_url = excluded.base_url, model_id = excluded.model_id, key_hint = excluded.key_hint,
+        `INSERT INTO ai_provider_profiles (id, label, kind, base_url, model_id, reasoning_effort, key_hint, supports_stream, supports_balance, enabled, is_default, last_probe_at, last_probe_status, last_probe_latency_ms, last_probe_message, models_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET label = excluded.label, kind = excluded.kind, base_url = excluded.base_url, model_id = excluded.model_id, reasoning_effort = excluded.reasoning_effort, key_hint = excluded.key_hint,
            supports_stream = excluded.supports_stream, supports_balance = excluded.supports_balance, enabled = excluded.enabled, is_default = excluded.is_default,
            last_probe_at = excluded.last_probe_at, last_probe_status = excluded.last_probe_status, last_probe_latency_ms = excluded.last_probe_latency_ms,
            last_probe_message = excluded.last_probe_message, models_json = excluded.models_json, updated_at = excluded.updated_at`,
-        provider.id, provider.label, provider.kind, provider.baseUrl, provider.modelId, provider.keyHint,
+        provider.id, provider.label, provider.kind, provider.baseUrl, provider.modelId, provider.reasoningEffort, provider.keyHint,
         provider.supportsStream ? 1 : 0, provider.supportsBalance ? 1 : 0, provider.enabled ? 1 : 0, provider.isDefault ? 1 : 0,
         provider.lastProbeAt, provider.lastProbeStatus, provider.lastProbeLatencyMs, provider.lastProbeMessage, provider.modelsJson,
         provider.createdAt, provider.updatedAt,
@@ -1519,6 +1519,14 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
     }));
   }
 
+  async deleteMemoryItem(memoryId: string): Promise<void> {
+    await this.withTransaction(async (transaction) => {
+      await transaction.runAsync('DELETE FROM memory_revisions WHERE memory_id = ?', memoryId);
+      await transaction.runAsync('DELETE FROM memory_sources WHERE memory_id = ?', memoryId);
+      await transaction.runAsync('DELETE FROM memory_items WHERE id = ?', memoryId);
+    });
+  }
+
   async clearAllMemory(): Promise<void> {
     await this.withTransaction(async (transaction) => {
       await transaction.execAsync('DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items;');
@@ -1558,6 +1566,9 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       this.db.getAllAsync<MemorySourceRowModel>('SELECT memory_id, source_kind, source_id FROM memory_sources ORDER BY memory_id'),
       this.db.getAllAsync<MemoryRevisionRowModel>('SELECT * FROM memory_revisions ORDER BY memory_id, created_at'),
     ]);
+    const exportedMemoryItems = memoryItemRows.map(mapMemoryItem);
+    // 只导出快照内的记忆来源与修订，避免恢复时引用到不存在的记忆。
+    const exportedMemoryIds = new Set(exportedMemoryItems.map((item) => item.id));
     return {
       checkIns: checkInRows.map(mapCheckIn),
       ledgerTransactions: ledgerTransactionRows.map(mapLedgerTransaction),
@@ -1586,15 +1597,15 @@ export class SQLiteStillAliveRepository implements StillAliveRepository {
       books,
       bookExcerpts,
       readingNoteSources: readingNoteSources.map((row) => ({ postId: row.post_id, bookId: row.book_id, excerptIds: parseStringList(row.excerpt_ids_json), quoteSnapshots: parseQuoteSnapshots(row.quote_snapshots_json) })),
-      memoryItems: memoryItemRows.map(mapMemoryItem),
-      memorySources: memorySourceRows.map((row) => ({ memoryId: row.memory_id, sourceKind: row.source_kind, sourceId: row.source_id })),
-      memoryRevisions: memoryRevisionRows.map((row) => ({ id: row.id, memoryId: row.memory_id, action: row.action, beforeJson: row.before_json, afterJson: row.after_json, reason: row.reason, createdAt: row.created_at })),
+      memoryItems: exportedMemoryItems,
+      memorySources: memorySourceRows.filter((row) => exportedMemoryIds.has(row.memory_id)).map((row) => ({ memoryId: row.memory_id, sourceKind: row.source_kind, sourceId: row.source_id })),
+      memoryRevisions: memoryRevisionRows.filter((row) => exportedMemoryIds.has(row.memory_id)).map((row) => ({ id: row.id, memoryId: row.memory_id, action: row.action, beforeJson: row.before_json, afterJson: row.after_json, reason: row.reason, createdAt: row.created_at })),
     };
   }
 
   async replaceFromBackup(snapshot: BackupSnapshot): Promise<void> {
     await this.withTransaction(async (transaction) => {
-      await transaction.execAsync('DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items;');
+      await transaction.execAsync('DELETE FROM profile_collection_requests; DELETE FROM ai_chat_messages; DELETE FROM ai_conversations; DELETE FROM knowledge_chunks; DELETE FROM knowledge_sources; DELETE FROM knowledge_aggregates; DELETE FROM knowledge_state; DELETE FROM birthday_notification_schedules; DELETE FROM memory_notification_schedules; DELETE FROM reading_note_sources; DELETE FROM book_excerpts; DELETE FROM person_events; DELETE FROM person_books; DELETE FROM book_list_entries; DELETE FROM book_lists; DELETE FROM books; DELETE FROM music_playlist_entries; DELETE FROM music_playlists; DELETE FROM music_collection_entries; DELETE FROM music_tracks; DELETE FROM album_media; DELETE FROM person_albums; DELETE FROM person_tag_assignments; DELETE FROM person_relationships; DELETE FROM person_relationship_nodes; DELETE FROM tag_definitions; DELETE FROM tag_groups; DELETE FROM tag_system_settings; DELETE FROM memory_exposures; DELETE FROM post_persons; DELETE FROM ledger_transactions; DELETE FROM posts; DELETE FROM drafts; DELETE FROM checkins; DELETE FROM persons; DELETE FROM media; DELETE FROM settings; DELETE FROM memory_revisions; DELETE FROM memory_sources; DELETE FROM memory_items;');
       for (const checkIn of snapshot.checkIns) {
         await transaction.runAsync('INSERT INTO checkins (id, day_key, city, created_at) VALUES (?, ?, ?, ?)', checkIn.id, checkIn.dayKey, checkIn.city, checkIn.createdAt);
       }
@@ -1673,6 +1684,7 @@ function mapAiProviderProfile(row: AiProviderProfileRow): AiProviderProfile {
     kind: row.kind,
     baseUrl: row.base_url,
     modelId: row.model_id,
+    reasoningEffort: parseAiReasoningEffort(row.reasoning_effort),
     keyHint: row.key_hint,
     supportsStream: row.supports_stream === 1,
     supportsBalance: row.supports_balance === 1,

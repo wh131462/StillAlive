@@ -1,6 +1,8 @@
 import type { Post, Person, PersonEvent, BookExcerpt } from '@still-alive/types';
+import { birthdaySolarDate } from '../../people/person-profile';
 import type { KnowledgeChunk, KnowledgeDataInput, KnowledgeSourceKind } from './knowledge-types';
 import { estimateTokens, hashText, stripMarkdown } from './knowledge-types';
+import { formatLocalDayKey, lunarDayLabel } from './time-context';
 
 export interface KnowledgeSourceBundle {
   sourceKind: KnowledgeSourceKind;
@@ -235,8 +237,15 @@ function buildPersonBody(person: Person, tags: string[]): string {
 }
 
 function formatBirthday(birthday: NonNullable<Person['birthday']>): string {
-  const calendar = birthday.calendar === 'lunar' ? '农历' : '公历';
-  return `${calendar} ${birthday.year ?? '—'}-${birthday.month ?? '—'}-${birthday.day ?? '—'}${birthday.isLeapMonth ? '（闰月）' : ''}`;
+  if (birthday.calendar === 'solar') {
+    return `公历 ${birthday.year}-${String(birthday.month).padStart(2, '0')}-${String(birthday.day).padStart(2, '0')}`;
+  }
+  try {
+    const solar = birthdaySolarDate(birthday);
+    return `农历${lunarDayLabel(solar) ?? `${birthday.month}月${birthday.day}日`}（公历 ${formatLocalDayKey(solar)}）`;
+  } catch {
+    return `农历 ${birthday.year}年${birthday.isLeapMonth ? '闰' : ''}${birthday.month}月${birthday.day}日`;
+  }
 }
 
 function formatDay(dayKey: string): string {
